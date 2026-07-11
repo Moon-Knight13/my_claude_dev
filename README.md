@@ -69,12 +69,19 @@ It runs, in order (each step idempotent; destructive bits confirm-gated):
    (skill-creator, frontend-design, code-review, superpowers, commit-commands), plus the
    on-box extras `skill-creator@` and `gitlab@claude-plugins-official`.
 4. **Killswitch** — `setup-killswitch.sh` (see below).
+5. **SSH agent forwarding** — read-only check that the box permits agent
+   forwarding and that a forwarded key is reachable. Warns; never edits `sshd`.
 
 **Reconnect-safe.** A completion marker at `/var/lib/claude-devbox/provisioned` lets a
 re-run on the *same* box short-circuit with "Already provisioned — skipping." The marker
 lives on the box filesystem, so a **re-imaged** box has none and re-provisions in full.
 Force a re-run with `--force`. If the ansible step adds you to the `docker` group, **reboot
 the box** for the Docker execution environment to work without `sudo`.
+
+> **Agent forwarding is required** — downstream tools (Catapult/`ctp`) use your
+> *forwarded* SSH key. After connecting, ensure VSCode `remote.SSH.useExecServer`
+> is off, **reconnect**, then verify on the box with `ssh-add -l`. See
+> [SSH agent forwarding](scripts/host/README.md#ssh-agent-forwarding-catapult--ctp).
 
 Finally run `make start` to configure Catapult — it uses your GitLab/VPN password
 interactively, and that secret is likewise never stored by these scripts.
