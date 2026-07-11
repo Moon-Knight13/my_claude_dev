@@ -66,6 +66,29 @@ See [docs/TEMPLATE_GUIDE.md](docs/TEMPLATE_GUIDE.md) for the full setup guide in
    bash scripts/validate-template.sh
    ```
 
+## Remote Deploybox provisioning (non-container)
+
+For the MCD workflow where you Remote-SSH into a shared **Deploybox** and use it
+directly as your dev environment (no local devcontainer), two scripts bring a box
+to the golden state:
+
+1. **On your laptop** — configure SSH + VSCode Remote-SSH (prompts for the box
+   number and your login; no secrets are stored in the repo):
+   ```bash
+   bash scripts/local/bootstrap-devbox.sh      # macOS/Linux
+   # Windows: powershell -ExecutionPolicy Bypass -File scripts\local\bootstrap-devbox.ps1
+   ```
+2. **On the box** (after connecting + cloning this repo there) — install the
+   killswitch, Claude + Ansible extensions, ansible-lint (Docker EE), caveman,
+   and the Claude plugins:
+   ```bash
+   sudo bash scripts/host/provision-remote-box.sh
+   ```
+
+See [`scripts/host/README.md`](scripts/host/README.md) for details, the
+subscription **killswitch** (wipes the Claude token when no SSH session remains
+on the shared account), and its honest limitations.
+
 ## Repository Structure
 
 ```
@@ -74,6 +97,8 @@ See [docs/TEMPLATE_GUIDE.md](docs/TEMPLATE_GUIDE.md) for the full setup guide in
 .github/             Workflows (CI, secret scan, semgrep, container scan, weekly audit); issue & PR templates
 docs/                TEMPLATE_GUIDE.md, AI_ROUTING_POLICY.md, BMAD_WORKFLOW.md, KANBAN_WORKFLOW.md
 scripts/             Bootstrap (incl. board), routing, CI helpers, and template validator
+scripts/local/       Developer-laptop bootstrap (SSH + VSCode Remote-SSH to a Deploybox)
+scripts/host/        Remote Deploybox provisioning (killswitch, extensions, ansible-lint)
 ```
 
 ## Deriving a New Project
