@@ -1,10 +1,19 @@
-# Claude Secure Template
+# my_claude_dev
 
-[![ci](https://github.com/Moon-Knight13/claude_template_repo/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Moon-Knight13/claude_template_repo/actions/workflows/ci.yml)
-[![semgrep](https://github.com/Moon-Knight13/claude_template_repo/actions/workflows/semgrep.yml/badge.svg?branch=main)](https://github.com/Moon-Knight13/claude_template_repo/actions/workflows/semgrep.yml)
-[![secret-scan](https://github.com/Moon-Knight13/claude_template_repo/actions/workflows/secret-scan.yml/badge.svg?branch=main)](https://github.com/Moon-Knight13/claude_template_repo/actions/workflows/secret-scan.yml)
+[![ci](https://github.com/Moon-Knight13/my_claude_dev/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Moon-Knight13/my_claude_dev/actions/workflows/ci.yml)
+[![semgrep](https://github.com/Moon-Knight13/my_claude_dev/actions/workflows/semgrep.yml/badge.svg?branch=main)](https://github.com/Moon-Knight13/my_claude_dev/actions/workflows/semgrep.yml)
+[![secret-scan](https://github.com/Moon-Knight13/my_claude_dev/actions/workflows/secret-scan.yml/badge.svg?branch=main)](https://github.com/Moon-Knight13/my_claude_dev/actions/workflows/secret-scan.yml)
 
-A language-agnostic, production-ready template for Claude-first development. Provides secure defaults, AI task routing, BMAD workflow integration, and deterministic CI gates so you can focus on your project rather than its scaffolding.
+> **Created from the [`claude_template_repo`](https://github.com/Moon-Knight13/claude_template_repo) template.**
+> That template supplies the secure Claude-first scaffolding (AI routing, security
+> gates, BMAD, Kanban, devcontainer). This repo builds on it.
+
+A Claude-first secure development repo. It carries the full
+[`claude_template_repo`](https://github.com/Moon-Knight13/claude_template_repo)
+scaffolding — secure defaults, AI task routing, BMAD workflow, and deterministic
+CI gates — **plus** its distinguishing feature: the **MCD Deploybox golden-provisioning
+workflow** that brings a shared remote dev box to a known-good state (see
+[Remote Deploybox provisioning](#remote-deploybox-provisioning-non-container)).
 
 ## What's Included
 
@@ -22,7 +31,7 @@ Work comes in as a board card, gets **routed** by risk — to a human, to Claude
 cheaper local model — and every change runs the same security gates before it merges. The
 whole loop runs inside a devcontainer whose network is deny-by-default.
 
-📊 **[Open the visual overview →](https://moon-knight13.github.io/claude_template_repo/)** —
+📊 **[Open the visual overview →](https://moon-knight13.github.io/my_claude_dev/)** —
 a one-page briefing (for technical and non-technical readers) covering the devcontainer, the
 two engines, caveman token compression, and the CI gates. Served from
 [`docs/explainer/`](docs/explainer/index.html) via GitHub Pages; the page is self-contained,
