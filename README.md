@@ -94,6 +94,11 @@ to the golden state:
    sudo bash scripts/host/provision-remote-box.sh
    ```
 
+> **Agent forwarding is required** — downstream tools (Catapult/`ctp`) use your
+> *forwarded* SSH key. After connecting, ensure VSCode `remote.SSH.useExecServer`
+> is off, **reconnect**, then verify on the box with `ssh-add -l`. See
+> [SSH agent forwarding](scripts/host/README.md#ssh-agent-forwarding-catapult--ctp).
+
 See [`scripts/host/README.md`](scripts/host/README.md) for details, the
 subscription **killswitch** (wipes the Claude token when no SSH session remains
 on the shared account), and its honest limitations.
