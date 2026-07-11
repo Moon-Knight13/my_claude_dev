@@ -11,6 +11,7 @@
 #   2. Ansible-lint settings + Docker prereqs (setup-ansible-lint.sh)
 #   3. Caveman (install-caveman.sh) + Claude plugins (repo set + official)
 #   4. Killswitch (setup-killswitch.sh)
+#   5. SSH agent-forwarding sanity check (Catapult/ctp need the forwarded key)
 #
 # Reconnect-safe: a completion marker at /var/lib/claude-devbox/provisioned lets
 # a re-run on the SAME box short-circuit ("already provisioned"). The marker
@@ -24,7 +25,7 @@ _REPO_ROOT="$(cd "$_SCRIPT_DIR/../.." && pwd)"
 source "$_SCRIPT_DIR/lib/host-common.sh"
 
 # Bump when the provisioning steps change so existing boxes re-provision.
-PROVISION_VERSION=1
+PROVISION_VERSION=2
 MARKER_DIR=/var/lib/claude-devbox
 MARKER="$MARKER_DIR/provisioned"
 FORCE=0
@@ -70,7 +71,7 @@ find_code() {
 }
 
 # --- 1. VSCode server extensions ---------------------------------------------
-host_step "[1/4] VSCode server extensions"
+host_step "[1/5] VSCode server extensions"
 if CODE_BIN="$(find_code)"; then
     for ext in anthropic.claude-code redhat.ansible; do
         if "$CODE_BIN" --list-extensions 2>/dev/null | grep -qix "$ext"; then
@@ -86,12 +87,12 @@ else
 fi
 
 # --- 2. Ansible-lint + Docker ------------------------------------------------
-host_step "[2/4] Ansible-lint + Docker"
+host_step "[2/5] Ansible-lint + Docker"
 bash "$_SCRIPT_DIR/setup-ansible-lint.sh" ${ASSUME_YES:+--yes} \
     || host_warn "setup-ansible-lint.sh reported an issue (continuing)"
 
 # --- 3. Caveman + Claude plugins ---------------------------------------------
-host_step "[3/4] Caveman + Claude plugins"
+host_step "[3/5] Caveman + Claude plugins"
 if [[ -f "$_REPO_ROOT/scripts/install-caveman.sh" ]]; then
     bash "$_REPO_ROOT/scripts/install-caveman.sh" || host_warn "install-caveman.sh failed (continuing)"
 else
@@ -124,9 +125,30 @@ else
 fi
 
 # --- 4. Killswitch -----------------------------------------------------------
-host_step "[4/4] Killswitch"
+host_step "[4/5] Killswitch"
 bash "$_SCRIPT_DIR/setup-killswitch.sh" ${ASSUME_YES:+--yes} \
     || host_warn "setup-killswitch.sh reported an issue"
+
+# --- 5. SSH agent-forwarding sanity check ------------------------------------
+# Downstream tools (Catapult/ctp) authenticate with the developer's FORWARDED
+# SSH key. Verify the box permits forwarding and (best-effort) that a forwarded
+# key is actually reachable. Read-only: we warn, we do NOT edit sshd here.
+host_step "[5/5] SSH agent forwarding"
+_aaf="$(_sudo sshd -T 2>/dev/null | awk '/^allowagentforwarding/ {print $2}')"
+if [[ "$_aaf" == "no" ]]; then
+    host_warn "sshd has 'AllowAgentForwarding no' — agent forwarding is BLOCKED."
+    host_note "fix: add 'AllowAgentForwarding yes' to /etc/ssh/sshd_config.d/ and reload sshd."
+elif [[ -n "$_aaf" ]]; then
+    host_info "sshd AllowAgentForwarding=$_aaf"
+else
+    host_note "could not read sshd effective config (sshd -T) — skipping forwarding check"
+fi
+if [[ -n "${SSH_AUTH_SOCK:-}" ]] && ssh-add -l >/dev/null 2>&1; then
+    host_info "forwarded SSH agent reachable ($(ssh-add -l 2>/dev/null | wc -l) key(s) visible)"
+else
+    host_note "no forwarded key visible in THIS shell. Verify from your interactive"
+    host_note "VSCode session (useExecServer off + reconnected):  ssh-add -l"
+fi
 
 # Record completion so a reconnect can skip. Best-effort; never fail the run.
 if _sudo mkdir -p "$MARKER_DIR" 2>/dev/null; then
