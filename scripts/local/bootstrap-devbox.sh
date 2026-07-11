@@ -23,7 +23,7 @@ step() { echo ""; echo ">> $*"; }
 # DEVBOX_DOMAIN env var or the prompt below.
 DOMAIN="${DEVBOX_DOMAIN:-}"
 BOX_USER="${DEVBOX_USER:-gt}"
-KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519}"
+KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519_MCD}"
 
 ask() { # ask VAR "prompt" "default"
     local __var="$1" __prompt="$2" __default="${3:-}" __reply
@@ -46,9 +46,11 @@ ask DEVBOX_NUM "Deploybox number (e.g. 07)" ""
 ask RANGE_USER "Your range username (for the key comment / git identity)" "$(id -un)"
 ask DOMAIN "Deploybox domain (e.g. dev.example.net)" ""
 [[ -z "${DOMAIN:-}" ]] && { warn "domain required (set DEVBOX_DOMAIN or answer the prompt)"; exit 1; }
+ask DEVBOX_IP "Deploybox IP address (blank = use hostname)" ""
 HOST="deploybox${DEVBOX_NUM}.${DOMAIN}"
 ALIAS="deploybox${DEVBOX_NUM}"
-info "Target: ${BOX_USER}@${HOST}"
+HOSTNAME_VALUE="${DEVBOX_IP:-$HOST}"
+info "Target: ${BOX_USER}@${HOST} (HostName ${HOSTNAME_VALUE})"
 
 # --- 2. SSH keypair (reuse or generate) --------------------------------------
 step "SSH keypair"
@@ -76,18 +78,20 @@ step "SSH config (\$HOME/.ssh/config)"
 mkdir -p "$HOME/.ssh"; chmod 700 "$HOME/.ssh"
 CFG="$HOME/.ssh/config"
 touch "$CFG"; chmod 600 "$CFG"
-if grep -qiE "^[[:space:]]*Host[[:space:]]+${ALIAS}([[:space:]]|$)" "$CFG"; then
-    info "Host '${ALIAS}' already in $CFG — leaving it as-is"
+# Match an existing Host block by FQDN or short alias (catches legacy
+# combined-format entries too) so a re-run never appends a duplicate.
+esc_host="${HOST//./\\.}"
+if grep -qiE "^[[:space:]]*Host[[:space:]]([^#]*[[:space:]])?(${ALIAS}|${esc_host})([[:space:]]|$)" "$CFG"; then
+    info "Host entry for ${HOST} already in $CFG — leaving it as-is"
 else
     {
         echo ""
-        echo "Host ${ALIAS} ${HOST}"
-        echo "    HostName ${HOST}"
-        echo "    User ${BOX_USER}"
-        echo "    ForwardAgent yes"
-        echo "    IdentityFile ${KEY}"
+        echo "Host ${HOST}"
+        echo "  HostName ${HOSTNAME_VALUE}"
+        echo "  User ${BOX_USER}"
+        echo "  ForwardAgent yes"
     } >> "$CFG"
-    info "added Host '${ALIAS}' -> ${BOX_USER}@${HOST} (ForwardAgent yes)"
+    info "added Host '${HOST}' -> ${BOX_USER}@${HOSTNAME_VALUE} (ForwardAgent yes)"
 fi
 
 # --- 5. Copy public key for passwordless login (prompts for password once) ---
@@ -155,8 +159,8 @@ EOF
 # --- 8. Connect + provision (pull-after-connect) -----------------------------
 step "Next: connect and provision the box"
 cat <<EOF
-  Connect with VSCode Remote-SSH (F1 -> "Remote-SSH: Connect to Host" -> ${ALIAS})
-  or from a shell:  ssh ${ALIAS}
+  Connect with VSCode Remote-SSH (F1 -> "Remote-SSH: Connect to Host" -> ${HOST})
+  or from a shell:  ssh ${HOST}
 
   Then ON THE BOX, clone this repo (if not already) and run:
       git clone https://github.com/Moon-Knight13/my_claude_dev
