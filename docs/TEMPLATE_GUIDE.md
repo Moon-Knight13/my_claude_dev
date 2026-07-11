@@ -1,0 +1,533 @@
+# Claude Secure Template — Reference Guide
+
+[![CI Configured](https://img.shields.io/badge/CI-configured-brightgreen.svg)](#ci-and-quality-gates)
+[![Secret Scan Configured](https://img.shields.io/badge/Secret%20Scan-configured-brightgreen.svg)](#ci-and-quality-gates)
+[![Semgrep Configured](https://img.shields.io/badge/Semgrep-configured-brightgreen.svg)](#ci-and-quality-gates)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](../LICENSE)
+
+Public, language-agnostic template for secure and repeatable Claude-first development with BMAD workflow, Caveman token compression, and optional local model offload.
+
+## Referenced Projects
+
+- BMAD Method: https://github.com/bmad-code-org/BMAD-METHOD
+- Caveman: https://github.com/JuliusBrussee/caveman
+- Semgrep: https://github.com/semgrep/semgrep
+- Gitleaks: https://github.com/gitleaks/gitleaks
+- Ollama: https://github.com/ollama/ollama
+- PII-Shield: https://github.com/gregmos/PII-Shield
+
+## Who This Template Is For
+
+- Teams that want secure defaults for new repositories.
+- Projects that need language-agnostic CI and policy enforcement.
+- Claude-led development that routes simple work to local models and complex work to Claude.
+
+## Requirements
+
+- Git with SSH access to GitHub.
+- Docker with Dev Containers support.
+- VS Code with Dev Containers extension.
+- Access to GitHub Actions in target repositories.
+- Optional local model endpoint on host port 11434.
+- Claude CLI authentication available before first coding session.
+- Caveman installer checksum configured for deterministic startup verification.
+
+### Local AI Prerequisite (Ollama on host:11434)
+
+If you want local-model offload, install and run Ollama on your host machine (not inside the container).
+
+Linux quick path:
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+ollama serve
+```
+
+Pull at least one model:
+
+```bash
+ollama pull qwen2.5-coder:7b
+```
+
+Verify host endpoint before opening devcontainer:
+
+```bash
+curl http://localhost:11434/api/tags
+```
+
+This template maps container access to host via host.docker.internal and firewall rules allow only host gateway tcp/11434.
+
+#### Bind Ollama so the container can reach it
+
+By default Ollama listens on `127.0.0.1:11434` (loopback only). The dev container
+reaches the host over a separate gateway address, so a loopback-only Ollama is
+**not reachable from the container** — `curl http://host.docker.internal:11434`
+fails with connection refused. You must bind Ollama to `0.0.0.0` on the host.
+
+Pick the method matching how Ollama runs on your host:
+
+- **systemd** (most Linux installs):
+  ```bash
+  sudo mkdir -p /etc/systemd/system/ollama.service.d
+  sudo tee /etc/systemd/system/ollama.service.d/override.conf >/dev/null <<'EOF'
+  [Service]
+  Environment="OLLAMA_HOST=0.0.0.0:11434"
+  EOF
+  sudo systemctl daemon-reload
+  sudo systemctl restart ollama
+  ```
+- **manual foreground:** `OLLAMA_HOST=0.0.0.0:11434 ollama serve`
+- **docker:** `-p 0.0.0.0:11434:11434` and `-e OLLAMA_HOST=0.0.0.0`
+- **snap:** `sudo snap set ollama host=0.0.0.0:11434`
+
+Confirm the bind before opening the devcontainer:
+
+```bash
+ss -tlnp | grep 11434   # expect 0.0.0.0:11434 (or *:11434), not 127.0.0.1:11434
+```
+
+> **⚠️ Security disclaimer — you accept this risk.**
+> Binding `0.0.0.0` exposes Ollama on **every** host interface, including your
+> LAN/Wi-Fi IP. **Ollama has no authentication** — anyone who can route to your
+> host on tcp/11434 can run models and consume your GPU/CPU. This is safe only on
+> a **trusted network you control**. On public, office, or shared Wi-Fi, do not
+> use `0.0.0.0`; instead bind the container gateway address only, or firewall
+> tcp/11434 to the container subnet. If you do not accept this exposure, set
+> `LOCAL_MODEL_ENABLED=false` in `.env` and routing falls back to Claude.
+
+### Claude Credential Prerequisite
+
+Claude auth is stored in a mounted user config volume and persists across container restarts.
+
+Before first coding session inside devcontainer:
+
+1. Open terminal in container.
+2. Run `claude auth login`.
+3. Complete the browser auth flow.
+4. Verify with `claude auth status` (expect `"loggedIn": true`).
+
+### GitHub Credential Prerequisite
+
+GitHub auth follows the same pattern: interactive browser OAuth, credentials in a
+named volume outside the workspace, never in env vars or repo files. Env-var tokens
+(`GITHUB_TOKEN`/`GH_TOKEN`) are deliberately not passed into the container — any
+process in the container (including agents) could read them, and they tend to leak
+into logs and shell history. `scripts/check-day0.sh` fails if one is set.
+
+1. Open terminal in container.
+2. Run `gh auth login --hostname github.com --git-protocol https --web` and complete
+   the browser flow (in a Claude Code session, type `! gh auth login --web`).
+3. Run `gh auth setup-git` so git push/pull over https uses gh as credential helper.
+4. Verify with `gh auth status`.
+
+The token lives in `~/.config/gh` (the `claude-code-ghconfig` volume) and persists
+across container rebuilds.
+
+The mounted path is `/home/node/.claude` and is intentionally outside repository files to prevent accidental credential commits.
+
+### Caveman Installer Verification Prerequisite
+
+This template verifies the pinned Caveman installer script checksum before executing it.
+
+- Default env var used by startup: `CAVEMAN_INSTALL_SHA256`
+- Update this value when bumping `CAVEMAN_VERSION` in `scripts/install-caveman.sh`
+- If checksum does not match, startup aborts Caveman installation by design
+
+## Quick Start
+
+1. Create a new repository from this template.
+2. Clone with SSH and open in VS Code.
+3. Reopen in devcontainer.
+4. Let post-start bootstrap run automatically:
+   - firewall setup (IPv4 + IPv6 deny-by-default)
+   - Caveman token compression install
+   - BMAD workflow install
+   - pre-commit hooks install
+   - Claude Code official plugins install (skill-creator, frontend-design, code-review, superpowers, commit-commands)
+   - day-0 auto-setup (`scripts/setup-day0.sh`): copies `.env` + `.claude/settings.json`, fills CODEOWNERS from the git remote, re-installs any missing Claude plugin, and (once gh is authenticated) applies the GitHub + Kanban bootstraps
+
+Note: startup is intentionally deterministic; pre-commit hook versions are not auto-updated unless `PRECOMMIT_AUTOUPDATE=1` is set.
+
+5. Authenticate — the only manual steps (two interactive browser logins, no tokens on disk):
+   - `gh auth login --hostname github.com --git-protocol https --web -s project`, then `gh auth setup-git`
+     (`-s project` grants the Kanban/Projects scope in the same login; already logged in? add it with `gh auth refresh -s project`)
+   - `claude auth login`
+6. Re-run the auto-setup so the now-unblocked GitHub + Kanban bootstraps apply, then verify:
+
+```bash
+bash scripts/setup-day0.sh   # applies the auth-gated bootstraps, then prints status
+bash scripts/check-day0.sh   # verify — expect all green
+```
+
+7. Push initial commit so CI checks exist.
+
+## Day 0 Setup
+
+Most of day-0 now runs **automatically** on container start via
+`scripts/setup-day0.sh` (the last step of `postStartCommand`). The only steps that
+still need a human are the interactive auth flows.
+
+### Automatic on build (no action needed)
+
+| Step | Handled by |
+|------|-----------|
+| Copy env config (`cp .env.example .env`) | `setup-day0.sh` (skips if `.env` already exists) |
+| Copy Claude MCP config (`.claude/settings.json`) | `setup-day0.sh` (skips if it already exists) |
+| Populate CODEOWNERS | `setup-day0.sh` derives the owner from the git remote (warns if it looks like an org — orgs need `@org/team`, not a bare `@org`) |
+| Claude plugins | postStartCommand; `setup-day0.sh` re-installs any missing plugin on re-run |
+| Apply GitHub branch-protection ruleset | `setup-day0.sh`, best-effort **once gh is authenticated** (passes `ADMIN_BYPASS=true` so admins keep a break-glass bypass) |
+| Allow Actions to create/approve PRs | `bootstrap-github-settings.sh` (applied with the ruleset; needed by template-sync) |
+| Create the Kanban board | `setup-day0.sh`, best-effort **once gh has the `project` scope** |
+
+The two GitHub bootstraps need auth (below), so they apply on the **re-run** of
+`setup-day0.sh` after you authenticate — or on the next container start.
+
+### Manual (interactive auth — the only human steps)
+
+Two browser logins. No tokens ever touch env vars or repo files.
+
+| Step | Command | Why it's manual |
+|------|---------|-----------------|
+| Authenticate gh (browser OAuth) | `gh auth login --hostname github.com --git-protocol https --web -s project`, then `gh auth setup-git` | Interactive browser login; `-s project` grants the Kanban/Projects scope in the same flow; the OAuth token stays in gh's config volume — never in env vars or repo files |
+| Authenticate Claude | `claude auth login` | Interactive browser login |
+| Finish the bootstraps | `bash scripts/setup-day0.sh` | Re-run after auth so the GitHub ruleset + board bootstraps apply (also runs on the next container start) |
+
+If gh was already logged in without the Projects scope, add it with
+`gh auth refresh -s project`.
+
+### Optional
+
+| Step | Command | Notes |
+|------|---------|-------|
+| Add `TEMPLATE_SYNC_TOKEN` secret | Fine-grained PAT: contents + pull requests + workflows write | Only needed when a template-sync PR changes `.github/workflows/` files; falls back to `GITHUB_TOKEN` otherwise |
+| Install Ollama | See [Ollama docs](https://ollama.com) | Only needed for local model routing; `check-day0.sh` reports it as a non-blocking WARN when unreachable |
+
+The manual bootstrap commands remain available as a fallback:
+`APPLY=true bash scripts/bootstrap-github-settings.sh` and
+`APPLY=true bash scripts/bootstrap-project.sh`.
+
+Run `bash scripts/check-day0.sh` at any time to see which steps are still pending;
+`setup-day0.sh` prints the same status plus the exact next commands at the end of every run.
+
+`bootstrap-github-settings.sh` configures a repository **ruleset**
+(`Main_Branch_Protections`, targeting the default branch), not legacy branch
+protection. It is idempotent — creates the ruleset if absent, updates it in place
+otherwise. The ruleset requires a pull request with approving review(s), passing
+status checks (`validate-template`, `semgrep`, `gitleaks`), linear history, and
+blocks force-pushes / deletions / direct pushes to the branch.
+
+Bootstrap safety defaults:
+- dry-run unless `APPLY=true` (prints the exact ruleset payload)
+- only the default branch is targeted unless `REQUIRE_DEFAULT_BRANCH=false`
+- refuses to require code-owner reviews while `.github/CODEOWNERS` is unset or still
+  the shipped placeholder owner (override with `REQUIRE_CODEOWNERS=false`)
+- no admin bypass by default (admins are held to the same gates); the automated
+  `setup-day0.sh` run passes `ADMIN_BYPASS=true` for a solo-repo break-glass, and
+  manual callers can opt in the same way
+- pre-change snapshots are saved under `.ai/bootstrap-snapshots` for rollback
+
+## Security Model
+
+- Deny-by-default egress firewall in devcontainer (IPv4 + IPv6). Use `/firewall-allow` to add a new egress host to the allowlist.
+- Host access limited to local model endpoint on TCP 11434.
+- Secrets blocked locally by pre-commit and in CI by gitleaks workflow.
+- Semgrep policy checks in local and CI workflows with SARIF upload to GitHub Security tab.
+- Default-branch ruleset (required PR reviews + required status checks, no force-push/deletion) configured by the bootstrap script.
+
+See [SECURITY.md](../SECURITY.md) for leak response guidance.
+
+## PII & Privacy Controls
+
+Protection is layered across two surfaces: **repo commits** and **Claude context**.
+
+### Commit-time PII detection (gitleaks)
+
+The following PII types are blocked at pre-commit and re-checked in CI:
+
+| PII Type | Rule ID | Notes |
+|----------|---------|-------|
+| Email addresses | `pii-email` | Test domains (example.com, localhost) are allowlisted |
+| Credit card numbers | `pii-credit-card` | Common test card numbers (Stripe, PayPal) are allowlisted |
+| US Social Security Numbers | `pii-ssn` | Invalid SSN prefix ranges excluded to reduce false positives |
+| UK National Insurance Numbers | `pii-uk-nino` | Specific format; low false positive rate |
+| Phone numbers (E.164) | `pii-phone-e164` | Only structured international format; TV placeholder numbers allowlisted |
+
+In addition, the built-in gitleaks ruleset (100+ rules) covers all common API keys and tokens: AWS, GitHub, Stripe, Slack, Google, Azure, Twilio, Sendgrid, Shopify, and more.
+
+All PII rules skip `tests/` and `docs/` paths by default. To add a custom allowlist for your project, add entries to `.gitleaks.toml`.
+
+### Code-time PII detection (semgrep)
+
+| Rule ID | What it catches | Languages |
+|---------|----------------|-----------|
+| `pii-literal-email-in-code` | Hardcoded real email addresses in string literals | Python, JS, TS |
+| `pii-in-log-call` | PII-named variables passed to logging/print calls | Python, JS, TS |
+| `atlas-t0040-pii-in-prompt` | PII field names interpolated into LLM f-string prompts | Python |
+
+### Claude context protection (PII-Shield)
+
+[PII-Shield](https://github.com/gregmos/PII-Shield) anonymizes content *before it reaches Claude* — replacing names, emails, phone numbers, and other PII with reversible placeholders that are restored in Claude's response. This is complementary to git hooks (which protect the repo), not a substitute.
+
+PII-Shield cannot be installed via `claude plugin install` — it uses a `.mcpb` bundle format. Manual setup:
+1. Download the `.mcpb` file from [gregmos/PII-Shield](https://github.com/gregmos/PII-Shield)
+2. In Claude Code: **Settings → Extensions → drag in the `.mcpb` file**
+3. First run downloads a ~634 MB NER model (one-time)
+4. Mappings expire after 7 days by default
+
+## CI and Quality Gates
+
+- Universal checks:
+   - secret-scan workflow (gitleaks full history scan)
+   - semgrep workflow (custom rules + `p/secrets` + `p/security-audit` community packs, SARIF output)
+   - container-scan workflow (Trivy CVE scan, weekly + on devcontainer changes).
+     The devcontainer is a local dev sandbox behind a deny-by-default firewall,
+     not a shipped artifact, so the gate **blocks only on CRITICAL** findings
+     while CRITICAL+HIGH are still reported to the Security tab for visibility.
+     Base-image OS CVEs are kept clear by `apt-get upgrade` in the Dockerfile;
+     the base digest is refreshed via Dependabot.
+   - repository-audit workflow (validates required files and CODEOWNERS customisation)
+- Project marker detection for language-specific checks.
+- If a stack marker exists and expected scripts are missing under `scripts/ci`, CI fails by design.
+
+## BMAD Workflow
+
+BMAD is the default delivery framework for planning and execution.
+
+BMAD bootstrap is validation-only. It does not auto-generate workflow docs at startup.
+Keep `docs/BMAD_WORKFLOW.md` authored in-repo and update it per project via normal commits.
+
+Stage flow:
+1. discovery
+2. requirements
+3. architecture
+4. task decomposition
+5. implementation
+6. security and release readiness
+
+See [docs/BMAD_WORKFLOW.md](BMAD_WORKFLOW.md).
+
+## Kanban & Agent Orchestration
+
+A per-repo GitHub Project v2 board turns BMAD planning into trackable work that a
+human orchestrator hands off to Claude sessions or local models — solo, or across
+a team without agents stepping on each other. It is entirely `gh`-CLI driven:
+**no API keys, no secrets, no Claude-in-CI**. Claude acts through your
+interactive session and `gh`.
+
+- Columns: `Backlog → Todo → Ready → In Progress → In Review → Done`.
+- Fields: **BMAD Stage** and **Route** (Human / Claude / Local, derived from
+  `scripts/route-model.sh` via `scripts/suggest-route.sh`).
+- Coordination: a collision-safe **claim protocol** (`scripts/board.sh claim` —
+  self-assign + `wip` lock + In Progress + re-check), one branch per issue, and
+  git worktrees for parallel subagents.
+
+Setup is two commands (`gh auth refresh -s project`, then
+`APPLY=true bash scripts/bootstrap-project.sh`). Populate the board from planning
+with `/bmad-to-board`, then build cards with `/next-issue` or orchestrate an epic
+with `/run-epic`. Full playbook (solo + team) in
+[docs/KANBAN_WORKFLOW.md](KANBAN_WORKFLOW.md).
+
+## Claude Code Skills and Plugins
+
+### Official plugins (auto-installed at startup)
+
+| Plugin | Source | Purpose |
+|--------|--------|---------|
+| `skill-creator` | `claude-plugins-official` | Create new custom skills for this repo |
+| `frontend-design` | `claude-plugins-official` | UI/UX design assistance with a11y and performance focus |
+| `code-review` | `claude-plugins-official` | Code review workflow |
+| `superpowers` | `claude-plugins-official` | Enhanced capabilities and full-context mode |
+| `commit-commands` | `claude-plugins-official` | Git commit workflow assistance |
+
+The `github` plugin is intentionally not installed: its MCP server requires a
+`GITHUB_PERSONAL_ACCESS_TOKEN` env var, which this template's no-tokens-in-env
+policy forbids. All GitHub operations (PRs, issues, board) go through the
+browser-OAuth-authenticated `gh` CLI instead.
+
+Semgrep scanning runs CI-side with the free OSS engine and the repo's `.semgrep.yml`
+rules (see `.github/workflows/semgrep.yml`) — no Semgrep Guardian plugin, login, or
+`SEMGREP_APP_TOKEN` is needed. The Guardian plugin is intentionally not installed:
+its PreToolUse hook blocks tool calls in sessions without a paid Semgrep login.
+
+Plugins are installed by `scripts/install-claude-plugins.sh` at container startup. They persist in the Claude Code config volume across rebuilds. Re-run `bash scripts/install-claude-plugins.sh` manually if a plugin is missing.
+
+### Project-specific custom skills
+
+These slash commands are defined in `.claude/commands/` and are specific to this template's tooling:
+
+| Command | Purpose |
+|---------|---------|
+| `/bmad` | Start a BMAD planning session for the current task |
+| `/bmad-to-board` | Turn a BMAD decomposition into epic + story issues on the Kanban board |
+| `/next-issue` | Claim the next ready card (collision-safe), build it, open a PR |
+| `/run-epic` | Take ownership of an epic and fan its stories out to subagents |
+| `/route-task` | Invoke the model routing protocol explicitly |
+| `/day0-check` | Validate day-0 setup and get guided remediation |
+| `/security-audit` | Full security scan with MITRE ATLAS + PII coverage mapping |
+| `/firewall-allow` | Add an egress host to the dev container firewall allowlist |
+
+## Caveman and Token Controls
+
+Caveman installs automatically in `lite` mode on first devcontainer start, verified against a pinned SHA256 checksum.
+
+### Activating Caveman in a Claude Code session
+
+Caveman is installed into `/home/node/.claude` and activates automatically with the configured default mode. To change mode within a session:
+
+- `/caveman lite` — enable lite compression (default; minimal prompt restructuring)
+- `/caveman full` — enable full compression (maximum savings; more aggressive reformatting)
+- `/caveman off` — disable for the current session
+
+To verify the installed version and mode:
+
+```bash
+cat ~/.claude/.caveman-default-mode
+cat ~/.claude/.template-caveman-version
+```
+
+To update the version, change `CAVEMAN_VERSION` in `scripts/install-caveman.sh` and update `CAVEMAN_INSTALL_SHA256` in `devcontainer.json`, then rebuild the container.
+
+### Model routing and cost controls
+
+- Model routing policy uses local endpoint for low-risk tasks and Claude for high-risk tasks.
+- Disable local routing with `CAVEMAN_ENABLED=0` or `LOCAL_MODEL_ENABLED=false`.
+- Recommended local defaults:
+   - `qwen2.5-coder:7b` for normal coding tasks
+   - `qwen2.5-coder:1.5b-base` for fast/simple edits
+   - escalate to Claude for high-risk or ambiguous changes
+- Optional fast-path env controls:
+   - `LOCAL_MODEL_FAST_MODEL=qwen2.5-coder:1.5b-base`
+   - `LOCAL_MODEL_FAST_TASK_TYPES=format,docs,tiny-refactor,rename,simple-test`
+
+See [docs/AI_ROUTING_POLICY.md](AI_ROUTING_POLICY.md) and `scripts/route-model.sh`.
+
+## Secrets Handling
+
+- Never commit credentials or API keys.
+- Keep Claude auth in mounted config outside workspace files.
+- Use `.env.example` as a template only — never commit `.env`.
+- Store CI secrets in GitHub Secrets or Environments.
+
+## What Propagates vs Manual Setup
+
+Propagates from template files:
+- workflows, scripts, docs, pre-commit config — kept up to date after repo
+  creation by the template-sync workflow (see
+  [Template Updates](#template-updates-downstream-sync))
+
+Automatic per new repository (on container start, via `scripts/setup-day0.sh`):
+- copy `.env` + `.claude/settings.json` from the shipped examples
+- populate CODEOWNERS from the git remote owner
+- apply the branch-protection ruleset and create the Kanban board — best-effort,
+  once `gh` is authenticated (re-run `setup-day0.sh` after auth to trigger them)
+
+Manual per new repository:
+- authenticate Claude and `gh` (interactive OAuth — the only unavoidable human step)
+- enable or verify repository-level security settings in GitHub if org rulesets are not centrally managed
+
+## Compatibility Matrix
+
+| Component | Default Pin |
+|-----------|------------|
+| BMAD | 6.9.0 (`scripts/install-bmad.sh`) |
+| Caveman | v1.9.0 (`scripts/install-caveman.sh`) |
+| Semgrep | pinned by image digest in `semgrep.yml`, tracked by Dependabot |
+| Gitleaks | pinned by image digest in `secret-scan.yml`, tracked by Dependabot |
+| Trivy | pinned by action SHA in `container-scan.yml`, tracked by Dependabot |
+
+## Version and Upgrade Policy
+
+- Use semantic tags for template releases.
+- Keep tool pins explicit in scripts and workflows.
+- Accept upgrades through reviewed pull requests (Dependabot or manual).
+
+## Template Updates (Downstream Sync)
+
+GitHub templates are one-time snapshots: a fix landing in this repo does not
+reach repos already created from it. The `template-sync` workflow
+(`.github/workflows/template-sync.yml`) closes that gap. It ships with the
+template, so every derived repo carries it from day one; weekly (and on manual
+`workflow_dispatch`) it pulls the template's `main` and opens a PR labeled
+`template-sync` containing the diff — reviewed and merged like any other PR.
+The template repo itself skips the job via a repository guard.
+
+What syncs and what doesn't:
+- Files listed in `.templatesyncignore` (README.md, CODEOWNERS, .env.example,
+  LICENSE) are never overwritten; extend that file with any project paths that
+  should stay divergent. Each repo owns its copy — the ignore file itself is
+  not synced.
+- Files that exist only in the derived repo (your source tree) are never
+  touched.
+
+### Conflict behavior — read before merging a sync PR
+
+The sync merges with `-X theirs`: when you and the template edited the **same
+lines** of a synced file, the sync PR arrives with the **template's version —
+silently proposing to revert your local edit**. Nothing blocks and there are no
+conflict markers; the only signal is the PR diff itself. So review sync PRs
+specifically for unexpected reverts of local customizations. Edits to
+*different* lines or files merge cleanly and both survive.
+
+This default is deliberate: the sync uses squash merges, so git records no
+merge base, and without `-X theirs` every previously resolved divergence would
+re-conflict on every future sync. Handle divergence by kind:
+- **Transient** (you fixed something the template later fixed differently):
+  accept the template version, or edit the sync PR branch before merging.
+- **Permanent** (intentional per-project customization of a template file):
+  add the path to `.templatesyncignore` so it stops being proposed at all.
+- **Conflict-heavy sync** (too tangled to review as a diff): close the sync PR
+  and do a real merge locally with full conflict markers —
+  `git remote add template https://github.com/Moon-Knight13/claude_template_repo`
+  (once), then `git fetch template && git merge template/main` (add
+  `--allow-unrelated-histories` the first time). After that first merge, git
+  has a recorded base and future manual merges are incremental.
+
+Setup per derived repo (one-time):
+- Enable Settings > Actions > General > Workflow permissions >
+  "Allow GitHub Actions to create and approve pull requests".
+- The default `GITHUB_TOKEN` is sufficient until a sync PR needs to change
+  files under `.github/workflows/`. `GITHUB_TOKEN` can **never** push workflow
+  files — this is a GitHub platform restriction: there is no `workflows:` key
+  for the workflow `permissions:` block, and the repository "Read and write
+  permissions" setting does not lift it either. For that case, add a
+  fine-grained PAT (contents: write, pull requests: write, workflows: write,
+  scoped to the repo) as the `TEMPLATE_SYNC_TOKEN` secret; the workflow falls
+  back to `GITHUB_TOKEN` when the secret is absent. A preflight step in the
+  workflow detects this case and fails fast with these instructions before
+  attempting the sync. If you mint tokens through your own GitHub App instead,
+  the app needs Workflows: Read and write, then reinstall/approve the updated
+  app permissions on the repo.
+
+Repos created before the workflow existed can retrofit it with
+`bash scripts/adopt-template-sync.sh` (fetches the two files from the template
+via `gh` and prints the setup steps).
+
+Possible future refinements (not implemented): converting the security
+workflows to reusable `workflow_call` workflows referenced by tag, and
+publishing a prebuilt devcontainer image — both would shrink the file surface
+that needs syncing at all.
+
+## Troubleshooting
+
+- Local model unreachable: verify host service and port 11434.
+- Local model unreachable from container: verify host endpoint with `curl http://localhost:11434/api/tags` on host, then check devcontainer firewall output.
+- Claude auth missing in container: run `claude auth login` inside container and confirm `claude auth status` reports `"loggedIn": true`.
+- Bootstrap permission error: ensure gh auth user is repo admin.
+- CI missing script failure: add matching scripts under `scripts/ci` for detected stack.
+- Gitleaks false positive on a test file: add the file path to the rule's `paths` allowlist in `.gitleaks.toml`.
+- Semgrep PII false positive: add the file pattern to the rule's `paths.exclude` list in `.semgrep.yml`.
+- template-sync push rejected with `refusing to allow a GitHub App to create or update workflow '.github/workflows/…' without 'workflows' permission`: the sync includes workflow-file changes and the run used the default `GITHUB_TOKEN`, which can never push those (platform restriction — no `permissions:` entry or repo setting fixes it; beware that `workflows:` is not a valid `permissions:` key and adding it invalidates the workflow file). Add the `TEMPLATE_SYNC_TOKEN` fine-grained PAT secret (Contents, Pull requests, Workflows — read and write) and re-run; see [Template Updates](#template-updates-downstream-sync).
+
+## FAQ
+
+**Q: Template or fork?**
+A: Use template for new projects. Fork only when contributing back to this repository.
+
+**Q: Can I disable optional layers?**
+A: Yes. Use `CAVEMAN_ENABLED=0` or `BMAD_ENABLED=0` in environment.
+
+**Q: The gitleaks PII rules are flagging test data — what do I do?**
+A: Either move test data to `tests/` (already allowlisted) or use placeholder values (`test@example.com`, `000-00-0000`). For custom allowlists, add entries to `.gitleaks.toml`.
+
+**Q: Does PII-Shield work offline?**
+A: The NER model runs locally after the initial download, but PII-Shield still sends the anonymized content to Claude via the Anthropic API.
