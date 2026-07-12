@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Claude Secure Template — what it is &amp; how it works</title>
+<title>my_claude_dev — provisioning a shared remote dev box</title>
 <style>
   :root {
     --ground: #EEF1F4;
@@ -241,13 +241,70 @@
 
 <div class="wrap">
   <header>
-    <span class="badge">secure&nbsp;<b>by&nbsp;default</b>&nbsp;·&nbsp;human&nbsp;in&nbsp;the&nbsp;loop</span>
-    <p class="eyebrow">Claude Secure Template</p>
-    <h1>A guarded workshop where AI does the work and nothing ships unchecked.</h1>
-    <p class="lede">A production-ready starting point for building software with Claude.
-      Work comes in, gets <span class="hl">routed</span> to whoever should do it — a person, Claude,
-      or a cheaper local model — and every change passes the same security gates before it merges.</p>
+    <span class="badge">no&nbsp;secrets&nbsp;<b>in&nbsp;the&nbsp;repo</b>&nbsp;·&nbsp;shared&nbsp;box,&nbsp;per-dev&nbsp;login</span>
+    <p class="eyebrow">my_claude_dev · remote dev box</p>
+    <h1>Connect to a shared box, and it comes up Claude-ready and locked down.</h1>
+    <p class="lede">You Remote-SSH into a team <span class="hl">Deploybox</span> and use it as your
+      dev environment. A laptop bootstrap wires up SSH — you type your own credentials, nothing
+      lands in the repo — and an on-box provisioner installs the golden Claude toolset. Built on
+      the secure Claude template it inherits.</p>
   </header>
+
+  <div class="board" aria-label="How a developer gets onto a Deploybox">
+    <p class="board-cap">The provisioning flow</p>
+    <div class="flow">
+      <div class="node in"><span class="k">On your laptop</span>bootstrap-devbox.sh — prompts for box number, user, domain. Generates an SSH key, writes ~/.ssh/config, copies the key (password typed live, never stored).</div>
+      <div class="rail" aria-hidden="true">▼ Remote-SSH into the box ▼</div>
+      <div class="node"><span class="k">On the box</span>sudo provision-remote-box.sh — idempotent, reconnect-safe. Brings a fresh (or re-imaged) box to a known-good state.</div>
+      <div class="rail" aria-hidden="true">▼ installs, in order ▼</div>
+      <div class="lanes">
+        <div class="lane claude">
+          <div class="who">Extensions</div>
+          <span class="what">Claude Code + Ansible (VSCode server); ansible-lint on a Docker EE.</span>
+        </div>
+        <div class="lane local">
+          <div class="who">Caveman + plugins</div>
+          <span class="what">Token compression and the Claude plugin set (skill-creator, gitlab, …).</span>
+        </div>
+        <div class="lane human">
+          <div class="who">Killswitch</div>
+          <span class="what">Wipes the shared Claude token when you disconnect.</span>
+        </div>
+      </div>
+      <div class="rail" aria-hidden="true">▼</div>
+      <div class="node out"><span class="k">Ready</span>A Claude-ready box — and the next dev logs in with their own credentials.</div>
+    </div>
+  </div>
+
+  <section>
+    <p class="eyebrow">Two secrets rules</p>
+    <h2>Why the credentials never touch the repo</h2>
+    <p class="section-note">The Deployboxes are a <b>shared account</b> used across a wider team, so
+      whose login is active — and where it lives — is the whole ballgame.</p>
+    <div class="cards">
+      <div class="card">
+        <h3>You type them, live</h3>
+        <p>The bootstrap prompts for your SSH key passphrase and the box password at the moment it needs them. They go into your SSH agent and your own <span class="mono">~/.ssh/config</span> — outside the repo — and are never committed.</p>
+      </div>
+      <div class="card">
+        <h3>The token is wiped on exit</h3>
+        <p>When you leave and no SSH session remains, the killswitch shreds the Claude token on the shared account. The next person <span class="mono">/login</span>s as themselves. A sequential-reuse hygiene control — not a shield against a malicious insider.</p>
+      </div>
+      <div class="card">
+        <h3>Nothing internal is hardcoded</h3>
+        <p>The box domain is supplied at runtime (<span class="mono">DEVBOX_DOMAIN</span> or a prompt), so this public repo carries no hostnames, IPs, or identity handles.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">What it's built on</p>
+    <h2>The secure template underneath</h2>
+    <p class="section-note">Provisioning is the job; the rest of this page is the scaffolding it
+      inherits from <span class="mono">claude_template_repo</span> — the same machinery used to
+      develop <b>this repo</b>, and the guardrails a Deploybox runs behind. Work is routed by risk
+      and nothing merges until the gates agree.</p>
+  </section>
 
   <div class="board" aria-label="How work flows through the template">
     <p class="board-cap">The routing switchboard</p>
@@ -431,6 +488,7 @@
     <p style="margin:0 0 4px;font-family:var(--sans);font-weight:640;color:var(--ink)">Where to go deeper</p>
     <div class="docs">
       <span>README.md</span>
+      <span>scripts/host/README.md</span>
       <span>docs/TEMPLATE_GUIDE.md</span>
       <span>docs/AI_ROUTING_POLICY.md</span>
       <span>docs/BMAD_WORKFLOW.md</span>
