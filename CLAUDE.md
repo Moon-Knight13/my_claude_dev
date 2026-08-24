@@ -11,6 +11,10 @@ Deliver secure, maintainable software with deterministic quality gates.
 5. Token efficiency
 
 ## Model Routing
+*Applies only when `SUBSYSTEM_ROUTING=true` in `template.conf`. If it is off,
+this repo has no local endpoint — ignore this section and the Task Routing
+Protocol below, and treat every task as Claude-routed.*
+
 Use local model by default for low-risk tasks:
 - formatting
 - boilerplate
@@ -46,6 +50,9 @@ Escalate to Claude if any condition is true:
 5. Test failures persist after one local attempt.
 
 ## Kanban / Board
+*Applies only when `SUBSYSTEM_BOARD=true` in `template.conf`. If it is off, use
+plain GitHub issues and ignore this section.*
+
 Work is tracked on a per-repo GitHub Project board (see `docs/KANBAN_WORKFLOW.md`).
 - The board **Route** field (Human / Claude / Local) is the routing protocol made
   visible; it is derived from `scripts/route-model.sh` via `scripts/suggest-route.sh`. Keep them consistent.
@@ -67,3 +74,15 @@ Work is tracked on a per-repo GitHub Project board (see `docs/KANBAN_WORKFLOW.md
 
 ## Style
 Default response style should be concise and precise.
+
+## Project Instructions
+Repository-specific instructions live in `docs/PROJECT.md` when a project has
+them. Read that file as well as this one; this contract governs security,
+routing, and quality gates, while the project file covers what the repository
+actually is and how to operate it.
+
+**Do not append project-specific content to this file.** `CLAUDE.md` is
+template-owned and template-sync merges with `-X theirs`, so anything added
+here is deleted the next time the template changes — including, in at least one
+real case, a project's own security rules. `docs/PROJECT.md` exists only
+downstream, so sync never touches it.
