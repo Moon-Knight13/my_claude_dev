@@ -1,18 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=scripts/lib/subsystems.sh disable=SC1090,SC1091
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/subsystems.sh"
+
+if ! subsystem_enabled caveman; then
+  subsystem_skip_notice caveman "Caveman install"
+  exit 0
+fi
+
 if [[ "${CAVEMAN_ENABLED:-1}" != "1" ]]; then
   echo "Caveman install disabled (CAVEMAN_ENABLED=${CAVEMAN_ENABLED})."
   exit 0
 fi
 
-CAVEMAN_VERSION="${CAVEMAN_VERSION:-v1.9.1}"
+CAVEMAN_VERSION="${CAVEMAN_VERSION:-v1.9.0}"
 CAVEMAN_MODE="${CAVEMAN_MODE:-lite}"
-# Pinned integrity checksum of the caveman installer for CAVEMAN_VERSION. This is
-# a PUBLIC checksum (not a secret) so the installer verifies standalone — no
-# devcontainer env needed. Override via env if you bump to a version whose
-# install.sh differs. (v1.9.1 install.sh is byte-identical to v1.9.0.)
-CAVEMAN_INSTALL_SHA256="${CAVEMAN_INSTALL_SHA256:-8ddef49c15f089c26affed3c31d97142c683e1d37a1499ae557281ca09c2712c}"
+CAVEMAN_INSTALL_SHA256="${CAVEMAN_INSTALL_SHA256:-}"
 MARKER_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 MARKER_FILE="$MARKER_DIR/.template-caveman-version"
 mkdir -p "$MARKER_DIR"

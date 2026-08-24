@@ -287,7 +287,66 @@ PII-Shield cannot be installed via `claude plugin install` — it uses a `.mcpb`
      the base digest is refreshed via Dependabot.
    - repository-audit workflow (validates required files and CODEOWNERS customisation)
 - Project marker detection for language-specific checks.
-- If a stack marker exists and expected scripts are missing under `scripts/ci`, CI fails by design.
+- If a stack marker exists but the matching `scripts/ci` hook is absent, CI logs
+  a notice naming the missing script and continues. It used to fail hard, which
+  meant a freshly stamped repo went red the moment it added a `package.json` —
+  before it had written any CI at all. Add the hook to turn the gate on.
+
+## Optional Subsystems
+
+Not every project wants everything the template ships. `template.conf` at the
+repository root records which optional subsystems a derived repo uses:
+
+```sh
+SUBSYSTEM_ROUTING=true   # local-model delegation (needs an Ollama endpoint)
+SUBSYSTEM_BOARD=true     # GitHub Project board: /next-issue, /run-epic
+SUBSYSTEM_BMAD=true      # BMAD planning skill pack
+SUBSYSTEM_CAVEMAN=true   # caveman response-style plugin
+SUBSYSTEM_DAY0=true      # day-0 provisioning scripts
+```
+
+Everything defaults to `true`, including when the file is missing entirely, so
+repos that predate this mechanism behave exactly as before.
+
+Switching one off does two things:
+
+1. `scripts/validate-template.sh` stops requiring that subsystem's files and
+   reports them as skipped instead of missing.
+2. The devcontainer's `postStartCommand` skips its installer, so container
+   start does not reinstall what you removed.
+
+It does **not** delete anything — delete the files yourself once the switch is
+off. `template.conf` is listed in `.templatesyncignore`, so sync never
+overwrites your choices.
+
+### Why this exists
+
+The validator's required-file list used to be flat, and the validator is itself
+template-owned. A derivative that deleted a subsystem it never used went red in
+CI, and could not fix it locally because the next sync reverted the edit. The
+only escape was to ignore-list the validator, which then froze it against real
+upstream fixes. Worse, `.devcontainer/devcontainer.json` and `CLAUDE.md` wire
+those subsystems in, and ignore-listing *those* would sever the channel that
+carries devcontainer security fixes downstream — the main reason to keep the
+sync at all. Subsystem switches let a derivative decline a subsystem without
+giving up anything it still wants.
+
+### Deciding whether you actually use one
+
+- **Routing** — read `.ai/route-log.jsonl`. If every entry says
+  `local_unreachable_fallback` and `.ai/local-health.json` was never written,
+  no local delegation has ever happened.
+- **BMAD** — check whether `_bmad-output/` has ever contained anything. The
+  cost is not disk: its skill descriptions load into the system prompt of
+  every session in the repo.
+- **Board** — cheap to keep; it costs nothing per session unless invoked.
+
+### Existing derivatives
+
+`template.conf` reaches an existing derivative through a normal sync PR. Add
+`template.conf` to that repo's own `.templatesyncignore` in the same PR,
+otherwise a later sync will reset the choices to the template's all-on
+defaults.
 
 ## BMAD Workflow
 
@@ -498,9 +557,51 @@ Setup per derived repo (one-time):
   the app needs Workflows: Read and write, then reinstall/approve the updated
   app permissions on the repo.
 
-Repos created before the workflow existed can retrofit it with
-`bash scripts/adopt-template-sync.sh` (fetches the two files from the template
-via `gh` and prints the setup steps).
+Repos created before the workflow existed can retrofit it by copying
+`.github/workflows/template-sync.yml` and `.templatesyncignore` from this
+template, then following the token setup above.
+
+### Project-specific container setup — `scripts/project-setup.sh`
+
+Every entry in `devcontainer.json`'s `postStartCommand` is template-owned, so a
+derivative that needs its own start-time setup used to face a bad choice: edit
+`devcontainer.json` downstream and watch the next sync revert it, or add
+`devcontainer.json` to `.templatesyncignore` and sever the channel that carries
+devcontainer **security** fixes. Neither is acceptable, so the chain ends with a
+hook the derivative owns:
+
+```
+… && bash scripts/setup-day0.sh && bash scripts/project-setup.sh
+```
+
+The template ships `scripts/project-setup.sh` as a no-op. To use it:
+
+1. Replace its body with what your project needs at container start.
+2. Add `scripts/project-setup.sh` to `.templatesyncignore`, so sync stops
+   proposing the no-op back. **Only after the file exists locally** — listing a
+   path sync has not yet delivered means it never arrives, and the hook then
+   fails with exit 127.
+
+It runs **last** deliberately: a non-zero exit marks the whole
+`postStartCommand` failed, and putting it last means a broken project hook
+cannot stop the firewall, pre-commit or day-0 steps from having run. Prefer
+exiting 0 and warning unless the failure genuinely warrants a broken container.
+
+Remember egress is deny-by-default (`.devcontainer/init-firewall.sh`).
+`registry.npmjs.org`, `pypi.org` and `files.pythonhosted.org` are reachable;
+anything else has to be added to the allowlist there first.
+
+Worked example — a derivative whose tooling needs Pillow, where putting
+`python3-pil` in the template-owned `Dockerfile` would be reverted by the next
+sync:
+
+```bash
+# scripts/project-setup.sh (downstream copy)
+set -euo pipefail
+if ! python3 -c "import PIL" 2>/dev/null; then
+  pip install --break-system-packages --user Pillow
+fi
+```
 
 Possible future refinements (not implemented): converting the security
 workflows to reusable `workflow_call` workflows referenced by tag, and
