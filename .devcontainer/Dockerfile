@@ -45,6 +45,14 @@ RUN apt-get update && apt-get -y upgrade && apt-get install -y --no-install-reco
 # Install a modern pre-commit version at build time to avoid runtime PyPI access.
 RUN python3 -m pip install --break-system-packages "pre-commit>=3.7.0"
 
+# The node:24 base image ships an npm whose vendored `tar` (7.5.16 on the
+# current pin) carries CVE-2026-59873 (node-tar gzip-bomb DoS, CRITICAL).
+# Upgrade npm in place as root — this rewrites /usr/local/lib/node_modules/npm,
+# the exact path Trivy flags — so its bundled tar advances to the patched
+# >=7.5.19 release and the container-scan CRITICAL gate passes. Unpinned
+# `latest` matches the image's existing CLAUDE_CODE_VERSION convention.
+RUN npm install -g npm@latest && npm cache clean --force
+
 # Ensure default node user has access to /usr/local/share
 RUN mkdir -p /usr/local/share/npm-global && \
   chown -R node:node /usr/local/share
