@@ -9,12 +9,28 @@ FROM golang:1.26.4 AS gitleaks-build
 ARG GITLEAKS_VERSION=8.30.1
 RUN CGO_ENABLED=0 go install "github.com/zricethezav/gitleaks/v8@v${GITLEAKS_VERSION}"
 
-FROM node:24@sha256:fdddfb3e688158251943d52eba361de991548f6814007acba4917ae6b512d6be
+FROM node:24@sha256:934240a162082fd8b8a2f90cd5114446443f1eba1c5378f6687167ca405e6584
 
 ARG TZ
 ENV TZ="$TZ"
 
 ARG CLAUDE_CODE_VERSION=latest
+
+# Replace the npm bundled in the base image. node:24 currently ships an npm
+# whose vendored node-tar is 7.5.15, carrying CVE-2026-59873 (DoS via crafted
+# gzip bomb, CRITICAL, fixed in 7.5.19) at
+# /usr/local/lib/node_modules/npm/node_modules/tar — the sole CRITICAL failing
+# the container-scan gate since 2026-07-27. A global npm install overwrites
+# that exact path.
+#
+# 11.19.0 rather than 12.0.2: both declare `tar: ^7.5.19`, but npm 12 requires
+# node ^24.15.0 and is a major bump for every derivative's lockfiles, while
+# 11.19.0 keeps engines at `^20.17.0 || >=22.9.0`. Same fix, no major.
+# Remove this once the pinned node:24 digest ships npm >= 11.19.0 itself.
+# Dependabot digest bumps do not imply that — the pending 5711a0d bump only
+# moves tar to 7.5.16.
+ARG NPM_VERSION=11.19.0
+RUN npm install -g "npm@${NPM_VERSION}" && npm --version
 
 # Install basic development tools and iptables/ipset.
 # `apt-get upgrade` pulls patched Debian security packages into the image so the
