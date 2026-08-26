@@ -45,7 +45,18 @@ else
     exit 1
   fi
 
-  bash "$INSTALL_FILE" --only claude --non-interactive
+  # Pass the POSIX `--` end-of-options marker before the installer flags.
+  # install.sh is a shim: run from a temp file it has no bin/install.js beside
+  # it, so it always takes the curl-pipe path and execs `npx -y github:<repo>
+  # "$@"`. Without `--`, npx consumes the flags instead of forwarding them and
+  # the already-installed `caveman` CLI answers instead of the installer
+  # ("unknown command \"--only\""), failing every container start. Upstream's
+  # own help documents the `--` form and bin/install.js skips a leading `--`.
+  if ! bash "$INSTALL_FILE" -- --only claude --non-interactive; then
+    echo "WARN: caveman install failed; continuing without it."
+    rm -f "$INSTALL_FILE"
+    exit 0
+  fi
   rm -f "$INSTALL_FILE"
   echo "$CAVEMAN_VERSION" > "$MARKER_FILE"
 fi
