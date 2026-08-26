@@ -117,6 +117,40 @@ A working v4 alongside a v6 that fails in milliseconds is this, not a network
 fault. If IPv6 egress is ever required, the ipset and the resolver precedence
 must change together — changing either alone recreates the dead path.
 
+### Reading the debug log: expected noise vs a real failure
+
+`~/.claude/debug/<session-id>.txt` is loud in this container, and most of the
+noise is the firewall doing its job. Distinguish the two classes before
+investigating anything.
+
+**Expected — telemetry the firewall deliberately blocks.** These hosts are not in
+`allowed-domains` and never will be; the errors are the deny-by-default policy
+working, not a symptom:
+
+- `Failed to flush logs to Datadog: ... connect ECONNREFUSED`
+- `[3P telemetry] OTEL diag error: Failed to export N events`
+- `1P event logging: N events failed to export`
+- `CCRClient: internal events failed` / `client events failed`
+- `MCP server "ide" Connection failed: WebSocket is not open` — the VS Code
+  bridge, cosmetic
+- YAML frontmatter errors under `.claude/skills/bmad-*` — BMAD-installed content,
+  gitignored (`.gitignore:26`), not fixable here; report upstream
+
+**A real API failure** looks like this instead, and carries an id meant for
+Anthropic support:
+
+```bash
+grep -E "API error \(attempt|turn ended in error|x-client-request-id" \
+  ~/.claude/debug/<session-id>.txt
+```
+
+`x-client-request-id` is emitted specifically so the API team can find the
+server-side record. When local measurement has been exhausted, that id — not
+another configuration change — is the next step.
+
+Do not allowlist the telemetry endpoints to quieten the log. Opening egress to
+reduce noise is the wrong trade in a deny-by-default container.
+
 ### Pinning third-party installers
 
 Installers fetched from upstream are pinned to a specific tag, and the commit
