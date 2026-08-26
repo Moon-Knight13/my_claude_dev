@@ -16,6 +16,11 @@
 # Every attempt (success or escalation) is appended to $MODEL_ROUTE_LOG.
 set -euo pipefail
 
+# Load .env so the values setup-day0.sh wrote there actually reach this script.
+# Environment still wins over the file; see scripts/lib/load-env.sh.
+# shellcheck source=scripts/lib/load-env.sh disable=SC1090,SC1091
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/load-env.sh"
+
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 TASK_TYPE="${1:-}"

@@ -16,6 +16,9 @@
 # Run again after each step — exits 0 only when nothing FAILs.
 set -euo pipefail
 
+# shellcheck source=scripts/lib/subsystems.sh disable=SC1090,SC1091
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/subsystems.sh"
+
 PASS=0
 FAIL=0
 SKIP=0
@@ -132,12 +135,30 @@ else
         "Run: bash scripts/setup-day0.sh  (derives the owner from the git remote; or edit .github/CODEOWNERS by hand)"
 fi
 
-# 6. .env file exists
-if [[ -f ".env" ]]; then
-    check ".env file exists" "pass" ""
-else
+# 6. .env exists AND its values actually reach the routing scripts.
+# Checking only that the file exists used to report OK while nothing loaded it.
+# Every consumer read the values from the environment, so on a remote box — which
+# has no devcontainer containerEnv — route-model.sh fell through to its own
+# defaults and returned local_disabled no matter what .env said. Assert the
+# plumbing, not the file.
+if [[ ! -f ".env" ]]; then
     check ".env file exists" "fail" \
         "Run: bash scripts/setup-day0.sh  (copies .env.example — then review the values)"
+elif ! grep -q "load-env.sh" scripts/route-model.sh 2>/dev/null; then
+    check ".env values reach the routing scripts" "fail" \
+        "scripts/route-model.sh does not source scripts/lib/load-env.sh, so .env is ignored"
+elif ! subsystem_enabled ROUTING; then
+    check ".env loaded (local routing off in template.conf)" "pass" ""
+else
+    _effective_local="$(bash -c '
+        source scripts/lib/load-env.sh 2>/dev/null || true
+        printf "%s" "${LOCAL_MODEL_ENABLED:-false}"' 2>/dev/null || echo false)"
+    if [[ "$_effective_local" == "true" ]]; then
+        check ".env loaded; local routing enabled" "pass" ""
+    else
+        check ".env loaded; local routing disabled" "warn" \
+            "LOCAL_MODEL_ENABLED is not true, so every task routes to Claude. Set it in .env to enable local offload."
+    fi
 fi
 
 # 7. .claude/settings.json exists (MCP routing configured)

@@ -82,6 +82,51 @@ installed on any box.
 Bump `PROVISION_VERSION` whenever the provisioning steps change, so boxes that
 already carry a marker re-provision.
 
+### `.env` only works because something loads it
+
+`.env.example` is copied to `.env` by `setup-day0.sh`, but for a long time
+nothing read the result. Every consumer took its values straight from the
+environment — `route-model.sh` still opens with
+`LOCAL_MODEL_ENABLED="${LOCAL_MODEL_ENABLED:-false}"` — so the file was
+decoration. `scripts/lib/load-env.sh` closes that gap and the routing entry
+points (`route-model.sh`, `delegate-local.sh`, `local-health.sh`,
+`ask-local.sh`) source it.
+
+The failure was surface-specific, which is why it survived so long. In the
+devcontainer, `devcontainer.json` sets `LOCAL_MODEL_ENABLED` and
+`LOCAL_MODEL_ENDPOINT` through `containerEnv`, so local routing worked and
+looked configured. On a remote box there is no `containerEnv` — `.env` is all
+there is — so `route-model.sh` fell through to its default and returned
+`local_disabled` for every task. This is the exact trap the "What this
+repository is" section warns about: an environment variable that only exists in
+`devcontainer.json` is not available on a box.
+
+Every variable `containerEnv` does *not* set was inert on **both** surfaces:
+`LOCAL_MODEL_MODEL`, the timeouts, `LOCAL_MODEL_MIN_TPS`, `LOCAL_HEALTH_TTL`,
+`CLAUDE_MODEL`, and the `FORCE_*` overrides. Setting `FORCE_LOCAL=true` in
+`.env` did nothing at all.
+
+Two properties of the loader matter if you change it:
+
+- **The environment wins over the file.** A variable already set is left alone,
+  so `FORCE_CLAUDE=true bash scripts/route-model.sh …`, CI, and `containerEnv`
+  keep overriding `.env` rather than being overwritten by it.
+- **The file is parsed, not sourced.** `.env` is developer-authored, so sourcing
+  it would execute its contents on every routing decision. Only `KEY=VALUE`
+  lines are honoured. `scripts/lib/subsystems.sh` refuses to source
+  `template.conf` for the same reason.
+
+`check-day0.sh` asserts the plumbing rather than the file. Checking that `.env`
+exists reported OK for a subsystem that had never worked — the same shape as the
+provisioning failure in "Provisioning must not lie". It now fails when
+`route-model.sh` does not source the loader, and warns when local routing is
+switched off, so the reported state matches the routed state.
+
+Note that these are template-owned scripts. If a template sync reverts the
+loader, `check-day0.sh` fails on "`.env` values reach the routing scripts"
+rather than going quiet — but the fix belongs upstream in the template, since
+the template ships both the `.env.example` and the scripts that ignored it.
+
 ### Network changes are deliberate
 
 Adding an outbound host to the devcontainer firewall goes through

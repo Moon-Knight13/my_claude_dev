@@ -7,6 +7,11 @@
 # Returns: the model's response text on stdout, exits non-zero on failure.
 set -euo pipefail
 
+# Load .env so the values setup-day0.sh wrote there actually reach this script.
+# Environment still wins over the file; see scripts/lib/load-env.sh.
+# shellcheck source=scripts/lib/load-env.sh disable=SC1090,SC1091
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/load-env.sh"
+
 LOCAL_MODEL_ENDPOINT="${LOCAL_MODEL_ENDPOINT:-http://host.docker.internal:11434}"
 LOCAL_MODEL_MODEL="${LOCAL_MODEL_MODEL:-qwen2.5-coder:7b}"
 

@@ -97,7 +97,8 @@ require_files routing \
     docs/AI_ROUTING_POLICY.md \
     .claude/commands/route-task.md \
     scripts/route-model.sh \
-    scripts/ask-local.sh
+    scripts/ask-local.sh \
+    scripts/lib/load-env.sh
 
 echo ""
 echo "[1b] Required files (project board):"
