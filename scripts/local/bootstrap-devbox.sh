@@ -58,19 +58,34 @@ if [[ -f "$KEY" ]]; then
     info "reusing existing key: $KEY"
 else
     note "no key at $KEY — generating an ed25519 keypair (you'll set a passphrase)"
-    ssh-keygen -t ed25519 -C "$RANGE_USER" -f "$KEY"
+    ssh-keygen -t ed25519 -C "MCD_${RANGE_USER}" -f "$KEY"
 fi
 
 # --- 3. SSH agent + add key --------------------------------------------------
+# The key MUST live in a PERSISTENT agent (your login session), because VSCode
+# forwards THAT agent to the box and downstream tools (Catapult/ctp) use the
+# forwarded key. We must NOT spawn a throwaway `ssh-agent` here — one started in
+# this script dies when the script exits, so your shell/VSCode would forward an
+# empty agent and ctp would fail. Detect a real agent instead of creating one.
 step "SSH agent"
-if ! ssh-add -l >/dev/null 2>&1; then
-    note "starting an ssh-agent for this shell"
-    eval "$(ssh-agent -s)" >/dev/null
-fi
-if ssh-add -l 2>/dev/null | grep -q "$(ssh-keygen -lf "$KEY" 2>/dev/null | awk '{print $2}')"; then
-    info "key already in agent"
+ssh-add -l >/dev/null 2>&1; agent_rc=$?   # 0 = keys loaded, 1 = empty agent, 2 = no agent
+if [[ "$agent_rc" -eq 2 ]]; then
+    warn "no persistent ssh-agent found in this session — NOT starting a throwaway one"
+    note "a script-started agent dies on exit and would forward NOTHING to the box."
+    note "run this in your OWN login shell, then re-run this script:"
+    note "    ssh-add ${KEY}"
+    note "  to persist across reboots:"
+    note "    macOS:  ssh-add --apple-use-keychain ${KEY}"
+    note "    Linux:  ensure your desktop/systemd ssh-agent is running (gnome-keyring/keychain)"
 else
-    ssh-add "$KEY" || warn "could not add key to agent"
+    _fp="$(ssh-keygen -lf "$KEY" 2>/dev/null | awk '{print $2}')"
+    if [[ -n "$_fp" ]] && ssh-add -l 2>/dev/null | grep -q "$_fp"; then
+        info "key already in agent"
+    elif [[ "$(uname)" == "Darwin" ]]; then
+        ssh-add --apple-use-keychain "$KEY" || warn "could not add key to agent"
+    else
+        ssh-add "$KEY" || warn "could not add key to agent"
+    fi
 fi
 
 # --- 4. ~/.ssh/config Host block (idempotent; lives outside the repo) ---------
@@ -161,6 +176,18 @@ step "Next: connect and provision the box"
 cat <<EOF
   Connect with VSCode Remote-SSH (F1 -> "Remote-SSH: Connect to Host" -> ${HOST})
   or from a shell:  ssh ${HOST}
+
+  IMPORTANT — agent forwarding (Catapult/ctp need your FORWARDED key):
+    1) This script set VSCode remote.SSH.useExecServer=false. Those settings only
+       take effect on a FRESH connection, so fully CLOSE and REOPEN the Remote-SSH
+       window after the first connect.
+    2) Verify on the box:   ssh-add -l
+       You should see your key (comment MCD_${RANGE_USER}). If it says
+       "no identities", forwarding is broken — check, in order:
+         - key is in your LOCAL agent:              ssh-add -l   (on your laptop)
+         - config forwards it:                      grep -A3 '^Host ${HOST}' ~/.ssh/config
+         - VSCode remote.SSH.useExecServer is off   (then reconnect)
+         - the box permits it:                      sshd -T | grep allowagentforwarding
 
   Then ON THE BOX, clone this repo (if not already) and run:
       git clone https://github.com/Moon-Knight13/my_claude_dev

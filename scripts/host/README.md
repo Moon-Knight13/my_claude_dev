@@ -29,6 +29,8 @@ Order it performs:
    `scripts/install-claude-plugins.sh`, then installs
    `skill-creator@claude-plugins-official` and `gitlab@claude-plugins-official`.
 4. **Killswitch** (`setup-killswitch.sh`).
+5. **SSH agent-forwarding check** — verifies the box permits agent forwarding and
+   that a forwarded key is reachable (read-only; see below).
 
 You can also run any step on its own, e.g.
 `bash scripts/host/setup-ansible-lint.sh`.
@@ -53,6 +55,34 @@ boxes re-provision on next run.
 > **Docker group needs a reboot.** If the ansible step adds you to the `docker`
 > group, reboot the box before the Docker execution environment works without
 > sudo (matches the manual dev-setup guide).
+
+## SSH agent forwarding (Catapult / ctp)
+
+Downstream tools on the box — **Catapult / `ctp` / `make start`** — authenticate
+with your **forwarded** SSH key (`~/.ssh/id_ed25519_MCD`, comment `MCD_<user>`).
+Nothing on the box holds your private key; it stays on your laptop and is reached
+over the forwarded agent. If forwarding isn't working, those tools fail. Four
+things must all be true:
+
+1. **Key is in your laptop's persistent agent** — `ssh-add -l` on your laptop
+   lists it. `scripts/local/bootstrap-devbox.sh` adds it, but a key only survives
+   in your *login* agent (the script refuses to spawn a throwaway one).
+2. **`~/.ssh/config` forwards it** — the Host block has `ForwardAgent yes`
+   (the local bootstrap writes this).
+3. **VSCode `remote.SSH.useExecServer` is OFF** — set by the local bootstrap.
+   It only takes effect on a **fresh** connection, so fully close and reopen the
+   Remote-SSH window after the first connect.
+4. **The box permits it** — `sshd -T | grep allowagentforwarding` → `yes`
+   (checked in provisioning step 5; `provision-remote-box.sh` warns if it's `no`).
+
+**Verify on the box:**
+
+```sh
+ssh-add -l     # should list your key (comment MCD_<user>); "no identities" = broken
+```
+
+If it's empty, walk the four points above in order (usually a missed reconnect
+after `useExecServer` was turned off).
 
 ## The killswitch
 
