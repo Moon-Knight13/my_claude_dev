@@ -59,9 +59,13 @@ boxes re-provision on next run.
 `setup-killswitch.sh` installs `/usr/local/sbin/claude-killswitch.sh` plus a PAM
 `close_session` hook, a 30-second systemd timer backstop, and an sshd keepalive
 drop-in. When the target user has **no** live SSH session, the script shreds
-`~/.claude/.credentials.json`, so the next person on the shared account must
-`/login` with their own credentials. Only the token file is removed — settings,
-history, and `projects/` are kept.
+the developer credentials left on the box — `~/.claude/.credentials.json` (Claude
+token), `~/.config/gh/hosts.yml` (GitHub token from `gh auth login`) and
+`~/.git-credentials` if present — so the next person on the shared account must
+authenticate as themselves. Only credentials are removed; losing any of them costs
+a re-login, never data. Settings, history, and `projects/` are deliberately kept,
+because Claude Code stores transcripts locally and nowhere else — deleting them
+would destroy the developer's own history rather than protect anything.
 
 Operate / verify:
 
