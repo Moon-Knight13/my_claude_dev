@@ -103,10 +103,15 @@ to IPv6 first, rejected in about two milliseconds, and the Claude CLI drops
 mid-session with `ECONNRESET`. Diagnose with:
 
 ```bash
-getent hosts api.anthropic.com    # an IPv6 answer here is the symptom
+getent ahosts api.anthropic.com   # IPv4 must sort first
 curl -4 -sS -o /dev/null -w 'v4: %{http_code}\n' https://api.anthropic.com/v1/messages
 curl -6 -sS -o /dev/null -w 'v6: %{http_code}\n' https://api.anthropic.com/v1/messages
 ```
+
+Use `ahosts`, not `hosts`: `getent hosts` resolves through the NSS `hosts` map
+and does not apply RFC 3484 sorting, so it can still report an IPv6 address
+even when the precedence setting is working. `getent ahosts` goes through
+`getaddrinfo`, which is what applications use and what `gai.conf` governs.
 
 A working v4 alongside a v6 that fails in milliseconds is this, not a network
 fault. If IPv6 egress is ever required, the ipset and the resolver precedence

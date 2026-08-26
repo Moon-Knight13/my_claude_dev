@@ -52,7 +52,7 @@
     "source=claude-code-ghconfig-${devcontainerId},target=/home/node/.config/gh,type=volume"
   ],
   "containerEnv": {
-    "NODE_OPTIONS": "--max-old-space-size=4096",
+    "NODE_OPTIONS": "--max-old-space-size=4096 --dns-result-order=ipv4first",
     "CLAUDE_CONFIG_DIR": "/home/node/.claude",
     "POWERLEVEL9K_DISABLE_GITSTATUS": "true",
     "LOCAL_MODEL_ENABLED": "true",
