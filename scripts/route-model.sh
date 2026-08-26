@@ -6,6 +6,11 @@
 # Not called automatically by Claude Code — Claude must invoke it explicitly per CLAUDE.md instructions.
 set -euo pipefail
 
+# Load .env so the values setup-day0.sh wrote there actually reach this script.
+# Environment still wins over the file; see scripts/lib/load-env.sh.
+# shellcheck source=scripts/lib/load-env.sh disable=SC1090,SC1091
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/load-env.sh"
+
 TASK_TYPE="${1:-unknown}"
 RISK_LEVEL="${2:-low}"
 CHANGED_FILES="${3:-1}"
