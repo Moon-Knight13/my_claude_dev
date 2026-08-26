@@ -151,6 +151,48 @@ another configuration change — is the next step.
 Do not allowlist the telemetry endpoints to quieten the log. Opening egress to
 reduce noise is the wrong trade in a deny-by-default container.
 
+### If you see `ECONNRESET`
+
+The failing shape is a full retry ladder — `API error (attempt 1/11)` through
+`attempt 11/11`, then `API connection_error after retries` and `[engine] turn
+ended in error: API Error: Connection dropped (ECONNRESET)`. Auto-mode tool
+classification fails closed in the same window, so tools start being denied with
+retry guidance; that is a consequence, not a second fault.
+
+**Check the one cause that is in this repository first.** Run the `getent
+ahosts` / `curl -4` / `curl -6` triple from the section above. If IPv4 does not
+sort first, or v6 fails in milliseconds while v4 works, this is the resolver
+precedence pairing and it is fixable here.
+
+If IPv4 sorts first and `curl -4` returns a response, the repository is not
+involved. A full day of measurement has already ruled out everything below —
+re-running it is a day nobody gets back:
+
+| Eliminated | How |
+| --- | --- |
+| DNS and IPv6 | `getent ahosts` sorts v4 first; `curl -4` succeeds |
+| Firewall and ipset membership | Destination resolves into the allowed ipset; rule counters increment on ACCEPT, and nothing lands on the deny rules |
+| MTU / path MTU black hole | 1500-byte don't-fragment probes round-trip cleanly, so no fragmentation-needed message is being swallowed |
+| Docker networking | Reproduced identically from the host, outside any container |
+| Throughput and connection duration | Bulk downloads and deliberately slow-trickled long-lived transfers both sustain without a reset |
+| Router IPS / ad-blocking | Router logs show zero blocks against the destination across the entire failure window |
+
+**What that leaves is upstream transit**, and the discriminator is this: a VPN
+egress path reaching the *same destination address* succeeds while the direct
+path fails. Same destination, same client, same request — only the transit
+differs. That isolates the fault to a hop between this network and the
+destination. No devcontainer, firewall, MTU or DNS change can reach it, and
+proposing one is how this loops back to the start.
+
+The workaround is a destination-scoped policy route at the network edge, which
+lives outside this repository by design — routing an egress path is not a
+container concern, and the repository is public.
+
+For the escalation path, pull `x-client-request-id` out of the debug log. Every
+failed request emits one so Anthropic support can find the server-side record;
+once local measurement is exhausted that id is the next step, not another
+configuration change.
+
 ### Pinning third-party installers
 
 Installers fetched from upstream are pinned to a specific tag, and the commit
