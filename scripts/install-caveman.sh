@@ -16,7 +16,13 @@ fi
 
 CAVEMAN_VERSION="${CAVEMAN_VERSION:-v1.9.0}"
 CAVEMAN_MODE="${CAVEMAN_MODE:-lite}"
-CAVEMAN_INSTALL_SHA256="${CAVEMAN_INSTALL_SHA256:-}"
+CAVEMAN_REPO="${CAVEMAN_REPO:-JuliusBrussee/caveman}"
+# The immutable commit CAVEMAN_VERSION pointed at when it was pinned. npm cannot
+# fetch a bare commit sha (npm/cli: "GitFetcher requires an Arborist constructor
+# to pack a tarball"), so the install pins the *tag* and uses this value to
+# detect a tag that upstream has since moved. Refresh both together with:
+#   git ls-remote https://github.com/JuliusBrussee/caveman refs/tags/<tag>^{}
+CAVEMAN_COMMIT="${CAVEMAN_COMMIT:-32f37af81a02a4b91c107b768f1365848e5bf005}"
 MARKER_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 MARKER_FILE="$MARKER_DIR/.template-caveman-version"
 mkdir -p "$MARKER_DIR"
@@ -24,29 +30,42 @@ mkdir -p "$MARKER_DIR"
 if [[ -f "$MARKER_FILE" ]] && grep -q "^${CAVEMAN_VERSION}$" "$MARKER_FILE"; then
   echo "Caveman already installed at ${CAVEMAN_VERSION}."
 else
-  INSTALL_URL="https://raw.githubusercontent.com/JuliusBrussee/caveman/${CAVEMAN_VERSION}/install.sh"
-  INSTALL_FILE="$(mktemp)"
-
-  curl -fsSL "$INSTALL_URL" -o "$INSTALL_FILE"
-
-  if [[ -z "$CAVEMAN_INSTALL_SHA256" ]]; then
-    echo "ERROR: CAVEMAN_INSTALL_SHA256 is required for secure installer verification."
-    echo "Set it in your environment or .env (do not hardcode secrets in repo files)."
-    rm -f "$INSTALL_FILE"
-    exit 1
+  # Do NOT go through upstream's install.sh. It is only a shim, and its
+  # curl-pipe path execs `npx -y github:<repo>` with NO ref, so it always runs
+  # the DEFAULT BRANCH — whose `caveman` bin is the runtime CLI, not the
+  # installer. That CLI rejects the installer's own flags ("unknown command
+  # \"--only\"", and likewise \"--\"), so the shim fails every single run.
+  # Invoke the installer directly at a pinned tag instead; `bin/install.js`
+  # there does accept --only/--non-interactive, and skips the leading `--`.
+  if ! command -v npx >/dev/null 2>&1; then
+    echo "WARN: npx not found (needs Node >=18); skipping caveman."
+    exit 0
   fi
 
-  ACTUAL_SHA256="$(sha256sum "$INSTALL_FILE" | awk '{print $1}')"
-  if [[ "$ACTUAL_SHA256" != "$CAVEMAN_INSTALL_SHA256" ]]; then
-    echo "ERROR: Caveman installer checksum mismatch."
-    echo "Expected: $CAVEMAN_INSTALL_SHA256"
-    echo "Actual:   $ACTUAL_SHA256"
-    rm -f "$INSTALL_FILE"
-    exit 1
+  # Supply-chain check: a git tag is mutable, so confirm it still points at the
+  # commit we pinned. On drift we refuse to install rather than execute code
+  # nobody reviewed -- but exit 0, because an optional statusline helper must
+  # not abort provisioning. scripts/check-day0.sh reports the absence.
+  if command -v git >/dev/null 2>&1; then
+    _resolved="$(git ls-remote "https://github.com/${CAVEMAN_REPO}" \
+      "refs/tags/${CAVEMAN_VERSION}^{}" 2>/dev/null | awk '{print $1}')" || _resolved=""
+    if [[ -z "$_resolved" ]]; then
+      echo "WARN: could not resolve ${CAVEMAN_VERSION}; skipping the tag-drift check."
+    elif [[ "$_resolved" != "$CAVEMAN_COMMIT" ]]; then
+      echo "ERROR: ${CAVEMAN_VERSION} now resolves to ${_resolved},"
+      echo "       but CAVEMAN_COMMIT pins ${CAVEMAN_COMMIT}. The upstream tag moved."
+      echo "       Refusing to install. Review the delta, then update CAVEMAN_COMMIT."
+      exit 0
+    fi
+  else
+    echo "WARN: git not available; skipping the tag-drift check."
   fi
 
-  bash "$INSTALL_FILE" --only claude --non-interactive
-  rm -f "$INSTALL_FILE"
+  if ! npx -y "github:${CAVEMAN_REPO}#${CAVEMAN_VERSION}" -- \
+      --only claude --non-interactive; then
+    echo "WARN: caveman install failed; continuing without it."
+    exit 0
+  fi
   echo "$CAVEMAN_VERSION" > "$MARKER_FILE"
 fi
 

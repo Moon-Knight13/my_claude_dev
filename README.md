@@ -82,9 +82,20 @@ interactively, and that secret is likewise never stored by these scripts.
 ### The killswitch (shared account)
 
 The Deployboxes are a **shared account** with sudo for everyone. `setup-killswitch.sh`
-installs a PAM hook + systemd timer that shred `~/.claude/.credentials.json` once the target
-user has **no** live SSH session — so the next connector must `/login` with their own
-credentials. Only the token file is removed; settings, history, and `projects/` are kept.
+installs a PAM hook + systemd timer that shred the developer credentials left on the box
+once the target user has **no** live SSH session — so the next connector must authenticate
+as themselves:
+
+| File | Credential |
+| --- | --- |
+| `~/.claude/.credentials.json` | Claude subscription token |
+| `~/.config/gh/hosts.yml` | GitHub token from `gh auth login` |
+| `~/.git-credentials` | plaintext git credential store, if present |
+
+Only credentials are removed — losing any of them costs a re-login, never data. Settings,
+history, and `projects/` are deliberately **kept**: Claude Code stores session transcripts
+locally and nowhere else, so deleting them would destroy the developer's own history rather
+than protect anything. Keep sensitive detail out of prompts on a shared box.
 
 This is a **sequential-reuse hygiene control, not a defense against a malicious insider**:
 concurrent sessions still share whichever token is logged in, and a peer with `sudo` can

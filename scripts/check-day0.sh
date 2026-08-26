@@ -221,6 +221,17 @@ if [[ -f docs/explainer/index.html ]]; then
     fi
 fi
 
+# 13. Caveman installed (optional — a WARN, never a FAIL). install-caveman.sh
+# exits 0 when it cannot install, precisely so an optional statusline helper
+# never aborts provisioning; that means its absence has to surface here instead.
+_caveman_marker="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/.template-caveman-version"
+if [[ -f "$_caveman_marker" ]]; then
+    check "Caveman installed ($(head -n1 "$_caveman_marker"))" "pass" ""
+else
+    check "Caveman installed" "warn" \
+        "Optional. Run: bash scripts/install-caveman.sh and read its output — it exits 0 on failure by design. A moved upstream tag makes it refuse to install until CAVEMAN_COMMIT is reviewed and updated."
+fi
+
 echo ""
 echo "Results: ${PASS} ok, ${FAIL} failed, ${SKIP} skipped, ${WARN} warnings"
 

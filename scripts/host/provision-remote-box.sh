@@ -24,7 +24,7 @@ _REPO_ROOT="$(cd "$_SCRIPT_DIR/../.." && pwd)"
 source "$_SCRIPT_DIR/lib/host-common.sh"
 
 # Bump when the provisioning steps change so existing boxes re-provision.
-PROVISION_VERSION=1
+PROVISION_VERSION=2
 MARKER_DIR=/var/lib/claude-devbox
 MARKER="$MARKER_DIR/provisioned"
 FORCE=0
@@ -88,17 +88,17 @@ fi
 # --- 2. Ansible-lint + Docker ------------------------------------------------
 host_step "[2/4] Ansible-lint + Docker"
 bash "$_SCRIPT_DIR/setup-ansible-lint.sh" ${ASSUME_YES:+--yes} \
-    || host_warn "setup-ansible-lint.sh reported an issue (continuing)"
+    || host_fail "setup-ansible-lint.sh reported an issue"
 
 # --- 3. Caveman + Claude plugins ---------------------------------------------
 host_step "[3/4] Caveman + Claude plugins"
 if [[ -f "$_REPO_ROOT/scripts/install-caveman.sh" ]]; then
-    bash "$_REPO_ROOT/scripts/install-caveman.sh" || host_warn "install-caveman.sh failed (continuing)"
+    bash "$_REPO_ROOT/scripts/install-caveman.sh" || host_fail "install-caveman.sh failed"
 else
     host_note "scripts/install-caveman.sh not found — skipping caveman"
 fi
 if [[ -f "$_REPO_ROOT/scripts/install-claude-plugins.sh" ]]; then
-    bash "$_REPO_ROOT/scripts/install-claude-plugins.sh" || host_warn "install-claude-plugins.sh failed (continuing)"
+    bash "$_REPO_ROOT/scripts/install-claude-plugins.sh" || host_fail "install-claude-plugins.sh failed"
 fi
 
 if CLAUDE_BIN="$(find_claude)"; then
@@ -116,17 +116,29 @@ if CLAUDE_BIN="$(find_claude)"; then
         elif "$CLAUDE_BIN" plugin install "${p}@claude-plugins-official" >/dev/null 2>&1; then
             host_info "installed ${p}@claude-plugins-official"
         else
-            host_warn "could not install ${p}@claude-plugins-official"
+            host_fail "could not install ${p}@claude-plugins-official"
         fi
     done
 else
-    host_warn "claude CLI not found — skipping official plugin install (connect once so the extension unpacks, then re-run)"
+    host_fail "claude CLI not found — official plugins not installed (connect once so the extension unpacks, then re-run)"
 fi
 
 # --- 4. Killswitch -----------------------------------------------------------
 host_step "[4/4] Killswitch"
 bash "$_SCRIPT_DIR/setup-killswitch.sh" ${ASSUME_YES:+--yes} \
-    || host_warn "setup-killswitch.sh reported an issue"
+    || host_fail "setup-killswitch.sh reported an issue"
+
+# A failed step must NOT be recorded as a completed provision. Writing the
+# marker anyway is what let a broken caveman install go unnoticed: the run
+# printed "complete", exited 0, and every re-run then short-circuited on
+# "Already provisioned".
+if (( ${#HOST_FAILURES[@]} > 0 )); then
+    host_step "Provisioning INCOMPLETE — ${#HOST_FAILURES[@]} step(s) failed"
+    for _f in "${HOST_FAILURES[@]}"; do host_warn "$_f"; done
+    host_note "No completion marker written, so a re-run retries these steps."
+    host_note "Check status any time with: bash scripts/check-day0.sh"
+    exit 1
+fi
 
 # Record completion so a reconnect can skip. Best-effort; never fail the run.
 if _sudo mkdir -p "$MARKER_DIR" 2>/dev/null; then

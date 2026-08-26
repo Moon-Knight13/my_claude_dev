@@ -52,11 +52,16 @@ host_step "Installing $WIPE_SCRIPT"
 _wipe_tmp="$(mktemp)"
 cat > "$_wipe_tmp" <<EOF
 #!/bin/sh
-# claude-killswitch.sh — wipe the Claude token when TARGET_USER has no live SSH
-# session. Installed by scripts/host/setup-killswitch.sh. Idempotent.
+# claude-killswitch.sh — wipe leftover developer credentials when TARGET_USER
+# has no live SSH session. Installed by scripts/host/setup-killswitch.sh.
+# Idempotent.
+#
+# Scope is credentials ONLY. Session transcripts under ~/.claude/projects/ are
+# deliberately not touched: Claude Code stores them locally and nowhere else, so
+# deleting them would destroy the developer's own history rather than protect
+# anything. Losing any file listed below costs a re-login, never data.
 set -eu
 TARGET_USER=$TARGET_USER
-CRED="$TARGET_HOME/.claude/.credentials.json"
 LOG=/var/log/claude-killswitch.log
 
 # A live SSH channel always has a \$TARGET_USER-owned sshd child; it dies the
@@ -68,11 +73,17 @@ if [ "\$sessions" -gt 0 ]; then
   exit 0
 fi
 
-if [ -f "\$CRED" ]; then
-  shred -u "\$CRED" 2>/dev/null || rm -f "\$CRED"
+_wiped=0
+for _cred in "$TARGET_HOME/.claude/.credentials.json" "$TARGET_HOME/.config/gh/hosts.yml" "$TARGET_HOME/.git-credentials"; do
+  [ -f "\$_cred" ] || continue
+  shred -u "\$_cred" 2>/dev/null || rm -f "\$_cred"
+  echo "\$(date -Is) killswitch: wiped \$_cred (0 ssh sessions)" >> "\$LOG"
+  _wiped=1
+done
+
+if [ "\$_wiped" -eq 1 ]; then
   pkill -u "\$TARGET_USER" -f 'native-binary/claude' 2>/dev/null || true
   pkill -u "\$TARGET_USER" -f 'anthropic.claude-code' 2>/dev/null || true
-  echo "\$(date -Is) killswitch: wiped \$CRED (0 ssh sessions)" >> "\$LOG"
 fi
 EOF
 $SUDO install -o root -g root -m 0755 "$_wipe_tmp" "$WIPE_SCRIPT"
