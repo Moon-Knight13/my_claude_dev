@@ -1,0 +1,80 @@
+---
+- name: Assert we are on a Debian/Ubuntu host with systemd
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['os_family'] == 'Debian'
+      - ansible_facts['service_mgr'] == 'systemd'
+    fail_msg: >-
+      The dolly role targets Ubuntu/Debian with systemd
+      (found {{ ansible_facts['os_family'] }} / {{ ansible_facts['service_mgr'] }}).
+
+- name: Install python3
+  ansible.builtin.apt:
+    name: python3
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create the dolly group
+  ansible.builtin.group:
+    name: "{{ dolly_group }}"
+    system: true
+    state: present
+
+- name: Create the dolly system user
+  ansible.builtin.user:
+    name: "{{ dolly_user }}"
+    group: "{{ dolly_group }}"
+    home: "{{ dolly_install_dir }}"
+    shell: /usr/sbin/nologin
+    system: true
+    create_home: false
+    state: present
+
+- name: Create the install directory
+  ansible.builtin.file:
+    path: "{{ dolly_install_dir }}"
+    state: directory
+    owner: root
+    group: "{{ dolly_group }}"
+    mode: "0750"
+
+- name: Install the tribute webserver
+  ansible.builtin.copy:
+    src: dolly.py
+    dest: "{{ dolly_install_dir }}/dolly.py"
+    owner: root
+    group: "{{ dolly_group }}"
+    mode: "0640"
+  notify: Restart dolly
+
+- name: Install the systemd unit
+  ansible.builtin.template:
+    src: dolly.service.j2
+    dest: "/etc/systemd/system/{{ dolly_service_name }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart dolly
+
+- name: Flush handlers so the service is current before we start it
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start dolly
+  ansible.builtin.systemd_service:
+    name: "{{ dolly_service_name }}"
+    enabled: true
+    state: started
+
+- name: Wait for dolly to answer
+  ansible.builtin.uri:
+    url: "http://{{ dolly_bind_host if dolly_bind_host != '0.0.0.0' else '127.0.0.1' }}:{{ dolly_port }}/"
+    status_code: 200
+    return_content: false
+  register: dolly_check
+  retries: 5
+  delay: 2
+  until: dolly_check is succeeded
+  changed_when: false

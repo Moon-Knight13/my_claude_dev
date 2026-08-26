@@ -1,0 +1,16 @@
+---
+# Where the app lives and who runs it.
+dolly_user: dolly
+dolly_group: dolly
+dolly_install_dir: /opt/dolly
+
+# Bind address. Keep 127.0.0.1 if you front it with nginx/caddy;
+# set 0.0.0.0 to expose it directly on the box's interfaces.
+dolly_bind_host: 127.0.0.1
+dolly_port: 8080
+
+dolly_service_name: dolly
+
+# NOTE: this role does not touch the firewall (keeps it pure ansible.builtin --
+# no collections to install). If you expose it, open the port yourself:
+#   ufw allow 8080/tcp

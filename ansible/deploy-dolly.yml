@@ -1,0 +1,6 @@
+---
+- name: Deploy the Dolly Parton tribute webserver
+  hosts: "{{ target | default('dolly') }}"
+  become: true
+  roles:
+    - role: dolly

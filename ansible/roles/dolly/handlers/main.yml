@@ -1,0 +1,9 @@
+---
+- name: Reload systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
+- name: Restart dolly
+  ansible.builtin.systemd_service:
+    name: "{{ dolly_service_name }}"
+    state: restarted

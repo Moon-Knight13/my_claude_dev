@@ -1,0 +1,43 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Dolly Parton tribute webserver
+Documentation=https://www.dollyparton.com/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User={{ dolly_user }}
+Group={{ dolly_group }}
+Environment=DOLLY_HOST={{ dolly_bind_host }}
+Environment=DOLLY_PORT={{ dolly_port }}
+ExecStart=/usr/bin/python3 {{ dolly_install_dir }}/dolly.py
+Restart=on-failure
+RestartSec=2s
+
+# It serves one constant string. It needs nothing else.
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

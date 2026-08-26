@@ -3,8 +3,13 @@
 
     python3 dolly.py            # http://localhost:8080
     python3 dolly.py 9000       # custom port
+
+Environment overrides (used by the systemd unit):
+    DOLLY_HOST  bind address (default 127.0.0.1)
+    DOLLY_PORT  bind port    (default 8080)
 """
 
+import os
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -93,9 +98,10 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8080
-    print(f"\N{SPARKLES} Dolly is live at http://localhost:{port}  (Ctrl-C to stop)")
+    host = os.environ.get("DOLLY_HOST", "127.0.0.1")
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get("DOLLY_PORT", 8080))
+    print(f"\N{SPARKLES} Dolly is live at http://{host}:{port}  (Ctrl-C to stop)", flush=True)
     try:
-        ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
+        ThreadingHTTPServer((host, port), Handler).serve_forever()
     except KeyboardInterrupt:
         print("\nGoodnight, y'all.")
