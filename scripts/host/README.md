@@ -1,6 +1,6 @@
 # Remote dev-box provisioning (`scripts/host/`)
 
-These scripts bring a **MCD Deploybox** (the remote box you Remote-SSH into and
+These scripts bring a **remote dev box** (the box you Remote-SSH into and
 use as your dev environment) to the golden state: killswitch, Claude Code +
 Ansible extensions, ansible-lint with a Docker execution environment, caveman,
 and the Claude plugins.
@@ -56,9 +56,9 @@ boxes re-provision on next run.
 > group, reboot the box before the Docker execution environment works without
 > sudo (matches the manual dev-setup guide).
 
-## SSH agent forwarding (Catapult / ctp)
+## SSH agent forwarding
 
-Downstream tools on the box — **Catapult / `ctp` / `make start`** — authenticate
+Downstream build tooling on the box — invoked via **`make start`** — authenticates
 with your **forwarded** SSH key (`~/.ssh/id_ed25519_MCD`, comment `MCD_<user>`).
 Nothing on the box holds your private key; it stays on your laptop and is reached
 over the forwarded agent. If forwarding isn't working, those tools fail. Four
@@ -107,7 +107,7 @@ sudo /usr/local/sbin/claude-killswitch.sh       # manual fire (no-op while conne
 
 ### Honest limitations (shared account)
 
-The Deployboxes are a **shared `gt` account** with sudo for everyone:
+The boxes are a **shared account** with sudo for everyone:
 
 - **Concurrent** sessions still share the token — while two devs are connected
   at once, both can use whichever subscription is logged in. No on-box mechanism

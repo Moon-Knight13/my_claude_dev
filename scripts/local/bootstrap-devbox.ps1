@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Windows bootstrap for connecting to a MCD Deploybox (mirrors bootstrap-devbox.sh).
+    Windows bootstrap for connecting to a remote dev box (mirrors bootstrap-devbox.sh).
 .DESCRIPTION
     Ensures OpenSSH agent is running, reuses/generates an ed25519 key, writes an
     idempotent ~/.ssh/config Host block (ForwardAgent yes), copies the public key
@@ -19,10 +19,15 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$DevboxNum = $env:DEVBOX_NUM,
-    [string]$BoxUser   = $(if ($env:DEVBOX_USER) { $env:DEVBOX_USER } else { "gt" }),
-    [string]$Domain    = $env:DEVBOX_DOMAIN,   # internal domain not hardcoded (public repo); set env or prompt
-    [string]$RangeUser = $env:RANGE_USER
+    # Every site-specific value is prompted for or read from an env var — this
+    # repo is public, so none of them are baked in.
+    [string]$DevboxNum  = $env:DEVBOX_NUM,
+    [string]$BoxUser    = $env:DEVBOX_USER,
+    [string]$Domain     = $env:DEVBOX_DOMAIN,
+    [string]$HostPrefix = $env:DEVBOX_PREFIX,
+    [string]$RangeUser  = $env:RANGE_USER,
+    [string]$GitHost    = $env:DEVBOX_GIT_HOST,
+    [string]$GitSshPort = $env:DEVBOX_GIT_SSH_PORT
 )
 
 $ErrorActionPreference = "Stop"
@@ -33,19 +38,23 @@ function Step($m) { Write-Host ""; Write-Host ">> $m" }
 
 $Key = Join-Path $HOME ".ssh\id_ed25519"
 
-Step "MCD Deploybox local bootstrap (Windows)"
+Step "Remote dev box local bootstrap (Windows)"
 
 # 1. Prompt for per-dev values
-if (-not $DevboxNum) { $DevboxNum = Read-Host "  ??  Deploybox number (e.g. 07)" }
-if (-not $DevboxNum) { throw "Deploybox number required" }
+if (-not $DevboxNum) { $DevboxNum = Read-Host "  ??  Box number (e.g. 07)" }
+if (-not $DevboxNum) { throw "box number required" }
 if (-not $RangeUser) {
-    $d = Read-Host "  ??  Your range username [$env:USERNAME]"
+    $d = Read-Host "  ??  Your username on the box [$env:USERNAME]"
     $RangeUser = if ($d) { $d } else { $env:USERNAME }
 }
-if (-not $Domain) { $Domain = Read-Host "  ??  Deploybox domain (e.g. dev.example.net)" }
+if (-not $Domain) { $Domain = Read-Host "  ??  Box domain (e.g. dev.example.net)" }
 if (-not $Domain) { throw "domain required (set DEVBOX_DOMAIN or answer the prompt)" }
-$BoxHost = "deploybox$DevboxNum.$Domain"
-$Alias   = "deploybox$DevboxNum"
+if (-not $HostPrefix) { $HostPrefix = Read-Host "  ??  Box hostname prefix, before the number (e.g. devbox)" }
+if (-not $HostPrefix) { throw "hostname prefix required (set DEVBOX_PREFIX or answer the prompt)" }
+if (-not $BoxUser) { $BoxUser = Read-Host "  ??  Login account on the box (shared account)" }
+if (-not $BoxUser) { throw "box account required (set DEVBOX_USER or answer the prompt)" }
+$BoxHost = "$HostPrefix$DevboxNum.$Domain"
+$Alias   = "$HostPrefix$DevboxNum"
 Info "Target: $BoxUser@$BoxHost"
 
 # 2. SSH agent
@@ -86,7 +95,7 @@ if (Select-String -Path $cfg -Pattern "^\s*Host\s+$Alias(\s|$)" -Quiet) {
 
 # 5. Copy public key (prompts for password once)
 Step "Passwordless login"
-Note "you'll be asked for your Deploybox login password ONCE (entered live, never stored)"
+Note "you'll be asked for your box login password ONCE (entered live, never stored)"
 $pub = Get-Content "$Key.pub"
 $remoteCmd = "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys"
 $pub | ssh "$BoxUser@$BoxHost" $remoteCmd
@@ -116,10 +125,19 @@ if ($code) {
 
 # 7. GitLab + next steps
 Step "GitLab key (one-time, manual)"
-Write-Host "  --  Add $Key.pub at https://git.$Domain/-/user_settings/ssh_keys ; test: ssh -T git@git.$Domain -p 10022"
+if (-not $GitHost) {
+    $d = Read-Host "  ??  Git server hostname [git.$Domain]"
+    $GitHost = if ($d) { $d } else { "git.$Domain" }
+}
+if (-not $GitSshPort) {
+    $d = Read-Host "  ??  Git server SSH port [22]"
+    $GitSshPort = if ($d) { $d } else { "22" }
+}
+Write-Host "  --  Add $Key.pub at https://$GitHost/-/user_settings/ssh_keys (that path is GitLab's; adjust for a different git server)"
+Write-Host "      test: ssh -T git@$GitHost -p $GitSshPort"
 Step "Next: connect and provision the box"
 Write-Host "  Connect (VSCode Remote-SSH -> $Alias, or: ssh $Alias), then ON THE BOX:"
 Write-Host "      git clone https://github.com/Moon-Knight13/my_claude_dev"
 Write-Host "      cd my_claude_dev && sudo bash scripts/host/provision-remote-box.sh"
-Write-Host "  Then 'make start' for Catapult (uses your GitLab/VPN password interactively; never stored)."
+Write-Host "  Then 'make start' for the downstream build tooling (prompts for a password interactively; never stored)."
 Info "local bootstrap complete"

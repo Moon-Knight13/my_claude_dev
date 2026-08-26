@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # setup-ansible-lint.sh — configure Ansible lint (redhat.ansible + Docker
-# execution environment) on the remote dev box, matching the MCD developer
+# execution environment) on the remote dev box, matching the documented developer
 # setup guide. Applies to a Remote-SSH box (settings go in the VSCode *server*
 # Machine scope) or a local install.
 #

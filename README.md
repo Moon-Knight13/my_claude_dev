@@ -9,8 +9,8 @@
 > gates, BMAD, Kanban, devcontainer) this repo is *built with*. What this repo *does*
 > is provision remote dev boxes — see below.
 
-**Get a developer onto a shared remote MCD Deploybox and bring that box to a known-good,
-Claude-ready state.** You Remote-SSH into a Deploybox and use it directly as your dev
+**Get a developer onto a shared remote dev box and bring that box to a known-good,
+Claude-ready state.** You Remote-SSH into a box and use it directly as your dev
 environment (no local container). Two scripts do the work:
 
 1. **On your laptop** — a bootstrap wires up SSH keys + VSCode Remote-SSH. You supply your
@@ -25,7 +25,7 @@ Claude token when you disconnect so the next person logs in with their own crede
 > The repo *itself* is developed inside a devcontainer inherited from the template — see
 > [Developing this repo](#developing-this-repo-devcontainer).
 
-## Connect to a Deploybox
+## Connect to a box
 
 ### Phase 1 — on your laptop (SSH + VSCode Remote-SSH)
 
@@ -35,7 +35,7 @@ bash scripts/local/bootstrap-devbox.sh                              # macOS / Li
 powershell -ExecutionPolicy Bypass -File scripts\local\bootstrap-devbox.ps1
 ```
 
-It **prompts** for your per-dev values — Deploybox number, your range username, the box
+It **prompts** for your per-dev values — box number, hostname prefix, your username, the box
 domain, and an optional IP — then:
 
 - reuses or generates an `ed25519` SSH key (`~/.ssh/id_ed25519_MCD`) and adds it to your agent;
@@ -50,7 +50,7 @@ or answer the prompt. Re-running the script is safe; it won't duplicate config.
 
 ### Phase 2 — on the box (provision to golden state)
 
-Connect (`F1 → Remote-SSH: Connect to Host`, or `ssh deployboxNN.<domain>`), clone this repo
+Connect (`F1 → Remote-SSH: Connect to Host`, or `ssh <box-host>`), clone this repo
 there, and run the provisioner:
 
 ```bash
@@ -78,17 +78,17 @@ lives on the box filesystem, so a **re-imaged** box has none and re-provisions i
 Force a re-run with `--force`. If the ansible step adds you to the `docker` group, **reboot
 the box** for the Docker execution environment to work without `sudo`.
 
-> **Agent forwarding is required** — downstream tools (Catapult/`ctp`) use your
+> **Agent forwarding is required** — the downstream build tooling uses your
 > *forwarded* SSH key. After connecting, ensure VSCode `remote.SSH.useExecServer`
 > is off, **reconnect**, then verify on the box with `ssh-add -l`. See
-> [SSH agent forwarding](scripts/host/README.md#ssh-agent-forwarding-catapult--ctp).
+> [SSH agent forwarding](scripts/host/README.md#ssh-agent-forwarding).
 
-Finally run `make start` to configure Catapult — it uses your GitLab/VPN password
-interactively, and that secret is likewise never stored by these scripts.
+Finally run `make start` to configure the downstream build tooling — it prompts for a
+password interactively, and that secret is likewise never stored by these scripts.
 
 ### The killswitch (shared account)
 
-The Deployboxes are a **shared account** with sudo for everyone. `setup-killswitch.sh`
+The boxes are a **shared account** with sudo for everyone. `setup-killswitch.sh`
 installs a PAM hook + systemd timer that shred the developer credentials left on the box
 once the target user has **no** live SSH session — so the next connector must authenticate
 as themselves:
@@ -131,7 +131,7 @@ bash scripts/setup-day0.sh    # finishes the auth-gated bootstraps, prints statu
 Verify anytime with `bash scripts/check-day0.sh` — or from Claude: `/day0-check`.
 
 📊 **[Open the visual overview →](https://moon-knight13.github.io/my_claude_dev/)** — a
-one-page briefing (technical and non-technical) covering the Deploybox provisioning flow,
+one-page briefing (technical and non-technical) covering the box provisioning flow,
 the devcontainer, the two routing engines, caveman token compression, and the CI gates.
 Served from [`docs/explainer/`](docs/explainer/index.html); the page is self-contained, so
 you can also open the HTML locally.
@@ -153,8 +153,8 @@ Caveman token compression and PII-Shield.
 ## Repository Structure
 
 ```
-scripts/local/       Developer-laptop bootstrap (SSH + VSCode Remote-SSH to a Deploybox)
-scripts/host/        Remote Deploybox provisioning (killswitch, extensions, ansible-lint)
+scripts/local/       Developer-laptop bootstrap (SSH + VSCode Remote-SSH to a box)
+scripts/host/        Remote box provisioning (killswitch, extensions, ansible-lint)
 scripts/             Bootstrap (incl. board), routing, CI helpers, and template validator
 .devcontainer/       Dev environment (for developing this repo) — deny-by-default firewall, pre-installed tooling
 .claude/commands/    Claude Code skills (/bmad, /bmad-to-board, /next-issue, /run-epic, /day0-check, /route-task, /security-audit, /firewall-allow)

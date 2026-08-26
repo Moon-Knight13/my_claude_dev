@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # setup-killswitch.sh — install the Claude subscription killswitch on a shared
-# dev box (Deploybox). Wipes the Claude Code OAuth token from the box whenever
+# dev box. Wipes the Claude Code OAuth token from the box whenever
 # the target user has no active SSH session, so a personal subscription cannot
 # be reused by whoever connects to the shared account next. The user re-`/login`s
 # on their next connect.
 #
-# On a shared account (all devs SSH as the same user, e.g. gt) this is the
+# On a shared account (all devs SSH as the same user) this is the
 # primary control against SEQUENTIAL reuse (you leave -> token wiped -> a later
 # connector must log in with their own credentials). It cannot stop concurrent
 # sessions sharing the token, and a peer with sudo can disable it — it is a

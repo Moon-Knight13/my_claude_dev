@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# provision-remote-box.sh — one entry point to bring a fresh MCD Deploybox to
+# provision-remote-box.sh — one entry point to bring a fresh remote dev box to
 # the "golden" dev state after you have Remote-SSH'd onto it. Run FROM the repo
 # checkout on the box (the local bootstrap clones it there). Needs sudo for the
 # host-level killswitch.
@@ -11,7 +11,7 @@
 #   2. Ansible-lint settings + Docker prereqs (setup-ansible-lint.sh)
 #   3. Caveman (install-caveman.sh) + Claude plugins (repo set + official)
 #   4. Killswitch (setup-killswitch.sh)
-#   5. SSH agent-forwarding sanity check (Catapult/ctp need the forwarded key)
+#   5. SSH agent-forwarding sanity check (downstream tooling needs the forwarded key)
 #
 # Reconnect-safe: a completion marker at /var/lib/claude-devbox/provisioned lets
 # a re-run on the SAME box short-circuit ("already provisioned"). The marker
@@ -142,7 +142,7 @@ if (( ${#HOST_FAILURES[@]} > 0 )); then
 fi
 
 # --- 5. SSH agent-forwarding sanity check ------------------------------------
-# Downstream tools (Catapult/ctp) authenticate with the developer's FORWARDED
+# Downstream build tooling authenticates with the developer's FORWARDED
 # SSH key. Verify the box permits forwarding and (best-effort) that a forwarded
 # key is actually reachable. Read-only: we warn, we do NOT edit sshd here.
 host_step "[5/5] SSH agent forwarding"
