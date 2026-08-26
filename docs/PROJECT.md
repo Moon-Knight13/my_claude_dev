@@ -91,6 +91,27 @@ never be routed to a local model.
 Note that the firewall pins hostnames to the IPs resolved at container start, so
 a CDN-hosted host can drift and need a rebuild.
 
+The firewall is **IPv4-only, deliberately**. IPv6 egress is denied wholesale,
+and `allowed-domains` can only ever learn IPv4 addresses — it skips IPv6 CIDRs
+from the GitHub meta feed and resolves A records only. To stop processes
+attempting a route that is guaranteed to be refused, the image raises the glibc
+precedence of IPv4-mapped addresses in `/etc/gai.conf` so `getaddrinfo` returns
+A records first.
+
+That pairing matters: without it, any host publishing AAAA records is resolved
+to IPv6 first, rejected in about two milliseconds, and the Claude CLI drops
+mid-session with `ECONNRESET`. Diagnose with:
+
+```bash
+getent hosts api.anthropic.com    # an IPv6 answer here is the symptom
+curl -4 -sS -o /dev/null -w 'v4: %{http_code}\n' https://api.anthropic.com/v1/messages
+curl -6 -sS -o /dev/null -w 'v6: %{http_code}\n' https://api.anthropic.com/v1/messages
+```
+
+A working v4 alongside a v6 that fails in milliseconds is this, not a network
+fault. If IPv6 egress is ever required, the ipset and the resolver precedence
+must change together — changing either alone recreates the dead path.
+
 ### Pinning third-party installers
 
 Installers fetched from upstream are pinned to a specific tag, and the commit
