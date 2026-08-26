@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # bootstrap-devbox.sh — run on the DEVELOPER'S laptop (macOS/Linux; Windows uses
-# the .ps1 sibling). Configures local SSH + VSCode Remote-SSH for a MCD
-# Deploybox, mirroring the manual developer-setup guide, then hands off to the
-# on-box provisioning.
+# the .ps1 sibling). Configures local SSH + VSCode Remote-SSH for a remote dev
+# box, mirroring the manual developer-setup guide, then hands off to the on-box
+# provisioning.
 #
 # It PROMPTS for per-dev values and secrets and NEVER writes them into the repo:
 #   - the SSH key passphrase and the box login password are entered live,
@@ -11,7 +11,11 @@
 #
 # Idempotent. Usage:
 #   bash scripts/local/bootstrap-devbox.sh
-#   DEVBOX_NUM=07 RANGE_USER=jdoe bash scripts/local/bootstrap-devbox.sh   # non-interactive-ish
+# Every site-specific value (domain, host prefix, box account, git host and
+# port) is prompted for or read from an env var — this repo is public, so none
+# of them are baked in. Pre-set them all to run non-interactively:
+#   DEVBOX_DOMAIN=… DEVBOX_PREFIX=… DEVBOX_USER=… DEVBOX_NUM=07 RANGE_USER=jdoe \
+#     bash scripts/local/bootstrap-devbox.sh
 set -euo pipefail
 
 info() { echo "  ++  $*"; }
@@ -19,11 +23,13 @@ note() { echo "  --  $*"; }
 warn() { echo "  !!  $*" >&2; }
 step() { echo ""; echo ">> $*"; }
 
-# Internal domain is NOT hardcoded (this repo is public). Provide it via the
-# DEVBOX_DOMAIN env var or the prompt below.
+# Site-specific values are NOT hardcoded (this repo is public). Provide each via
+# its env var or the prompts below. SSH_KEY overrides the key path if yours
+# already lives somewhere else.
 DOMAIN="${DEVBOX_DOMAIN:-}"
-BOX_USER="${DEVBOX_USER:-gt}"
-KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519_MCD}"
+BOX_USER="${DEVBOX_USER:-}"
+HOST_PREFIX="${DEVBOX_PREFIX:-}"
+KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519_devbox}"
 
 ask() { # ask VAR "prompt" "default"
     local __var="$1" __prompt="$2" __default="${3:-}" __reply
@@ -38,17 +44,21 @@ ask() { # ask VAR "prompt" "default"
     eval "$__var=\${__reply:-\$__default}"
 }
 
-step "MCD Deploybox local bootstrap"
+step "Remote dev box local bootstrap"
 
 # --- 1. Prompt for per-dev values (never persisted to the repo) --------------
-ask DEVBOX_NUM "Deploybox number (e.g. 07)" ""
-[[ -z "${DEVBOX_NUM:-}" ]] && { warn "Deploybox number required"; exit 1; }
-ask RANGE_USER "Your range username (for the key comment / git identity)" "$(id -un)"
-ask DOMAIN "Deploybox domain (e.g. dev.example.net)" ""
+ask DEVBOX_NUM "Box number (e.g. 07)" ""
+[[ -z "${DEVBOX_NUM:-}" ]] && { warn "box number required"; exit 1; }
+ask RANGE_USER "Your username on the box (for the key comment / git identity)" "$(id -un)"
+ask DOMAIN "Box domain (e.g. dev.example.net)" ""
 [[ -z "${DOMAIN:-}" ]] && { warn "domain required (set DEVBOX_DOMAIN or answer the prompt)"; exit 1; }
-ask DEVBOX_IP "Deploybox IP address (blank = use hostname)" ""
-HOST="deploybox${DEVBOX_NUM}.${DOMAIN}"
-ALIAS="deploybox${DEVBOX_NUM}"
+ask HOST_PREFIX "Box hostname prefix, before the number (e.g. devbox)" ""
+[[ -z "${HOST_PREFIX:-}" ]] && { warn "hostname prefix required (set DEVBOX_PREFIX or answer the prompt)"; exit 1; }
+ask BOX_USER "Login account on the box (shared account)" ""
+[[ -z "${BOX_USER:-}" ]] && { warn "box account required (set DEVBOX_USER or answer the prompt)"; exit 1; }
+ask DEVBOX_IP "Box IP address (blank = use hostname)" ""
+HOST="${HOST_PREFIX}${DEVBOX_NUM}.${DOMAIN}"
+ALIAS="${HOST_PREFIX}${DEVBOX_NUM}"
 HOSTNAME_VALUE="${DEVBOX_IP:-$HOST}"
 info "Target: ${BOX_USER}@${HOST} (HostName ${HOSTNAME_VALUE})"
 
@@ -58,15 +68,15 @@ if [[ -f "$KEY" ]]; then
     info "reusing existing key: $KEY"
 else
     note "no key at $KEY — generating an ed25519 keypair (you'll set a passphrase)"
-    ssh-keygen -t ed25519 -C "MCD_${RANGE_USER}" -f "$KEY"
+    ssh-keygen -t ed25519 -C "${KEY_COMMENT:-devbox_${RANGE_USER}}" -f "$KEY"
 fi
 
 # --- 3. SSH agent + add key --------------------------------------------------
 # The key MUST live in a PERSISTENT agent (your login session), because VSCode
-# forwards THAT agent to the box and downstream tools (Catapult/ctp) use the
+# forwards THAT agent to the box and the downstream build tooling uses the
 # forwarded key. We must NOT spawn a throwaway `ssh-agent` here — one started in
 # this script dies when the script exits, so your shell/VSCode would forward an
-# empty agent and ctp would fail. Detect a real agent instead of creating one.
+# empty agent and that tooling would fail. Detect a real agent, don't create one.
 step "SSH agent"
 ssh-add -l >/dev/null 2>&1; agent_rc=$?   # 0 = keys loaded, 1 = empty agent, 2 = no agent
 if [[ "$agent_rc" -eq 2 ]]; then
@@ -111,7 +121,7 @@ fi
 
 # --- 5. Copy public key for passwordless login (prompts for password once) ---
 step "Passwordless login (ssh-copy-id)"
-note "you'll be asked for your Deploybox login password ONCE (entered live, never stored)"
+note "you'll be asked for your box login password ONCE (entered live, never stored)"
 if command -v ssh-copy-id >/dev/null 2>&1; then
     ssh-copy-id "${BOX_USER}@${HOST}" || warn "ssh-copy-id failed — you can add ${KEY}.pub to ${BOX_USER}:~/.ssh/authorized_keys manually"
 else
@@ -162,13 +172,18 @@ else
     note "VSCode 'code' CLI not on PATH — install Remote-SSH from the Marketplace and set remote.SSH.useExecServer=false"
 fi
 
-# --- 7. GitLab key reminder (manual browser step) ----------------------------
-step "GitLab key (one-time, manual)"
+# --- 7. Git server key reminder (manual browser step) ------------------------
+# Host and port are prompted rather than baked in: the SSH port in particular is
+# site topology, and this repo is public.
+step "Git server key (one-time, manual)"
+ask GIT_HOST "Git server hostname" "git.${DOMAIN}"
+ask GIT_SSH_PORT "Git server SSH port" "22"
 cat <<EOF
-  --  Add your PUBLIC key to GitLab so you can clone/pull/push:
+  --  Add your PUBLIC key to the git server so you can clone/pull/push:
         1) copy:  cat ${KEY}.pub
-        2) paste at: https://git.${DOMAIN}/-/user_settings/ssh_keys
-        3) test:  ssh -T git@git.${DOMAIN} -p 10022   (expects: Welcome to GitLab, @you!)
+        2) paste at: https://${GIT_HOST}/-/user_settings/ssh_keys
+           (that path is GitLab's; adjust for a different git server)
+        3) test:  ssh -T git@${GIT_HOST} -p ${GIT_SSH_PORT}
 EOF
 
 # --- 8. Connect + provision (pull-after-connect) -----------------------------
@@ -177,12 +192,13 @@ cat <<EOF
   Connect with VSCode Remote-SSH (F1 -> "Remote-SSH: Connect to Host" -> ${HOST})
   or from a shell:  ssh ${HOST}
 
-  IMPORTANT — agent forwarding (Catapult/ctp need your FORWARDED key):
+  IMPORTANT — agent forwarding (the downstream build tooling needs your
+  FORWARDED key):
     1) This script set VSCode remote.SSH.useExecServer=false. Those settings only
        take effect on a FRESH connection, so fully CLOSE and REOPEN the Remote-SSH
        window after the first connect.
     2) Verify on the box:   ssh-add -l
-       You should see your key (comment MCD_${RANGE_USER}). If it says
+       You should see your key (comment ${KEY_COMMENT:-devbox_${RANGE_USER}}). If it says
        "no identities", forwarding is broken — check, in order:
          - key is in your LOCAL agent:              ssh-add -l   (on your laptop)
          - config forwards it:                      grep -A3 '^Host ${HOST}' ~/.ssh/config
@@ -195,7 +211,7 @@ cat <<EOF
       sudo bash scripts/host/provision-remote-box.sh
 
   That installs the killswitch, Claude + Ansible extensions, caveman, and plugins.
-  Finally run 'make start' to configure Catapult (uses your GitLab/VPN password
-  interactively — that secret is never stored by these scripts).
+  Finally run 'make start' to configure the downstream build tooling (it prompts
+  for a password interactively — that secret is never stored by these scripts).
 EOF
 info "local bootstrap complete"
