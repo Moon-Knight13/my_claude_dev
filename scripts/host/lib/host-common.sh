@@ -13,6 +13,15 @@ host_note()  { echo "  --  $*"; }
 host_warn()  { echo "  !!  $*" >&2; }
 host_step()  { echo ""; echo ">> $*"; }
 
+# --- golden-state failure tracking -------------------------------------------
+# host_warn stays advisory. host_fail is for a step that was supposed to reach
+# the golden state and did not: it warns AND records, so the orchestrator can
+# report honestly and exit non-zero instead of printing "complete" over a
+# half-provisioned box.
+# shellcheck disable=SC2034  # consumed by scripts that source this
+HOST_FAILURES=()
+host_fail() { HOST_FAILURES+=("$*"); host_warn "$*"; }
+
 # --- confirm gate ------------------------------------------------------------
 # confirm "<action description>" -> 0 proceed / 1 skip.
 # Auto-yes when ASSUME_YES=1 (set by --yes). Non-interactive stdin also auto-yes
