@@ -125,13 +125,29 @@ across container rebuilds.
 
 The mounted path is `/home/node/.claude` and is intentionally outside repository files to prevent accidental credential commits.
 
-### Caveman Installer Verification Prerequisite
+### Caveman Installer Pinning
 
-This template verifies the pinned Caveman installer script checksum before executing it.
+The Caveman installer is executed from a pinned upstream tag, never from the
+default branch.
 
-- Default env var used by startup: `CAVEMAN_INSTALL_SHA256`
-- Update this value when bumping `CAVEMAN_VERSION` in `scripts/install-caveman.sh`
-- If checksum does not match, startup aborts Caveman installation by design
+- `CAVEMAN_VERSION` and `CAVEMAN_COMMIT` are pinned together in
+  `scripts/install-caveman.sh`, on adjacent lines
+- Before installing, the script resolves the tag with `git ls-remote` and compares
+  it to `CAVEMAN_COMMIT`. If upstream has **moved the tag**, it refuses to install
+  rather than execute unreviewed code
+- A refusal exits 0, not 1: an optional statusline helper must never abort
+  provisioning. `scripts/check-day0.sh` reports that caveman is missing
+- The pin lives in the shared script, so it covers the devcontainer **and** remote
+  boxes provisioned by `scripts/host/provision-remote-box.sh`
+
+> This deliberately does *not* use upstream's `install.sh`. That script is a shim
+> whose curl-pipe path runs `npx -y github:<repo>` with **no ref**, resolving to the
+> default branch — where the `caveman` bin is the runtime CLI, not the installer, so
+> it rejects the installer's own flags and fails every run.
+>
+> Scope note: the pin governs which *installer* runs. The plugin payload itself is
+> fetched by `claude plugin install caveman@caveman` from the upstream marketplace
+> and tracks that marketplace, not `CAVEMAN_COMMIT`.
 
 ## Quick Start
 
@@ -444,7 +460,15 @@ cat ~/.claude/.caveman-default-mode
 cat ~/.claude/.template-caveman-version
 ```
 
-To update the version, change `CAVEMAN_VERSION` in `scripts/install-caveman.sh` and update `CAVEMAN_INSTALL_SHA256` in `devcontainer.json`, then rebuild the container.
+To update the version, change `CAVEMAN_VERSION` in `scripts/install-caveman.sh` and
+set `CAVEMAN_COMMIT` to the commit the new tag resolves to:
+
+```bash
+git ls-remote https://github.com/JuliusBrussee/caveman refs/tags/<new-tag>^{}
+```
+
+Then rebuild the container. Leaving `CAVEMAN_COMMIT` stale is safe by design — the
+drift check refuses to install instead of running the unpinned code.
 
 ### Model routing and cost controls
 
