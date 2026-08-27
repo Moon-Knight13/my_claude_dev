@@ -288,7 +288,12 @@ check "Edit .env -> deny"            "$(decide "$(printf '{"tool_name":"Edit","t
 # whose line happens to start ctp/make is DATA, not a command. This was a real
 # false-deny on the box that forced `git commit -F` workarounds.
 check "multiline commit msg body -> none" "$(decide "$(bash_json "$(printf 'git commit -m "fix bridge\nctp host deploy notes\nmake start notes"')")")" none
+# a heredoc delimiter ended by the newline ITSELF (the common form, no trailing
+# redirect) must still register the heredoc so its body is skipped, not parsed.
 check "heredoc body with ctp/make -> none" "$(decide "$(bash_json "$(printf 'cat <<EOF > /tmp/n\nctp host deploy x\nmake start y\nEOF')")")" none
+check "unquoted delim at EOL body -> none" "$(decide "$(bash_json "$(printf 'cat <<EOF\nctp host remove x\nEOF')")")" none
+check "quoted delim at EOL body -> none"   "$(decide "$(bash_json "$(printf "cat <<'EOF'\nctp host remove x\nEOF")")")" none
+check "dash delim at EOL body -> none"      "$(decide "$(bash_json "$(printf 'cat <<-EOF\n\tctp host remove x\n\tEOF')")")" none
 check "quoted-delim heredoc body -> none"  "$(decide "$(bash_json "$(printf "cat <<'EOF' > /tmp/n\nctp host deploy x\nEOF")")")" none
 # but a genuine command on its own line, or after a pipe, is still caught
 check "newline-separated bare ctp -> deny" "$(decide "$(bash_json "$(printf 'echo hi\nctp host deploy x')")")" deny
