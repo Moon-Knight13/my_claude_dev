@@ -38,6 +38,29 @@ everything below:
 - **Restricted egress.** Network access is limited; new outbound hosts are a
   deliberate change, not an incidental one.
 
+### Authorized scope
+
+The work this harness supports is confined to **one authorized range**, on boxes
+the organisation owns and operates, for **training and authorized
+security-testing** — including authorized red-team work: developing boxes, both
+hardened and deliberately weak, and the means to exercise those weaknesses, on
+range assets set aside for it. This is the standing authorization context, and it
+is why an assistant should read deploy and box-development work here as ordinary
+engineering, not as targeting.
+
+Two things keep that legible rather than assumed:
+
+- The tool bridge is scoped to a **single named box** in code (see *The tool
+  bridge*), so the work provably cannot reach a target it was not pointed at.
+- Nothing operational enters the repository. Per *This repository is public*
+  below, range names, hosts, topology, technique detail and box specifics stay
+  off the repo regardless — which keeps the authorization clean and the sensitive
+  content where it belongs.
+
+Anything outside that scope — a target not on the authorized range, real
+infrastructure the organisation does not own — is not in view here and is not
+something to work toward.
+
 ## Rules
 
 ### This repository is public
@@ -126,6 +149,178 @@ Note that these are template-owned scripts. If a template sync reverts the
 loader, `check-day0.sh` fails on "`.env` values reach the routing scripts"
 rather than going quiet — but the fix belongs upstream in the template, since
 the template ships both the `.env.example` and the scripts that ignored it.
+
+### sudo is for one step, not for the whole run
+
+`provision-remote-box.sh` is invoked with `sudo` because the killswitch needs
+root. Everything else it does is user-level — VSCode server extensions, the
+Machine `settings.json`, caveman, the Claude plugin set, git config, the docker
+group — and under `sudo`, `$HOME` is `/root`.
+
+Using it provisioned root instead of the developer, on every box, silently:
+extensions reported "not found" because the search looked in
+`/root/.vscode-server`; ansible settings were merged into
+`/root/.config/Code/User/settings.json`, a file no VSCode session reads; plugins
+would have installed into `/root/.claude`; and the docker-group step offered to
+add *root* to the docker group, which is meaningless.
+
+`scripts/host/lib/host-common.sh` resolves `CLAUDE_TARGET_USER` and
+`CLAUDE_TARGET_HOME` — who the work is *for*, whether or not the script was
+elevated — and `run_as_target` runs a command as them with the right `HOME`.
+Any user-level step added to a host script must go through it. The run announces
+the target user, and warns when that target is root.
+
+Two related traps in the same family: `code` is not on `PATH` on a Remote-SSH
+box (the shim lives under the VSCode server directory in the developer's home,
+so `command -v code` alone reports no CLI on boxes that have one), and `sudo`
+strips `SSH_AUTH_SOCK`, so an agent check run as root says nothing about whether
+forwarding works.
+
+### Two traps in the local-model config
+
+Both were live for the whole life of the routing subsystem and neither failed
+loudly, which is why they survived.
+
+**Model names contain colons.** `route-model.sh` prints `provider:model:reason`,
+and every real Ollama tag — `qwen2.5-coder:7b` — has a colon in the middle field.
+`delegate-local.sh` split that string left to right, so the model was truncated at
+its first colon: the health preflight probed a model called `qwen2.5-coder` while
+routing had selected `qwen2.5-coder:7b`. Ollama resolves an untagged name by
+prefix, so `model_present` still passed and the only symptom was an occasional
+unexplained `health:probe_timeout` served from a health cache keyed to the wrong
+name. Provider and reason never contain a colon; the model may — so parse from
+both ends and treat the remainder as the model. `scripts/tests/test-delegation.sh`
+asserts the full tagged name reaches both the route log and the health cache.
+
+**A base model is not an instruct model.** The template shipped
+`LOCAL_MODEL_FAST_MODEL=qwen2.5-coder:1.5b-base`. Base models have had no
+instruction tuning: given "Reply with the single word OK" they *continue* the
+text rather than obeying it. The output is fluent English, so it passes the empty
+and degenerate output checks in `delegate-local.sh` and is returned as a
+successful delegation. Every fast-path task got plausible nonsense. Never put a
+`:*-base` tag in either model variable.
+
+### Local routing is an optimisation, not a dependency
+
+When the endpoint is unreachable, `route-model.sh` returns
+`claude:…:local_unreachable_fallback` and `delegate-local.sh` exits 3. Work still
+gets done — by Claude. Nothing in the harness may treat an absent local model as
+a blocker.
+
+`check-day0.sh` reports that state honestly without failing on it: on a box,
+enabled-but-unreachable is a WARN whose text says everything is routing to
+Claude. `LOCAL_MODEL_REQUIRED=true` turns it into a FAIL, for a developer who has
+decided the local model is load-bearing for them. That is the compromise between
+this rule and "Provisioning must not lie" — the report always states what is
+actually happening; only its severity is the developer's choice.
+
+### Build-tooling commands are confirmed manually
+
+Set by the repository owner, 2026-08-27:
+
+> Every tool command is confirmed manually until there are protections against a
+> model — Claude or local — accidentally running a destructive or high-cost
+> command.
+
+The tooling on a dev box deploys to a live range. Nothing in this repository may
+invoke it without a human saying yes to that specific invocation. That applies to
+Claude, to any subagent, and to the local model, which has no judgement about
+consequences at all.
+
+Practical consequences for anything built here:
+
+- A wrapper around the tooling ships **confirming everything**. An empty
+  allow-list is the supported configuration, not a placeholder to be filled in
+  later by whoever implements it.
+- `ASSUME_YES`, `--yes` and equivalents must not reach that gate. A
+  non-interactive caller is **refused**, never auto-approved — the whole point is
+  that a human is present.
+- Exempting a verb is the owner's decision, made per verb, after a classifier and
+  its tests exist. It is not a judgement call for whoever is writing the code.
+
+Classification needs **two** axes, not one. Destructive-versus-read-only is
+insufficient: a whole-range deployment may destroy nothing and still be something
+no one wants triggered by a misread instruction, because it consumes real time
+and real infrastructure. A verb is a candidate for exemption only when it is low
+on both **blast radius** (what it changes, and whether that is reversible) and
+**cost** (what running it consumes, and who pays).
+
+Pattern-matching command strings is not a protection — quoting and environment
+prefixes defeat it, and it looks enforced while not being. See the provisioning
+rule above for the same failure shape.
+
+#### The tool bridge (`scripts/ctp-bridge.sh`)
+
+That wrapper is the **only** supported path to run `ctp`. A `PreToolUse` hook
+(`.claude/hooks/pretooluse-ctp.sh`) denies the two ways around it — `docker exec`
+into the container, and a bare `ctp` — so the gates cannot be skipped.
+
+**Installed at user scope, not per-repo.** The work does not happen in this repo —
+it happens in the range checkout (e.g. `~/catapult/inventories/dcm`), and a hook
+registered only in this repo's `.claude/` would not load for a session started
+there. So `scripts/install-ctp-bridge.sh` (run by provisioning, step 8, or
+standalone) installs the wrapper to `~/.local/bin/ctp-bridge`, the guard to
+`~/.local/lib/ctp-bridge/`, the hook into `~/.claude/`, and seeds
+`~/.ctp-bridge.conf` — so the gate is present in **every** session on the account,
+whatever the CWD, and **nothing** is written into the range checkout (a tree you
+push). Run it as `ctp-bridge host deploy <box>` from the range checkout. The gate
+is inert until `CTP_ALLOWED_TARGET` is set — a provisioned box refuses every deploy
+until configured, which is the safe direction.
+
+The gates that matter, all in code on the parsed argv (never string-matched), and
+shared between wrapper and hook via `scripts/lib/ctp-guard.sh` so the two cannot
+drift:
+
+- **Two gates on a mutating target, both mandatory.** A **team gate** —
+  `CTP_ALLOWED_TEAM`, e.g. `t02` — requires the target to end with the authorised
+  team suffix, so a deploy cannot land on a live team by mistake; it holds even if
+  the box list is widened, and fails closed when unset. A **box allow-list** —
+  `CTP_ALLOWED_TARGET`, one named box — on top of it. A glob metacharacter in a
+  target is refused outright.
+- **Reachable verbs.** Mutating: `host deploy`, `host deploy-role` (team + box
+  gated). Read: `host list <box>` (verify a target) and `project update-inventory`
+  (required after making a Providentia box). `host vars`/`redeploy`/`remove` are
+  not reachable (`vars` would stream box detail into the transcript); `secrets` and
+  `make` are refused outright (credentials). Every reachable verb is still
+  confirmed per the owner policy above.
+- **The boundary is the config file, never caller env.** An agent that can set an
+  environment variable in the same call it makes must not be able to widen its own
+  limits. Both wrapper and hook read `.ctp-bridge.conf`; neither trusts env for a
+  boundary value.
+- **The agent's confirmation is the hook's prompt, handed to the wrapper by a
+  token.** The Bash tool's stdin is non-interactive, so the wrapper cannot prompt
+  on the agent path. The human confirms at the hook's `ask` prompt; the hook then
+  writes a single-use, argv-bound, short-TTL token, and the wrapper consumes it in
+  place of prompting. Without a token and without a TTY the wrapper refuses (no
+  auto-yes) — so an unattended/scripted run with no human is still blocked, while
+  the hook-approved agent path runs. The token path is itself guarded: the hook
+  denies any Read/Write/Edit/Bash access to it (and to the secret paths), and its
+  matcher is `Bash|Read|Write|Edit` for that reason. This is hygiene + human-in-
+  the-loop to the same strength as the rest of the hook, not a cryptographic
+  boundary — consistent with the accepted-risk note below.
+
+`.ctp-bridge.conf` is gitignored and holds a box name and paths — never secrets.
+The invocation count log lives under `.ai/` (also gitignored) and records verbs
+and outcomes only, never a target or output.
+
+#### Secrets and transcripts
+
+The tool gate does nothing about a secret Claude might *read*. On this shared box
+the next occupant can read the session transcript, and anything read also leaves
+the box to reach the model. So the same hook **denies reads of configured secret
+paths** — the vault password file, `~/.ssh/id_*`, `**/.env`, shell history —
+whether via the Read tool or a Bash command naming them. Least privilege makes
+that free: the deploy loop needs none of those, and the wrapper checks the vault
+by existence, never by reading it.
+
+Be honest about the limit. A hook matching command strings is hygiene and
+defense-in-depth, not a sandbox — an adversarial model could obfuscate a read. The
+real containment is OS-level: an agent user without read access to those files.
+The shared single-account box does not offer that (see *Operating environment* —
+one account, everyone sudo), so this is an **accepted risk**, the same class as
+the killswitch: it reduces incidental and instructed capture, it does not contain
+a hostile model. `PII-Shield` (referenced in `.claude/settings.json`) is
+complementary, not a substitute.
 
 ### Network changes are deliberate
 

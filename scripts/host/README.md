@@ -18,19 +18,50 @@ After you have Remote-SSH'd onto the box and cloned this repo there:
 cd my_claude_dev
 sudo bash scripts/host/provision-remote-box.sh          # interactive
 sudo bash scripts/host/provision-remote-box.sh --yes    # unattended
+
+# with the step that proves the build tooling actually works:
+sudo bash scripts/host/provision-remote-box.sh --verify-cmd '<inventory-listing command>'
 ```
 
 Order it performs:
 
-1. **VSCode server extensions** — `anthropic.claude-code`, `redhat.ansible`.
+1. **VSCode server extensions** — `anthropic.claude-code`, `redhat.ansible` — and
+   a `claude` wrapper at `~/.local/bin/claude`. The CLI ships *inside* the
+   extension, so it is not on `PATH`: typing `claude` on a box fails even when
+   Claude Code is installed. The wrapper resolves the extension's binary at run
+   time rather than symlinking it, because the directory name carries the
+   version and a symlink would break on every extension update. If
+   `~/.local/bin` is not on your `PATH`, the step says so.
 2. **Ansible-lint** (`setup-ansible-lint.sh`) — merges the ansible settings into
    the Remote-SSH Machine `settings.json` and checks Docker prereqs.
 3. **Caveman + Claude plugins** — reuses `scripts/install-caveman.sh` and
    `scripts/install-claude-plugins.sh`, then installs
    `skill-creator@claude-plugins-official` and `gitlab@claude-plugins-official`.
 4. **Killswitch** (`setup-killswitch.sh`).
-5. **SSH agent-forwarding check** — verifies the box permits agent forwarding and
+5. **Git identity** — prompted, and **repo-local by default**. `git config
+   --global` writes to the shared account's home, so the first developer to set
+   it silently becomes the committer identity for every colleague without an
+   override. It never overwrites an existing value, and `--git-identity-global`
+   opts in only on a box genuinely dedicated to you. The step prints the two
+   commands to run in your own project checkout.
+6. **Build tooling verification** — runs `--verify-cmd` and treats a failure as a
+   failed step, so the box gets no completion marker and a re-run retries. The
+   command is site-specific and this repository is public, so it is passed in
+   rather than baked in; use whatever proves your tooling can talk to its
+   inventory. Without it the step says plainly that this run could not confirm
+   the tooling works, and the marker records `tool_verified=unconfigured` —
+   it does not quietly claim success.
+7. **SSH agent-forwarding check** — verifies the box permits agent forwarding and
    that a forwarded key is reachable (read-only; see below).
+
+On a **first** provision the Claude Code extension may be installed during the
+run and not yet unpacked, so the plugin step cannot use the CLI. That is
+reported as "not usable YET — reconnect and re-run", distinct from a genuinely
+missing CLI: it is expected, and one reconnect fixes it.
+
+A failed step means **no marker and a non-zero exit**, so the next run retries
+instead of short-circuiting. That gate covers the whole run: it previously sat
+before the last two steps, where a late failure could not have stopped it.
 
 You can also run any step on its own, e.g.
 `bash scripts/host/setup-ansible-lint.sh`.
@@ -59,7 +90,7 @@ boxes re-provision on next run.
 ## SSH agent forwarding
 
 Downstream build tooling on the box — invoked via **`make start`** — authenticates
-with your **forwarded** SSH key (`~/.ssh/id_ed25519_MCD`, comment `MCD_<user>`).
+with your **forwarded** SSH key (`~/.ssh/id_ed25519_<user>_<machine>`, comment `<user>_<machine>`).
 Nothing on the box holds your private key; it stays on your laptop and is reached
 over the forwarded agent. If forwarding isn't working, those tools fail. Four
 things must all be true:
@@ -73,16 +104,83 @@ things must all be true:
    It only takes effect on a **fresh** connection, so fully close and reopen the
    Remote-SSH window after the first connect.
 4. **The box permits it** — `sshd -T | grep allowagentforwarding` → `yes`
-   (checked in provisioning step 5; `provision-remote-box.sh` warns if it's `no`).
+   (checked in provisioning step 7; `provision-remote-box.sh` warns if it's `no`).
 
 **Verify on the box:**
 
 ```sh
-ssh-add -l     # should list your key (comment MCD_<user>); "no identities" = broken
+ssh-add -l     # should list your key (comment <user>_<machine>); "no identities" = broken
 ```
 
 If it's empty, walk the four points above in order (usually a missed reconnect
 after `useExecServer` was turned off).
+
+**A different failure looks identical.** After a dropped connection the editor's
+agent socket can be a *dangling symlink*: the agent it pointed at died, the
+reconnect started a new one elsewhere, and shells opened before the reconnect keep
+the old path. `ssh-add -l` then reports:
+
+```
+Error connecting to agent: No such file or directory
+```
+
+That is stale, not missing, and forwarding is fine. Repair the current shell:
+
+```sh
+eval "$(bash scripts/host/fix-agent-sock.sh)"
+```
+
+Do **not** attach to the newest socket under `/tmp/ssh-*/` by hand. The account is
+shared, so every connected developer's agent lives there owned by the same user —
+"newest" means "whoever reconnected last", and attaching authenticates you as them.
+
+**If the agent works but git pushes are attributed to the wrong account,** the
+identity is being decided by agent *order*: ssh offers keys in order and stops at
+the first the server accepts, and a wrong-but-known key authenticates
+successfully. Diagnose with `bash scripts/host/diagnose-git-auth.sh`; fix by
+re-running the laptop bootstrap, which verifies the returned identity and pins it.
+
+## Local model routing on a box
+
+The routing contract in `CLAUDE.md` sends low-risk work to a local model. That
+model runs on **your own machine**, not on the box, and `http://host.docker.internal`
+resolves only inside the devcontainer — so on a box every routing decision used to
+fall through to Claude with `local_unreachable_fallback`, while `.env` and day-0
+both reported local routing as configured.
+
+The endpoint reaches the box over a reverse tunnel that
+`scripts/local/bootstrap-devbox.sh` writes into your laptop's SSH `Host` block:
+
+```
+RemoteForward 127.0.0.1:<box-port> 127.0.0.1:<laptop-port>
+```
+
+VSCode Remote-SSH reads that same config, so the tunnel comes up with your normal
+connection. Two consequences worth knowing:
+
+- **It is established at connect time.** Adding the line to an open session does
+  nothing until you reconnect.
+- **The port is bound on the box's loopback**, not published to the network
+  (sshd's `GatewayPorts` defaults to `no`). It is still reachable by anyone with a
+  shell on that box while your session is open — the account is shared — and
+  nothing authenticates to it. The bootstrap refuses to reuse a port already bound
+  on the box, because that port would be another developer's tunnel and your
+  prompts would leave for their machine.
+
+Then set the matching endpoint in `.env` **on the box**:
+
+```
+LOCAL_MODEL_ENDPOINT=http://127.0.0.1:<box-port>
+```
+
+`bash scripts/check-day0.sh` verifies this per surface: on a box, local routing
+that is enabled but unreachable is a **FAIL**, not a warning — the point is that
+the reported state matches the routed state. Set `LOCAL_MODEL_ENABLED=false` if
+you would rather route everything to Claude.
+
+Never bind the model to `0.0.0.0` to make a box reach it. That advice belongs to
+the container surface; on a box it publishes a personal machine's model onto the
+range network.
 
 ## The killswitch
 

@@ -1,0 +1,46 @@
+# ctp-bridge configuration — copy to .ctp-bridge.conf on the box and edit.
+#
+# This file is the BOUNDARY. The wrapper (scripts/ctp-bridge.sh) and the
+# PreToolUse hook (.claude/hooks/pretooluse-ctp.sh) both read it, and neither
+# trusts caller-supplied environment for these values — an agent that can set an
+# env var in the same call it makes could otherwise rewrite its own limits.
+#
+# .ctp-bridge.conf is gitignored: it lives on the box and is never committed. It
+# holds NO secrets — only a box name, a verb list, and paths to deny. Real
+# secret VALUES never appear here.
+#
+# Format: KEY=value, one per line. Lines starting with # are ignored. No shell
+# expansion is performed on values.
+
+# The single box this harness may deploy to, named EXACTLY (including the team
+# suffix). Any mutating verb naming anything else is refused. One name, no
+# wildcard, no list. Example shape: some-box_t02
+CTP_ALLOWED_TARGET=
+
+# The authorised team suffix. A mutating target MUST end with _<team> — this is
+# the gate that stops a deploy landing on a live team by mistake, and it holds
+# even if the box allow-list above is ever widened. Both gates must pass. Fail
+# closed: if this is unset, every mutating verb is refused. Example: t02
+CTP_ALLOWED_TEAM=
+
+# The MUTATING verbs the wrapper will run. Allow-list: a verb not named here is
+# refused. Read verbs (host list <box>, project update-inventory) are reachable
+# separately and always confirmed; host vars, redeploy and remove are not
+# reachable, and secrets/make are refused outright regardless of this line.
+CTP_ALLOWED_VERBS=deploy deploy-role
+
+# Container override. Leave blank to derive catapult-<current-user> at runtime.
+CTP_CONTAINER=
+
+# Optional: the project directory INSIDE the container that ctp runs from (where
+# playbook.yml lives), e.g. /srv/inventories/<project>. Leave blank to translate
+# the directory you invoke the wrapper from through the container's bind mount at
+# runtime (run the wrapper from your range checkout). Set this only to pin a fixed
+# project regardless of CWD.
+CTP_PROJECT_DIR=
+
+# Secret paths the hook refuses to let any tool read (Read tool or a Bash command
+# naming the path), so their contents never reach the transcript. Space-separated
+# glob patterns. Tilde expands to the target user's home. Extend per box; never
+# remove the vault password or private-key entries.
+CTP_SECRET_PATHS=/var/tmp/vlt_pf ~/.ssh/id_* ~/.zsh_history ~/.bash_history **/.env

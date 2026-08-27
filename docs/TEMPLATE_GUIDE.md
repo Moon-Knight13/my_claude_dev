@@ -476,10 +476,11 @@ drift check refuses to install instead of running the unpinned code.
 - Disable local routing with `CAVEMAN_ENABLED=0` or `LOCAL_MODEL_ENABLED=false`.
 - Recommended local defaults:
    - `qwen2.5-coder:7b` for normal coding tasks
-   - `qwen2.5-coder:1.5b-base` for fast/simple edits
+   - `qwen2.5-coder:1.5b` for fast/simple edits (instruct-tuned — not the
+     `:1.5b-base` variant, which continues prompts instead of following them)
    - escalate to Claude for high-risk or ambiguous changes
 - Optional fast-path env controls:
-   - `LOCAL_MODEL_FAST_MODEL=qwen2.5-coder:1.5b-base`
+   - `LOCAL_MODEL_FAST_MODEL=qwen2.5-coder:1.5b`
    - `LOCAL_MODEL_FAST_TASK_TYPES=format,docs,tiny-refactor,rename,simple-test`
 
 See [docs/AI_ROUTING_POLICY.md](AI_ROUTING_POLICY.md) and `scripts/route-model.sh`.
