@@ -35,6 +35,7 @@ ctp_load_config() {
         key="${line%%=*}"
         val="${line#*=}"
         key="${key//[[:space:]]/}"
+        # shellcheck disable=SC2034  # CTP_PROJECT_DIR is consumed cross-file by ctp-bridge.sh
         case "$key" in
             CTP_ALLOWED_TARGET) CTP_ALLOWED_TARGET="$val" ;;
             CTP_ALLOWED_TEAM)   CTP_ALLOWED_TEAM="${val//[[:space:]]/}" ;;
@@ -150,6 +151,7 @@ ctp_classify() {
 # ctp_expand_tilde <path> — leading ~ to the target user's home.
 ctp_expand_tilde() {
     local p="$1" home="${CTP_TARGET_HOME:-$HOME}"
+    # shellcheck disable=SC2088  # matching a LITERAL leading ~, not expanding it
     case "$p" in
         '~/'*) printf '%s/%s' "$home" "${p#\~/}" ;;
         '~')   printf '%s' "$home" ;;
@@ -166,9 +168,10 @@ ctp_is_secret_path() {
     base="${candidate##*/}"
     for pat in $CTP_SECRET_PATHS; do
         epat="$(ctp_expand_tilde "$pat")"
-        # shellcheck disable=SC2053
+        # shellcheck disable=SC2053  # glob match is intentional (secret-path patterns)
         [[ "$candidate" == $epat ]] && return 0
         # a **/ prefix means "anywhere": match on the basename too
+        # shellcheck disable=SC2053
         case "$epat" in
             '**/'*) [[ "$base" == ${epat#\*\*/} ]] && return 0 ;;
         esac

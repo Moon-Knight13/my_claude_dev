@@ -23,7 +23,6 @@
 set -euo pipefail
 
 # self-contained logging (no repo-relative dependency, so it runs when installed)
-host_info() { echo "  ++  $*"; }
 host_note() { echo "  --  $*"; }
 host_warn() { echo "  !!  $*" >&2; }
 

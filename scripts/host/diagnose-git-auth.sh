@@ -91,6 +91,7 @@ else
     if [[ -L "$SSH_AUTH_SOCK" && ! -e "$SSH_AUTH_SOCK" ]]; then
         host_fail "SSH_AUTH_SOCK is a DANGLING symlink -> $(readlink "$SSH_AUTH_SOCK" 2>/dev/null)"
         host_note "the agent it pointed at died; a reconnect created a new one elsewhere"
+        # shellcheck disable=SC2012  # listing candidate sockets by mtime for display only; never auto-picked
         _live="$(ls -1t /tmp/ssh-*/agent.* 2>/dev/null | head -5)"
         if [[ -n "$_live" ]]; then
             host_note "agent sockets that DO exist (newest first):"

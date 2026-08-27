@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2015,SC2034  # A&&B||C ok/bad idiom (ok never fails); config vars used via sourced guard
 # test-ctp-bridge.sh — refusal and decision tests for the ctp tool bridge.
 #
 # Three groups: the shared guard (pure functions), the wrapper (with a mocked

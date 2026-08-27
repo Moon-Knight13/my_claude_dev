@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2015  # A&&B||C ok/bad idiom (ok never fails)
 # test-ctp-bridge-install.sh — the installer lands the gate at user scope, merges
 # settings without clobbering, preserves the config, is idempotent, and the
 # INSTALLED wrapper + hook resolve their guard lib from the installed location
