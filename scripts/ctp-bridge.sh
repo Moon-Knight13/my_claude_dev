@@ -83,24 +83,42 @@ if [[ "$CLASS" == "mutating" ]]; then
     fi
 fi
 
-# --- confirm gate (human-shell path) -----------------------------------------
-# This wrapper's OWN gate. Unlike host-common's confirm(), it never auto-yeses on
-# non-interactive stdin — a present human is the whole point. The agent path does
-# not reach here unconfirmed: the PreToolUse hook prompts the user first. Every
-# class is confirmed, per owner policy.
+# --- confirm gate ------------------------------------------------------------
+# Every class is confirmed by a human, per owner policy. Two paths:
+#   - agent path: the Bash tool has no TTY, so the human already confirmed at the
+#     PreToolUse hook's `ask` prompt, and the hook left a single-use token bound to
+#     THIS argv. Consume it here instead of prompting.
+#   - human-shell path: a TTY is present, so prompt directly.
+# ASSUME_YES is refused on either path — a present human is the whole point, and a
+# token is written by the hook, never by ASSUME_YES.
+_APPROVAL="$(ctp_approval_file)"
+_consume_token() { # 0 iff a fresh token bound to "$*" exists; consumes it either way
+    [[ -f "$_APPROVAL" ]] || return 1
+    local exp argv now
+    IFS=$'\t' read -r exp argv < "$_APPROVAL" 2>/dev/null
+    rm -f "$_APPROVAL"                       # single-use: gone whether or not it matched
+    now="$(date +%s 2>/dev/null || echo 0)"
+    [[ -n "$exp" && "$now" -le "$exp" ]] || return 1
+    [[ "$argv" == "$*" ]] || return 1
+    return 0
+}
+
 if [[ "${ASSUME_YES:-0}" == "1" ]]; then
     host_warn "refusing: ASSUME_YES must not reach the ctp gate"
     exit 5
 fi
-if [[ ! -t 0 ]]; then
-    host_warn "refusing: non-interactive caller cannot confirm 'ctp $*'"
+if _consume_token "$@"; then
+    host_note "approved at the hook prompt: ctp $*"
+elif [[ -t 0 ]]; then
+    printf '  ??  run: ctp %s   [y/N] ' "$*"
+    read -r reply
+    if [[ ! "$reply" =~ ^[Yy]([Ee][Ss])?$ ]]; then
+        host_note "skipped by operator"
+        exit 6
+    fi
+else
+    host_warn "refusing: non-interactive caller with no hook approval for 'ctp $*'"
     exit 5
-fi
-printf '  ??  run: ctp %s   [y/N] ' "$*"
-read -r reply
-if [[ ! "$reply" =~ ^[Yy]([Ee][Ss])?$ ]]; then
-    host_note "skipped by operator"
-    exit 6
 fi
 
 # --- run ---------------------------------------------------------------------

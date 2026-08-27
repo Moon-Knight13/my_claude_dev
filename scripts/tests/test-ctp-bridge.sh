@@ -118,6 +118,27 @@ check "busy refused (4)" "$?" 4
 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$TMP/nope.conf" bash "$ROOT/scripts/ctp-bridge.sh" host deploy trainbox_t02 </dev/null >/dev/null 2>&1
 check "missing config refused (2)" "$?" 2
 
+# --- hook-approval token: the agent path (no TTY) runs iff a valid token exists
+STATE="$TMP/state"; mkdir -p "$STATE"; APPROVAL="$STATE/approval"
+_mktoken() { printf '%s\t%s\n' "$1" "$2" > "$APPROVAL"; }   # <expiry-epoch> <argv>
+NOW="$(date +%s)"; FUTURE=$((NOW + 120)); PAST=$((NOW - 5))
+
+_mktoken "$FUTURE" "host list trainbox_t02"
+PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_BRIDGE_STATE="$STATE" CTP_BRIDGE_LOG="$TMP/c2.log" \
+    bash "$ROOT/scripts/ctp-bridge.sh" host list trainbox_t02 </dev/null >/dev/null 2>&1
+check "valid token: non-interactive run proceeds (0)" "$?" 0
+[[ ! -f "$APPROVAL" ]] && ok "token consumed (single-use)" || bad "token consumed (single-use)"
+
+_mktoken "$FUTURE" "host list SOMETHINGELSE_t02"
+PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_BRIDGE_STATE="$STATE" \
+    bash "$ROOT/scripts/ctp-bridge.sh" host list trainbox_t02 </dev/null >/dev/null 2>&1
+check "token for other argv: refused (5)" "$?" 5
+
+_mktoken "$PAST" "host list trainbox_t02"
+PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_BRIDGE_STATE="$STATE" \
+    bash "$ROOT/scripts/ctp-bridge.sh" host list trainbox_t02 </dev/null >/dev/null 2>&1
+check "expired token: refused (5)" "$?" 5
+
 # Run path needs a tty (the gate refuses non-interactive by design). Use script(1)
 # to allocate one; skip honestly if unavailable.
 if command -v script >/dev/null 2>&1; then
@@ -146,10 +167,11 @@ HOOK="$ROOT/.claude/hooks/pretooluse-ctp.sh"
 if ! command -v jq >/dev/null 2>&1; then
     echo "  --  jq unavailable; skipping hook tests"
 else
+HSTATE="$TMP/hookstate"; mkdir -p "$HSTATE"
 decide() { # decide <json> -> prints allow|deny|ask|none
     local out
-    out="$(CTP_BRIDGE_CONF="$CONF" CTP_TARGET_USER=tester CTP_TARGET_HOME=/home/tester \
-        HOME=/home/tester bash "$HOOK" <<<"$1" 2>/dev/null)"
+    out="$(CTP_BRIDGE_CONF="$CONF" CTP_BRIDGE_STATE="$HSTATE" CTP_TARGET_USER=tester \
+        CTP_TARGET_HOME=/home/tester HOME=/home/tester bash "$HOOK" <<<"$1" 2>/dev/null)"
     if [[ -z "$out" ]]; then echo none
     else printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null || echo parse-error
     fi
@@ -178,6 +200,24 @@ check "Bash wrapper refused verb -> deny" "$(decide "$(bash_json "bash $ROOT/scr
 check "env cannot override config -> deny" "$(decide "$(bash_json "CTP_ALLOWED_TARGET=evil_t02 bash $ROOT/scripts/ctp-bridge.sh host deploy evil_t02")")" deny
 check "prose mentioning ctp -> none"      "$(decide "$(bash_json 'echo use ctp later to deploy')")"  none
 check "unrelated bash -> none"            "$(decide "$(bash_json 'ls -la /workspace')")"             none
+
+# approving a wrapper call writes a token bound to the exact argv
+rm -f "$HSTATE/approval"
+decide "$(bash_json "ctp-bridge host deploy trainbox_t02")" >/dev/null
+if [[ -f "$HSTATE/approval" ]] && grep -Fq 'host deploy trainbox_t02' "$HSTATE/approval"; then
+    ok "ask writes an approval token bound to the argv"
+else bad "ask writes an approval token bound to the argv"; fi
+# a refused call writes NO token
+rm -f "$HSTATE/approval"
+decide "$(bash_json "ctp-bridge host deploy trainbox_t05")" >/dev/null
+[[ ! -f "$HSTATE/approval" ]] && ok "refused call writes no token" || bad "refused call writes no token"
+
+# the approval token path is guarded from tools (read/write/bash)
+APPROVAL_PATH="$HSTATE/approval"
+check "Read approval token -> deny"  "$(decide "$(read_json "$APPROVAL_PATH")")" deny
+check "Write to secret path -> deny" "$(decide "$(printf '{"tool_name":"Write","tool_input":{"file_path":"%s"}}' "$APPROVAL_PATH")")" deny
+check "Bash write token -> deny"     "$(decide "$(bash_json "echo x > $APPROVAL_PATH")")" deny
+check "Edit .env -> deny"            "$(decide "$(printf '{"tool_name":"Edit","tool_input":{"file_path":"/app/.env"}}')")" deny
 fi
 
 # ============================================================================

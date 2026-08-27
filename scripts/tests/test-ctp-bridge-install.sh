@@ -38,6 +38,12 @@ check "kept unrelated mcpServers key" "$(jq -r '.mcpServers["keep-me"] | type' "
 check "kept pre-existing hook"        "$(jq '[.hooks.PreToolUse[] | select(.hooks[].command=="/pre-existing")] | length' "$S")" 1
 HOOK_ABS="$HOME_DIR/.claude/hooks/pretooluse-ctp.sh" \
   check "added our hook (absolute path)" "$(jq --arg h "$HOME_DIR/.claude/hooks/pretooluse-ctp.sh" '[.hooks.PreToolUse[] | select(.hooks[].command==$h)] | length' "$S")" 1
+check "our hook matcher covers Write/Edit" "$(jq -r --arg h "$HOME_DIR/.claude/hooks/pretooluse-ctp.sh" '.hooks.PreToolUse[] | select(.hooks[].command==$h) | .matcher' "$S")" "Bash|Read|Write|Edit"
+
+# an older install's matcher is upgraded, not left stale, on re-run
+jq --arg h "$HOME_DIR/.claude/hooks/pretooluse-ctp.sh" '(.hooks.PreToolUse[] | select(.hooks[].command==$h) | .matcher) = "Bash|Read"' "$S" > "$S.t" && mv "$S.t" "$S"
+run_install
+check "stale matcher upgraded on re-install" "$(jq -r --arg h "$HOME_DIR/.claude/hooks/pretooluse-ctp.sh" '.hooks.PreToolUse[] | select(.hooks[].command==$h) | .matcher' "$S")" "Bash|Read|Write|Edit"
 
 # preserve an operator-set target across re-install, and MIGRATE a config that
 # predates a required key: CTP_ALLOWED_TEAM must be appended, not left missing.

@@ -616,13 +616,20 @@ the range checkout, which is a tree the developer pushes. This is the C-scoped
 slice of what component D would generalise; D proper (the portable contract) is
 still blocked on #37.
 
-**The confirmation gate is two mechanisms, split by caller.** The design spoke of
-a single confirm gate. In practice the agent calls through the Bash tool, whose
-stdin is non-interactive — so the wrapper's own gate (which refuses non-interactive
-input, no auto-yes) would refuse every agent deploy, confirmed or not. The
-authoritative agent-path gate is therefore the `PreToolUse` hook returning `ask`,
-and the wrapper's stdin gate is the belt for a human running it directly. Both read
-the same shared guard, so they classify identically.
+**The confirmation gate is two mechanisms, split by caller, joined by a token.**
+The design spoke of a single confirm gate. In practice the agent calls through the
+Bash tool, whose stdin is non-interactive — so the wrapper's own gate (refuses
+non-interactive input, no auto-yes) would refuse every agent call, confirmed or
+not. This was found by running it on the box: the hook prompted, the human
+approved, and the wrapper refused anyway — the agent path was unreachable for every
+verb. The fix is a handoff, not a fake TTY: on `ask`, the hook writes a single-use,
+argv-bound, short-TTL token; the wrapper consumes it in place of prompting. No
+token and no TTY → refuse, so an unattended/scripted run is still blocked. The
+token is authenticated only to the strength of the hook itself (the hook denies
+tool access to the token path; its matcher is `Bash|Read|Write|Edit`) — hygiene +
+human-in-the-loop, not a cryptographic boundary, consistent with the accepted-risk
+note. Both wrapper and hook read the same shared guard, so they classify
+identically.
 
 **B″ ships opt-in, not on by default.** The design has the scoped agent carry the
 managed key alone and additional identities added only after an observed failure.

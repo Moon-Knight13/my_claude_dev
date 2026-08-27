@@ -40,16 +40,32 @@ emit() { # emit <allow|deny|ask> <reason>
 }
 pass() { exit 0; }  # no opinion
 
+# A path is guarded if it is a configured secret OR the approval token (which the
+# agent must not read or forge). Used for Read/Write/Edit file_path and Bash args.
+_is_guarded_path() {
+    ctp_is_secret_path "$1" && return 0
+    [[ "$1" == "$(ctp_approval_file)" ]] && return 0
+    return 1
+}
+
+# _write_approval <argv-string> — record a single-use, argv-bound, short-TTL token
+# so the wrapper knows the human approved THIS invocation at the prompt below.
+_write_approval() {
+    local dir; dir="$(ctp_state_dir)"
+    mkdir -p "$dir" 2>/dev/null || return 0
+    ( umask 077; printf '%s\t%s\n' "$(( $(date +%s) + 180 ))" "$1" > "$dir/approval" 2>/dev/null )
+}
+
 INPUT="$(cat)"
 _json() { printf '%s' "$INPUT" | jq -r "$1" 2>/dev/null; }
 
 TOOL="$(_json '.tool_name')"
 
-# --- Read tool: block reads of secret paths ----------------------------------
-if [[ "$TOOL" == "Read" ]]; then
+# --- Read/Write/Edit: block touching a guarded path --------------------------
+if [[ "$TOOL" == "Read" || "$TOOL" == "Write" || "$TOOL" == "Edit" ]]; then
     fp="$(_json '.tool_input.file_path')"
-    [[ -n "$fp" ]] && ctp_is_secret_path "$fp" && \
-        emit deny "reading a secret path into the transcript is refused: $fp"
+    [[ -n "$fp" ]] && _is_guarded_path "$fp" && \
+        emit deny "a guarded path (secret or approval token) is off-limits to tools: $fp"
     pass
 fi
 
@@ -65,8 +81,9 @@ read -r -a _toks <<<"$CMD"
 for _t in "${_toks[@]}"; do
     _c="$(_stripq "$_t")"
     _c="${_c#<}"   # redirection like <secret
+    _c="${_c#>}"   # redirection like >token
     [[ -n "$_c" ]] || continue
-    ctp_is_secret_path "$_c" && emit deny "command would read a secret path: $_c"
+    _is_guarded_path "$_c" && emit deny "command would touch a guarded path: $_c"
 done
 
 # --- split into command segments and inspect each command word ---------------
@@ -123,6 +140,9 @@ while IFS= read -r _seg; do
     if [[ "$_is_wrapper" == 1 ]]; then
         verdict="$(ctp_classify "${_wrapper_args[@]:-}")" && vrc=0 || vrc=$?
         if [[ "$vrc" -eq 0 ]]; then
+            # Human confirms at this prompt; leave the wrapper a token bound to this
+            # exact argv so it runs without a second (impossible, no-TTY) prompt.
+            _write_approval "${_wrapper_args[*]:-}"
             emit ask "confirm build-tooling run: ctp ${_wrapper_args[*]:-}"
         else
             emit deny "ctp bridge refuses this: ${verdict#refuse }"

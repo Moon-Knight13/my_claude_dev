@@ -287,9 +287,17 @@ drift:
   environment variable in the same call it makes must not be able to widen its own
   limits. Both wrapper and hook read `.ctp-bridge.conf`; neither trusts env for a
   boundary value.
-- **The agent's confirmation is the hook's prompt, not the wrapper's stdin.** The
-  Bash tool's stdin is non-interactive, so the wrapper refuses it (no auto-yes);
-  the human says yes at the hook's `ask` prompt instead.
+- **The agent's confirmation is the hook's prompt, handed to the wrapper by a
+  token.** The Bash tool's stdin is non-interactive, so the wrapper cannot prompt
+  on the agent path. The human confirms at the hook's `ask` prompt; the hook then
+  writes a single-use, argv-bound, short-TTL token, and the wrapper consumes it in
+  place of prompting. Without a token and without a TTY the wrapper refuses (no
+  auto-yes) — so an unattended/scripted run with no human is still blocked, while
+  the hook-approved agent path runs. The token path is itself guarded: the hook
+  denies any Read/Write/Edit/Bash access to it (and to the secret paths), and its
+  matcher is `Bash|Read|Write|Edit` for that reason. This is hygiene + human-in-
+  the-loop to the same strength as the rest of the hook, not a cryptographic
+  boundary — consistent with the accepted-risk note below.
 
 `.ctp-bridge.conf` is gitignored and holds a box name and paths — never secrets.
 The invocation count log lives under `.ai/` (also gitignored) and records verbs

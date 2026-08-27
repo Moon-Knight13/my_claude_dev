@@ -84,13 +84,16 @@ if ! jq -e . "$SETTINGS" >/dev/null 2>&1; then
     host_fail "$SETTINGS is not valid JSON; refusing to touch it. Fix it and re-run."
     exit 1
 fi
-HOOK_ABS="$HOOK" jq '
+# Upsert our entry: if one with our command exists, refresh its matcher (so an
+# older install's matcher is upgraded); otherwise append. Other hooks untouched.
+HOOK_ABS="$HOOK" MATCHER="Bash|Read|Write|Edit" jq '
   .hooks //= {} |
   .hooks.PreToolUse //= [] |
   if any(.hooks.PreToolUse[]?; (.hooks[]?.command) == env.HOOK_ABS)
-  then .
+  then .hooks.PreToolUse |= map(
+    if (.hooks[]?.command) == env.HOOK_ABS then .matcher = env.MATCHER else . end)
   else .hooks.PreToolUse += [{
-    "matcher": "Bash|Read",
+    "matcher": env.MATCHER,
     "hooks": [{"type": "command", "command": env.HOOK_ABS}]
   }] end
 ' "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"

@@ -45,6 +45,17 @@ ctp_load_config() {
     return 0
 }
 
+# --- approval handoff (hook -> wrapper) --------------------------------------
+# The Bash tool has no TTY, so the wrapper's own confirm prompt cannot reach the
+# human on the agent path. The human confirms at the hook's `ask` prompt instead;
+# the hook then writes a single-use, argv-bound, short-TTL token here, and the
+# wrapper consumes it in place of prompting. Both derive the path from here so
+# they agree. This authenticates "the hook approved THIS invocation" to the same
+# strength as the rest of the hook (a shared-account hook is hygiene + human-in-
+# the-loop, not a cryptographic boundary — see docs/PROJECT.md).
+ctp_state_dir()     { printf '%s' "${CTP_BRIDGE_STATE:-$HOME/.local/state/ctp-bridge}"; }
+ctp_approval_file() { printf '%s/approval' "$(ctp_state_dir)"; }
+
 # ctp_container — the container name, derived at runtime unless overridden. Never
 # hardcoded; the vendor convention is catapult-<user>.
 ctp_container() {
