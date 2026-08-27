@@ -55,45 +55,48 @@ fi
 
 # --- classify (shared gates) -------------------------------------------------
 verdict="$(ctp_classify "$@")" && rc=0 || rc=$?
-read -r decision reason_or_verb target_or_rest <<<"$verdict"
+read -r decision CLASS VERB TARGET <<<"$verdict"
 if [[ "$rc" -ne 0 || "$decision" != "confirm" ]]; then
-    host_warn "refused: ${reason_or_verb} ${target_or_rest}"
+    # on refuse the verdict is "refuse <reason...>"; CLASS/VERB hold the reason
+    host_warn "refused: ${CLASS} ${VERB} ${TARGET}"
     exit 3
 fi
-VERB="$reason_or_verb"
-TARGET="$target_or_rest"
 
 CONTAINER="$(ctp_container)"
 
-# --- preconditions before any mutating run -----------------------------------
+# --- preconditions, by class -------------------------------------------------
+# Container must be up for anything. A mutating run additionally needs an unlocked
+# vault and no run already in flight; a read/inventory verb does not gate on those.
 if ! docker inspect -f '{{.State.Running}}' "$CONTAINER" >/dev/null 2>&1; then
     host_warn "container '$CONTAINER' is not running — run 'make start' first"
     exit 4
 fi
-# Vault must be unlocked. Check EXISTENCE ONLY — never read the file's contents.
-if ! docker exec "$CONTAINER" test -e /var/tmp/vlt_pf 2>/dev/null; then
-    host_warn "vault is locked (no /var/tmp/vlt_pf) — run 'make start' and complete first-run config"
-    exit 4
-fi
-# Busy: an ansible/ctp run already in flight in the container.
-if docker exec "$CONTAINER" pgrep -f 'ansible-playbook|ctp ' >/dev/null 2>&1; then
-    host_warn "a run is already in progress in '$CONTAINER' — refusing to start a second"
-    exit 4
+if [[ "$CLASS" == "mutating" ]]; then
+    # Vault must be unlocked. Check EXISTENCE ONLY — never read the file's contents.
+    if ! docker exec "$CONTAINER" test -e /var/tmp/vlt_pf 2>/dev/null; then
+        host_warn "vault is locked (no /var/tmp/vlt_pf) — run 'make start' and complete first-run config"
+        exit 4
+    fi
+    if docker exec "$CONTAINER" pgrep -f 'ansible-playbook|ctp ' >/dev/null 2>&1; then
+        host_warn "a run is already in progress in '$CONTAINER' — refusing to start a second"
+        exit 4
+    fi
 fi
 
 # --- confirm gate (human-shell path) -----------------------------------------
 # This wrapper's OWN gate. Unlike host-common's confirm(), it never auto-yeses on
 # non-interactive stdin — a present human is the whole point. The agent path does
-# not reach here unconfirmed: the PreToolUse hook prompts the user first.
+# not reach here unconfirmed: the PreToolUse hook prompts the user first. Every
+# class is confirmed, per owner policy.
 if [[ "${ASSUME_YES:-0}" == "1" ]]; then
     host_warn "refusing: ASSUME_YES must not reach the ctp gate"
     exit 5
 fi
 if [[ ! -t 0 ]]; then
-    host_warn "refusing: non-interactive caller cannot confirm 'ctp host $VERB $TARGET'"
+    host_warn "refusing: non-interactive caller cannot confirm 'ctp $*'"
     exit 5
 fi
-printf '  ??  run: ctp host %s %s   [y/N] ' "$VERB" "$TARGET"
+printf '  ??  run: ctp %s   [y/N] ' "$*"
 read -r reply
 if [[ ! "$reply" =~ ^[Yy]([Ee][Ss])?$ ]]; then
     host_note "skipped by operator"
@@ -101,18 +104,18 @@ if [[ ! "$reply" =~ ^[Yy]([Ee][Ss])?$ ]]; then
 fi
 
 # --- run ---------------------------------------------------------------------
-# argv passed as POSITIONAL PARAMS, never interpolated into a command string:
-# `ctp "$@"` inside the login shell. Interpolation would re-open the very
-# quoting/env-prefix hole the classifier exists to close.
+# The validated argv is forwarded as POSITIONAL PARAMS, never interpolated into a
+# command string: `ctp "$@"` inside the login shell. Interpolation would re-open
+# the quoting/env-prefix hole the classifier exists to close.
 mkdir -p "$(dirname "$COUNT_LOG")"
-_log_count() { # verb outcome — verbs + outcomes only, never target or output
-    printf '%s\t%s\t%s\n' "$(date -u +%FT%TZ 2>/dev/null || echo unknown)" "$1" "$2" >> "$COUNT_LOG"
+_log_count() { # verb class outcome — verbs/outcomes only, never target or output
+    printf '%s\t%s\t%s\t%s\n' "$(date -u +%FT%TZ 2>/dev/null || echo unknown)" "$1" "$2" "$3" >> "$COUNT_LOG"
 }
 
 set +e
 docker exec -i "$CONTAINER" zsh -c \
-    'source /home/builder/autocomplete.zsh >/dev/null 2>&1; ctp "$@"' _ host "$VERB" "$TARGET"
+    'source /home/builder/autocomplete.zsh >/dev/null 2>&1; ctp "$@"' _ "$@"
 run_rc=$?
 set -e
-_log_count "host_$VERB" "exit_$run_rc"
+_log_count "$VERB" "$CLASS" "exit_$run_rc"
 exit "$run_rc"

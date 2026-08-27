@@ -19,6 +19,7 @@
 # 1 if the file is missing (the caller decides whether that is fatal). Values are
 # taken literally; no shell expansion beyond a leading ~ in secret paths.
 CTP_ALLOWED_TARGET=""
+CTP_ALLOWED_TEAM=""
 CTP_ALLOWED_VERBS="deploy deploy-role"
 CTP_CONTAINER=""
 CTP_SECRET_PATHS=""
@@ -35,6 +36,7 @@ ctp_load_config() {
         key="${key//[[:space:]]/}"
         case "$key" in
             CTP_ALLOWED_TARGET) CTP_ALLOWED_TARGET="$val" ;;
+            CTP_ALLOWED_TEAM)   CTP_ALLOWED_TEAM="${val//[[:space:]]/}" ;;
             CTP_ALLOWED_VERBS)  CTP_ALLOWED_VERBS="$val" ;;
             CTP_CONTAINER)      CTP_CONTAINER="$val" ;;
             CTP_SECRET_PATHS)   CTP_SECRET_PATHS="$val" ;;
@@ -62,10 +64,18 @@ ctp_has_glob() {
 }
 
 # --- classification ----------------------------------------------------------
-# ctp_classify <ctp-argv...> — prints one verdict token and returns:
-#   0  "confirm <verb> <target>"   permitted mutating verb; caller confirms + runs
-#   1  "refuse <reason>"           not permitted (never run, whatever the caller)
-# The verdict is derived from the parsed argv only.
+# ctp_classify <ctp-argv...> — prints one verdict and returns:
+#   0  "confirm <class> <verb> <target|->"   reachable; caller confirms + runs
+#   1  "refuse <reason>"                      not permitted (never run)
+# class is one of: mutating | read | inventory — the wrapper uses it to pick
+# preconditions. The verdict is derived from the parsed argv only.
+#
+# Two independent gates protect a mutating verb, and BOTH must pass:
+#   - team gate: the target must belong to the authorised team (CTP_ALLOWED_TEAM),
+#     i.e. end with _<team>. This is the protection against deploying to a live
+#     team by mistake; it holds even if the box allow-list is later widened.
+#   - box allow-list: the target must equal CTP_ALLOWED_TARGET (one named box).
+# Both fail closed: an unset team or target refuses every mutating verb.
 ctp_classify() {
     local a1="${1:-}" a2="${2:-}" a3="${3:-}" verb target
     case "$a1" in
@@ -75,34 +85,50 @@ ctp_classify() {
             # make start/restart/stop are host-shell lifecycle + credential entry,
             # not ctp verbs; never run through the bridge.
             printf 'refuse lifecycle-verb-refused-outright'; return 1 ;;
+        project)
+            # update-inventory is the required step after making a Providentia box
+            # (nothing else has a target; refuse any other project subverb).
+            if [[ "$a2" == "update-inventory" && -z "$a3" ]]; then
+                printf 'confirm inventory update-inventory -'; return 0
+            fi
+            printf 'refuse project-verb-not-reachable:%s' "${a2:-<empty>}"; return 1 ;;
         host)
             verb="$a2"; target="$a3" ;;
         *)
             printf 'refuse unknown-verb:%s' "${a1:-<empty>}"; return 1 ;;
     esac
 
-    # Only the allow-listed host verbs are reachable.
-    local allowed=" $CTP_ALLOWED_VERBS "
     case "$verb" in
-        deploy|deploy-role) ;;
-        list|vars)
-            printf 'refuse read-verb-not-reachable-in-this-slice:%s' "$verb"; return 1 ;;
+        list)
+            # read-only verification. A concrete target only — no bulk dump of the
+            # whole range into the transcript.
+            [[ -n "$target" ]] || { printf 'refuse list-needs-a-target-no-bulk-listing'; return 1; }
+            [[ "$target" == "all" ]] && { printf 'refuse list-all-refused-no-bulk-dump'; return 1; }
+            ctp_has_glob "$target" && { printf 'refuse glob-in-list-target-refused'; return 1; }
+            printf 'confirm read list %s' "$target"; return 0 ;;
+        vars)
+            printf 'refuse vars-not-reachable-streams-box-detail'; return 1 ;;
         redeploy|remove)
             printf 'refuse destructive-verb-not-reachable:%s' "$verb"; return 1 ;;
+        deploy|deploy-role)
+            : ;;
         *)
             printf 'refuse unknown-host-verb:%s' "${verb:-<empty>}"; return 1 ;;
     esac
-    [[ "$allowed" == *" $verb "* ]] || { printf 'refuse verb-not-in-config-allow-list:%s' "$verb"; return 1; }
 
-    # Target gates for a mutating verb.
+    # --- mutating verb: allow-list, glob, team gate, box gate ---
+    local allowed=" $CTP_ALLOWED_VERBS "
+    [[ "$allowed" == *" $verb "* ]] || { printf 'refuse verb-not-in-config-allow-list:%s' "$verb"; return 1; }
     [[ -n "$target" ]] || { printf 'refuse mutating-verb-needs-a-target:%s' "$verb"; return 1; }
-    if ctp_has_glob "$target"; then
-        printf 'refuse glob-in-target-refused:%s' "$verb"; return 1
-    fi
+    ctp_has_glob "$target" && { printf 'refuse glob-in-target-refused:%s' "$verb"; return 1; }
+    # team gate (mandatory, fail closed)
+    [[ -n "$CTP_ALLOWED_TEAM" ]] || { printf 'refuse no-authorised-team-configured'; return 1; }
+    [[ "$target" == *"_$CTP_ALLOWED_TEAM" ]] || { printf 'refuse target-not-in-authorised-team:%s' "$CTP_ALLOWED_TEAM"; return 1; }
+    # box allow-list (one named box, fail closed)
     [[ -n "$CTP_ALLOWED_TARGET" ]] || { printf 'refuse no-allowed-target-configured'; return 1; }
     [[ "$target" == "$CTP_ALLOWED_TARGET" ]] || { printf 'refuse target-not-allowed'; return 1; }
 
-    printf 'confirm %s %s' "$verb" "$target"; return 0
+    printf 'confirm mutating %s %s' "$verb" "$target"; return 0
 }
 
 # --- secret paths ------------------------------------------------------------

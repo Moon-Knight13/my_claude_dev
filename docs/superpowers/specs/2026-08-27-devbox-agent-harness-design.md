@@ -586,19 +586,23 @@ than by silently editing the section they contradict.
 ### Deviations
 
 **C ships scoped to the training-box vignette, not as a general ctp bridge.** The
-design described C against `ctp` broadly. As built, the wrapper reaches exactly
-`host deploy` and `host deploy-role` against **one** configured box
-(`.ctp-bridge.conf`); `list`/`vars`/`redeploy`/`remove`/`project` are out of the
-slice, and `secrets`/`make` are refused outright. Two reasons. First, the owner's
-manual-confirmation policy means classification-for-exemption is not built yet, so
-a narrow reachable set is the safe finished state, not a stub. Second, the enabling
-use case is the training-box loop (deploy → iterate playbooks → `deploy-role`),
-which needs only those two verbs; the rest widen the surface for no current gain.
+design described C against `ctp` broadly. As built, mutating reach is `host deploy`
+and `host deploy-role`, gated by TWO mandatory checks — a team-suffix gate
+(`CTP_ALLOWED_TEAM`, so a deploy cannot land on a live team) and a one-named-box
+allow-list (`CTP_ALLOWED_TARGET`) — plus glob refusal. Read reach is `host list
+<box>` (verify a target) and `project update-inventory` (required after creating a
+Providentia box). `host vars`/`redeploy`/`remove` are not reachable; `secrets`/
+`make` are refused outright. Every reachable verb is confirmed.
+
+The team gate was added once real operation showed the true boundary: hosts carry
+a team suffix (`..._t02`), only the authorised team is for dev/test, and the
+catastrophe is "right box, wrong team" — so team is a first-class gate, not a
+consequence of the box name. `list` and `update-inventory` were made reachable
+because the real loop needs them (a Providentia box does not appear in ctp until
+`update-inventory`, and `list` is how you confirm a target before deploying);
+`vars` stayed out because its output would stream box detail into the transcript.
 The design's intent — one script, one hook, gates in code not string-matching, the
-boundary outside caller control — is preserved. `vars` was additionally dropped
-from the reachable set because its output would stream box detail into the
-transcript; the shared-box transcript exposure drove that. Reads become an
-evidence-driven addition later, if justified, with `vars` output redacted.
+boundary outside caller control — is preserved.
 
 **C is delivered at user scope on the box, not as repo-local config.** The design
 placed the hook in this repo's `.claude/`. But the work runs from the range

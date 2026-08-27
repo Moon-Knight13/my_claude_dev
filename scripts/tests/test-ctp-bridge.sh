@@ -18,7 +18,8 @@ trap 'rm -rf "$TMP"' EXIT
 
 CONF="$TMP/.ctp-bridge.conf"
 cat > "$CONF" <<EOF
-CTP_ALLOWED_TARGET=trainbox
+CTP_ALLOWED_TARGET=trainbox_t02
+CTP_ALLOWED_TEAM=t02
 CTP_ALLOWED_VERBS=deploy deploy-role
 CTP_CONTAINER=catapult-tester
 CTP_SECRET_PATHS=/var/tmp/vlt_pf ~/.ssh/id_* ~/.zsh_history ~/.bash_history **/.env
@@ -32,18 +33,33 @@ ctp_load_config "$CONF"
 export CTP_TARGET_HOME="/home/tester"
 
 cls() { ctp_classify "$@" >/dev/null 2>&1 && echo confirm || echo refuse; }
-check "deploy allowed target -> confirm"      "$(cls host deploy trainbox)"      confirm
-check "deploy-role allowed target -> confirm" "$(cls host deploy-role trainbox)" confirm
-check "deploy other target -> refuse"         "$(cls host deploy otherbox)"      refuse
-check "glob in target -> refuse"              "$(cls host deploy 'train*')"      refuse
-check "deploy no target -> refuse"            "$(cls host deploy)"               refuse
-check "list -> refuse (not reachable)"        "$(cls host list)"                 refuse
-check "vars -> refuse (not reachable)"        "$(cls host vars trainbox)"        refuse
-check "redeploy -> refuse"                    "$(cls host redeploy trainbox)"    refuse
-check "remove -> refuse"                      "$(cls host remove trainbox)"      refuse
-check "secrets -> refuse"                     "$(cls secrets edit)"              refuse
-check "make -> refuse"                        "$(cls make start)"               refuse
-check "unknown verb -> refuse"                "$(cls frobnicate all)"            refuse
+clsc() { ctp_classify "$@" 2>/dev/null | awk '{print $2}'; }   # the class token
+check "deploy allowed box -> confirm"         "$(cls host deploy trainbox_t02)"      confirm
+check "deploy-role allowed box -> confirm"    "$(cls host deploy-role trainbox_t02)" confirm
+check "  ...class is mutating"                "$(clsc host deploy trainbox_t02)"     mutating
+check "deploy other box (right team) -> refuse" "$(cls host deploy otherbox_t02)"    refuse
+check "deploy right box WRONG TEAM -> refuse"   "$(cls host deploy trainbox_t05)"    refuse
+check "deploy bare name (no team) -> refuse"    "$(cls host deploy trainbox)"        refuse
+check "glob in target -> refuse"              "$(cls host deploy 'trainbox_t0*')"    refuse
+check "deploy no target -> refuse"            "$(cls host deploy)"                   refuse
+check "list <box> -> confirm (read)"          "$(cls host list trainbox_t02)"        confirm
+check "  ...class is read"                    "$(clsc host list trainbox_t02)"       read
+check "list any box (read, not team-gated)"   "$(cls host list otherbox_t05)"        confirm
+check "list all -> refuse (no bulk dump)"     "$(cls host list all)"                 refuse
+check "list no target -> refuse"              "$(cls host list)"                     refuse
+check "list glob -> refuse"                   "$(cls host list 'train*')"            refuse
+check "update-inventory -> confirm"           "$(cls project update-inventory)"      confirm
+check "  ...class is inventory"               "$(clsc project update-inventory)"     inventory
+check "project other subverb -> refuse"       "$(cls project nuke)"                  refuse
+check "vars -> refuse (streams detail)"       "$(cls host vars trainbox_t02)"        refuse
+check "redeploy -> refuse"                    "$(cls host redeploy trainbox_t02)"    refuse
+check "remove -> refuse"                      "$(cls host remove trainbox_t02)"      refuse
+check "secrets -> refuse"                     "$(cls secrets edit)"                  refuse
+check "make -> refuse"                        "$(cls make start)"                    refuse
+check "unknown verb -> refuse"                "$(cls frobnicate all)"                refuse
+
+# team gate fails closed when unset
+( CTP_ALLOWED_TEAM=""; check "no team configured -> mutating refused" "$(cls host deploy trainbox_t02)" refuse )
 
 sec() { ctp_is_secret_path "$1" && echo secret || echo ok; }
 check "vault file is secret"        "$(sec /var/tmp/vlt_pf)"            secret
@@ -89,31 +105,37 @@ run_wrap() { # run_wrap <stdin> -- args...   ; prints nothing, sets RC
     RC=$?
 }
 
-run_wrap "" -- host deploy trainbox;  check "non-interactive deploy refused (no auto-yes)" "$RC" 5
-ASSUME_YES=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" bash "$ROOT/scripts/ctp-bridge.sh" host deploy trainbox </dev/null >/dev/null 2>&1
+run_wrap "" -- host deploy trainbox_t02;  check "non-interactive deploy refused (no auto-yes)" "$RC" 5
+ASSUME_YES=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" bash "$ROOT/scripts/ctp-bridge.sh" host deploy trainbox_t02 </dev/null >/dev/null 2>&1
 check "ASSUME_YES refused" "$?" 5
-run_wrap "" -- secrets edit;          check "refused verb exits before docker (3)" "$RC" 3
-run_wrap "" -- host deploy otherbox;  check "wrong target refused (3)" "$RC" 3
-MOCK_VAULT_LOCKED=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" bash "$ROOT/scripts/ctp-bridge.sh" host deploy trainbox </dev/null >/dev/null 2>&1
+run_wrap "" -- secrets edit;              check "refused verb exits before docker (3)" "$RC" 3
+run_wrap "" -- host deploy trainbox_t05;  check "wrong-team deploy refused (3)" "$RC" 3
+run_wrap "" -- host deploy otherbox_t02;  check "wrong-box deploy refused (3)" "$RC" 3
+MOCK_VAULT_LOCKED=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" bash "$ROOT/scripts/ctp-bridge.sh" host deploy trainbox_t02 </dev/null >/dev/null 2>&1
 check "vault locked refused (4)" "$?" 4
-MOCK_BUSY=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" bash "$ROOT/scripts/ctp-bridge.sh" host deploy trainbox </dev/null >/dev/null 2>&1
+MOCK_BUSY=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" bash "$ROOT/scripts/ctp-bridge.sh" host deploy trainbox_t02 </dev/null >/dev/null 2>&1
 check "busy refused (4)" "$?" 4
-PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$TMP/nope.conf" bash "$ROOT/scripts/ctp-bridge.sh" host deploy trainbox </dev/null >/dev/null 2>&1
+PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$TMP/nope.conf" bash "$ROOT/scripts/ctp-bridge.sh" host deploy trainbox_t02 </dev/null >/dev/null 2>&1
 check "missing config refused (2)" "$?" 2
 
 # Run path needs a tty (the gate refuses non-interactive by design). Use script(1)
 # to allocate one; skip honestly if unavailable.
 if command -v script >/dev/null 2>&1; then
     rm -f "$TMP/count.log"
-    script -qec "PATH='$BIN:$PATH' CTP_BRIDGE_CONF='$CONF' CTP_BRIDGE_LOG='$TMP/count.log' bash '$ROOT/scripts/ctp-bridge.sh' host deploy-role trainbox" /dev/null <<<"y" >"$TMP/run.out" 2>&1
+    script -qec "PATH='$BIN:$PATH' CTP_BRIDGE_CONF='$CONF' CTP_BRIDGE_LOG='$TMP/count.log' bash '$ROOT/scripts/ctp-bridge.sh' host deploy-role trainbox_t02" /dev/null <<<"y" >"$TMP/run.out" 2>&1
     # The mock echoes the full docker-exec argv; the ctp args must arrive as
-    # trailing positional params (…_ host deploy-role trainbox), never a string.
-    if grep -Fq '_ host deploy-role trainbox' "$TMP/run.out"; then
+    # trailing positional params (…_ host deploy-role trainbox_t02), never a string.
+    if grep -Fq '_ host deploy-role trainbox_t02' "$TMP/run.out"; then
         ok "confirm 'y' runs the exact positional argv"
     else bad "confirm 'y' runs the exact positional argv ($(grep RAN: "$TMP/run.out" | head -1))"; fi
-    if [[ -f "$TMP/count.log" ]] && grep -q "host_deploy-role" "$TMP/count.log" && ! grep -q "trainbox" "$TMP/count.log"; then
+    if [[ -f "$TMP/count.log" ]] && grep -q "deploy-role" "$TMP/count.log" && ! grep -q "trainbox" "$TMP/count.log"; then
         ok "count log records verb+outcome, not the target"
     else bad "count log records verb+outcome, not the target"; fi
+    # a read verb runs too (update-inventory, no target)
+    script -qec "PATH='$BIN:$PATH' CTP_BRIDGE_CONF='$CONF' bash '$ROOT/scripts/ctp-bridge.sh' project update-inventory" /dev/null <<<"y" >"$TMP/inv.out" 2>&1
+    if grep -Fq '_ project update-inventory' "$TMP/inv.out"; then
+        ok "update-inventory runs (no target)"
+    else bad "update-inventory runs ($(grep RAN: "$TMP/inv.out" | head -1))"; fi
 else
     echo "  --  script(1) unavailable; skipping run-path tests"
 fi
@@ -143,9 +165,12 @@ check "Bash cat ssh key (~) -> deny"      "$(decide "$(bash_json 'cat ~/.ssh/id_
 check "Bash docker exec bypass -> deny"   "$(decide "$(bash_json 'docker exec catapult-tester zsh -c ctp')")" deny
 check "Bash bare ctp -> deny"             "$(decide "$(bash_json 'ctp host deploy trainbox')")"      deny
 check "Bash make start -> deny"           "$(decide "$(bash_json 'make start')")"                    deny
-check "Bash wrapper allowed -> ask"       "$(decide "$(bash_json "bash $ROOT/scripts/ctp-bridge.sh host deploy trainbox")")" ask
-check "Bash wrapper refused verb -> deny" "$(decide "$(bash_json "bash $ROOT/scripts/ctp-bridge.sh host remove trainbox")")" deny
-check "env cannot override config -> deny" "$(decide "$(bash_json "CTP_ALLOWED_TARGET=evil bash $ROOT/scripts/ctp-bridge.sh host deploy evil")")" deny
+check "Bash wrapper allowed -> ask"       "$(decide "$(bash_json "bash $ROOT/scripts/ctp-bridge.sh host deploy trainbox_t02")")" ask
+check "Bash wrapper wrong team -> deny"   "$(decide "$(bash_json "bash $ROOT/scripts/ctp-bridge.sh host deploy trainbox_t05")")" deny
+check "Bash wrapper update-inventory -> ask" "$(decide "$(bash_json "bash $ROOT/scripts/ctp-bridge.sh project update-inventory")")" ask
+check "Bash wrapper list <box> -> ask"    "$(decide "$(bash_json "bash $ROOT/scripts/ctp-bridge.sh host list trainbox_t02")")" ask
+check "Bash wrapper refused verb -> deny" "$(decide "$(bash_json "bash $ROOT/scripts/ctp-bridge.sh host remove trainbox_t02")")" deny
+check "env cannot override config -> deny" "$(decide "$(bash_json "CTP_ALLOWED_TARGET=evil_t02 bash $ROOT/scripts/ctp-bridge.sh host deploy evil_t02")")" deny
 check "prose mentioning ctp -> none"      "$(decide "$(bash_json 'echo use ctp later to deploy')")"  none
 check "unrelated bash -> none"            "$(decide "$(bash_json 'ls -la /workspace')")"             none
 fi

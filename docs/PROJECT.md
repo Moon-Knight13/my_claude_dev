@@ -271,13 +271,18 @@ The gates that matter, all in code on the parsed argv (never string-matched), an
 shared between wrapper and hook via `scripts/lib/ctp-guard.sh` so the two cannot
 drift:
 
-- **One target.** `.ctp-bridge.conf` names a single box; any mutating verb naming
-  anything else is refused. A glob metacharacter in a target is refused outright —
-  `deploy` and `deploy '*'` are different classes.
-- **Two reachable verbs.** `host deploy` and `host deploy-role`, nothing else.
-  `secrets` and `make` are refused outright (credentials). `redeploy`/`remove` are
-  out of the current slice; `list`/`vars` are too, because `vars` would stream box
-  detail into the transcript.
+- **Two gates on a mutating target, both mandatory.** A **team gate** —
+  `CTP_ALLOWED_TEAM`, e.g. `t02` — requires the target to end with the authorised
+  team suffix, so a deploy cannot land on a live team by mistake; it holds even if
+  the box list is widened, and fails closed when unset. A **box allow-list** —
+  `CTP_ALLOWED_TARGET`, one named box — on top of it. A glob metacharacter in a
+  target is refused outright.
+- **Reachable verbs.** Mutating: `host deploy`, `host deploy-role` (team + box
+  gated). Read: `host list <box>` (verify a target) and `project update-inventory`
+  (required after making a Providentia box). `host vars`/`redeploy`/`remove` are
+  not reachable (`vars` would stream box detail into the transcript); `secrets` and
+  `make` are refused outright (credentials). Every reachable verb is still
+  confirmed per the owner policy above.
 - **The boundary is the config file, never caller env.** An agent that can set an
   environment variable in the same call it makes must not be able to widen its own
   limits. Both wrapper and hook read `.ctp-bridge.conf`; neither trusts env for a

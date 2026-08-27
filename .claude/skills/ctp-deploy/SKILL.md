@@ -12,31 +12,46 @@ training and authorized security-testing. The bridge targets a **single
 configured box** (`.ctp-bridge.conf`), not the range. If a task needs a different
 box, that is a config change the owner makes — not something to work around.
 
+**The team suffix is a hard boundary.** Range hosts carry a team suffix
+(`..._t02`). Only the **authorised team** (`CTP_ALLOWED_TEAM`) is for dev/test;
+other `_tNN` are live teams. The bridge refuses any mutating target that is not in
+the authorised team, in code — but treat it as a real boundary, not a safety net:
+never try to reach another team's host. A deploy to the wrong team is an outage
+for someone else.
+
 ## The only way to run ctp
 
-Run **`ctp-bridge host <verb> <box>`** — the wrapper installed at user scope on
-the box (`~/.local/bin/ctp-bridge`; `scripts/ctp-bridge.sh` in this repo before
-install). It works from anywhere, including the range checkout where the work
-happens. Never `docker exec` into the container and never a bare `ctp` — a
-`PreToolUse` hook (installed into `~/.claude/`) denies both, because the bridge is
-where every gate lives. Reachable verbs in this slice:
+Run **`ctp-bridge <args...>`** — the wrapper installed at user scope on the box
+(`~/.local/bin/ctp-bridge`; `scripts/ctp-bridge.sh` in this repo before install).
+It works from anywhere, including the range checkout where the work happens. Never
+`docker exec` into the container and never a bare `ctp` — a `PreToolUse` hook
+(installed into `~/.claude/`) denies both, because the bridge is where every gate
+lives. Reachable verbs:
 
-- `host deploy <box>` — full deploy of the box.
+- `host deploy <box>` — full deploy of the box (mutating; team + box gated).
 - `host deploy-role <box>` — redeploy just the role; the quicker iteration path
-  when only the box's content/config changed, not its base.
+  when only the box's content/config changed, not its base (mutating; gated).
+- `host list <box>` — read-only; use it to confirm a box resolves before you act.
+- `project update-inventory` — regenerate ctp's inventory from Providentia. Run it
+  after creating a box on Providentia, or the box will not appear in ctp.
 
-Everything else (`list`, `vars`, `redeploy`, `remove`, `secrets`, `make`) is
-refused here. Each run is confirmed by the operator — that is policy, not a bug
-to route around. Do not pass `--yes` or set `ASSUME_YES`; the gate refuses them.
+`host vars`, `redeploy`, `remove` are not reachable; `secrets` and `make` are
+refused outright. **Every** run is confirmed by the operator — policy, not a bug to
+route around. Do not pass `--yes` or set `ASSUME_YES`; the gate refuses them.
 
 ## The developer loop
 
-1. Write/adjust the playbooks and role content as ordinary files (no bridge
+1. Make the box on Providentia (outside ctp).
+2. `project update-inventory` — so ctp learns the new box. Without this, the next
+   step finds nothing.
+3. `host list <box>` — confirm it resolves, and that the name carries the
+   authorised team suffix.
+4. Write/adjust the playbooks and role content as ordinary files (no bridge
    needed — this is where most of the work is).
-2. First stand-up: `host deploy <box>`.
-3. Iterate content: edit files, then `host deploy-role <box>` — faster than a
-   full deploy because it reapplies the role only.
-4. Repeat 3. Reach for a full `deploy` again only if the base box itself is wrong.
+5. First stand-up: `host deploy <box>`.
+6. Iterate content: edit files, then `host deploy-role <box>` — faster than a full
+   deploy because it reapplies the role only.
+7. Repeat 6. Reach for a full `deploy` again only if the base box itself is wrong.
 
 ## Reading a result instead of guessing
 

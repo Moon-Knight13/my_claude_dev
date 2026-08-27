@@ -12,14 +12,21 @@
 # Format: KEY=value, one per line. Lines starting with # are ignored. No shell
 # expansion is performed on values.
 
-# The single box this harness may target. Any mutating verb naming anything else
-# is refused. Set this to the training box you are iterating on — nothing else.
-# There is no wildcard and no list; one name, exactly.
+# The single box this harness may deploy to, named EXACTLY (including the team
+# suffix). Any mutating verb naming anything else is refused. One name, no
+# wildcard, no list. Example shape: some-box_t02
 CTP_ALLOWED_TARGET=
 
-# The verbs the wrapper will run. This is an allow-list: a verb not named here is
-# refused, not passed through. The supported slice is deploy and deploy-role
-# only. secrets and make are refused outright regardless of this line.
+# The authorised team suffix. A mutating target MUST end with _<team> — this is
+# the gate that stops a deploy landing on a live team by mistake, and it holds
+# even if the box allow-list above is ever widened. Both gates must pass. Fail
+# closed: if this is unset, every mutating verb is refused. Example: t02
+CTP_ALLOWED_TEAM=
+
+# The MUTATING verbs the wrapper will run. Allow-list: a verb not named here is
+# refused. Read verbs (host list <box>, project update-inventory) are reachable
+# separately and always confirmed; host vars, redeploy and remove are not
+# reachable, and secrets/make are refused outright regardless of this line.
 CTP_ALLOWED_VERBS=deploy deploy-role
 
 # Container override. Leave blank to derive catapult-<current-user> at runtime.
