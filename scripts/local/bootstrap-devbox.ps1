@@ -56,6 +56,78 @@ function Step($m) { Write-Host ""; Write-Host ">> $m" }
 function Confirm($m) { $r = Read-Host "  ??  $m [y/N]"; return $r -match '^[Yy]' }
 function Sanitise($s) { return ($s -replace '[^A-Za-z0-9._-]', '_') }
 
+# --- SSH managed-block helpers (issue #38) -----------------------------------
+# Let a re-run add directives (IdentityFile, RemoteForward) that a developer's
+# existing Host block predates, WITHOUT editing what they wrote. SSH merges all
+# matching Host blocks and treats these directives as additive, so the additions
+# go in a separate, marker-delimited block. Mirrors scripts/local/lib/ssh-config.sh
+# (the bash side is unit-tested; there is no PowerShell test runner here).
+function Get-SshNorm($s) { return ($s -replace '^\s+', '' -replace '\s+', ' ' -replace '\s+$', '') }
+
+function Get-SshMatchingDirectives($Lines, $Alias, $Fqdn) {
+    $out = New-Object System.Collections.Generic.List[string]
+    $inManaged = $false; $inBlk = $false
+    foreach ($line in $Lines) {
+        if ($line -match '^\s*#\s*>>>\s*devbox-managed') { $inManaged = $true; continue }
+        if ($line -match '^\s*#\s*<<<\s*devbox-managed') { $inManaged = $false; continue }
+        if ($inManaged) { continue }
+        $hdr = $line -replace '^\s+', ''
+        if ($hdr -match '^Host\s') {
+            $inBlk = $false
+            $tokens = $hdr -split '\s+'
+            for ($i = 1; $i -lt $tokens.Count; $i++) {
+                if ($tokens[$i] -eq $Alias -or $tokens[$i] -eq $Fqdn) { $inBlk = $true }
+            }
+            continue
+        }
+        if ($hdr -match '^Match\s') { $inBlk = $false; continue }
+        if ($inBlk -and $hdr -notmatch '^#' -and $hdr -match '\S') { $out.Add($line) }
+    }
+    return $out
+}
+
+function Get-SshManagedMissing($CfgPath, $Alias, $Fqdn, $Key, $Tunnel) {
+    $lines = @(Get-Content -Path $CfgPath -ErrorAction SilentlyContinue)
+    $present = @(Get-SshMatchingDirectives $lines $Alias $Fqdn | ForEach-Object { Get-SshNorm $_ })
+    $missing = New-Object System.Collections.Generic.List[string]
+    if ($Key) {
+        $d = "IdentityFile $Key"
+        if ($present -notcontains (Get-SshNorm $d)) { $missing.Add($d) }
+    }
+    if ($Tunnel) {
+        $t = $Tunnel.Trim()
+        if ($present -notcontains (Get-SshNorm $t)) { $missing.Add($t) }
+    }
+    return $missing
+}
+
+function Set-SshManagedBlock($CfgPath, $Alias, $Fqdn, $Directives) {
+    $lines = @(Get-Content -Path $CfgPath -ErrorAction SilentlyContinue)
+    $kept = New-Object System.Collections.Generic.List[string]
+    $skip = $false
+    $beginRe = '^\s*#\s*>>>\s*devbox-managed\s+' + [regex]::Escape($Alias) + '\s*>>>'
+    $endRe = '^\s*#\s*<<<\s*devbox-managed\s+' + [regex]::Escape($Alias) + '\s*<<<'
+    foreach ($line in $lines) {
+        if ($line -match $beginRe) { $skip = $true; continue }
+        if ($skip -and $line -match $endRe) { $skip = $false; continue }
+        if ($skip) { continue }
+        $kept.Add($line)
+    }
+    while ($kept.Count -gt 0 -and $kept[$kept.Count - 1] -match '^\s*$') { $kept.RemoveAt($kept.Count - 1) }
+
+    $text = ($kept -join "`n")
+    if ($Directives -and $Directives.Count -gt 0) {
+        $block = "`n`n# >>> devbox-managed $Alias >>>`n" +
+                 "# Added by bootstrap-devbox so a re-run can supply directives your`n" +
+                 "# original block predates. Safe to delete; SSH merges it additively.`n" +
+                 "Host $Alias $Fqdn`n"
+        foreach ($d in $Directives) { if ($d) { $block += "    $d`n" } }
+        $block += "# <<< devbox-managed $Alias <<<"
+        $text += $block
+    }
+    Set-Content -Path $CfgPath -Value $text
+}
+
 Step "Remote dev box local bootstrap (Windows)"
 
 # 1. Prompt for per-dev values
@@ -254,11 +326,24 @@ if (-not (Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir | Out
 $cfg = Join-Path $sshDir "config"
 if (-not (Test-Path $cfg)) { New-Item -ItemType File -Path $cfg | Out-Null }
 if (Select-String -Path $cfg -Pattern "^\s*Host\s+.*\b$Alias\b" -Quiet) {
-    Info "Host '$Alias' already in config — leaving as-is"
-    Note "if it lacks 'IdentityFile $Key', add it: box login should not depend on agent order either"
-    if ($TunnelLine) {
-        Note "and add this line to carry the local model endpoint to the box:"
-        Note "  $($TunnelLine.Trim())"
+    Info "Host '$Alias' already in config — leaving your block as-is"
+    # A re-run must still pick up directives your original block predates
+    # (IdentityFile, RemoteForward) without touching what you wrote. Any gaps go
+    # into a separate, clearly-marked block that SSH merges in additively (#38).
+    $missing = @(Get-SshManagedMissing $cfg $Alias $BoxHost $Key $TunnelLine)
+    if ($missing.Count -gt 0) {
+        Note "your block is missing directives this script now sets:"
+        foreach ($d in $missing) { Note "    $d" }
+        if (Confirm "add them in a marked 'devbox-managed' block? (your block stays untouched)") {
+            Set-SshManagedBlock $cfg $Alias $BoxHost $missing
+            Info "wrote devbox-managed block for '$Alias' — delete it any time; SSH merges it"
+        } else {
+            Note "skipped — add them by hand, or re-run and accept"
+        }
+    } elseif (Select-String -Path $cfg -Pattern "devbox-managed $Alias " -Quiet) {
+        # Nothing missing but a managed block lingers: clear ours so it self-heals.
+        Set-SshManagedBlock $cfg $Alias $BoxHost @()
+        Info "removed a now-redundant devbox-managed block for '$Alias'"
     }
 } else {
     # ForwardAgent yes forwards EVERY key in the agent. Windows OpenSSH has no
