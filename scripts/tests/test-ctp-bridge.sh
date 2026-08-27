@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC2015,SC2034  # A&&B||C ok/bad idiom (ok never fails); config vars used via sourced guard
+# shellcheck disable=SC2015,SC2034,SC2016  # A&&B||C ok/bad idiom (ok never fails); config vars used via sourced guard; SC2016: single-quoted $( ) in test payloads is deliberately literal
 # test-ctp-bridge.sh — refusal and decision tests for the ctp tool bridge.
 #
 # Three groups: the shared guard (pure functions), the wrapper (with a mocked
@@ -298,6 +298,24 @@ check "quoted-delim heredoc body -> none"  "$(decide "$(bash_json "$(printf "cat
 # but a genuine command on its own line, or after a pipe, is still caught
 check "newline-separated bare ctp -> deny" "$(decide "$(bash_json "$(printf 'echo hi\nctp host deploy x')")")" deny
 check "pipe into bare ctp -> deny"         "$(decide "$(bash_json 'true | ctp host deploy x')")" deny
+
+# command substitution / backticks / subshells must reach classification on the
+# INNER command — even inside double quotes, where the shell still expands them —
+# so `echo $(ctp ...)` cannot slip a bare ctp past the confirm gate as `echo`.
+check "cmdsub bare -> deny"               "$(decide "$(bash_json 'echo $(ctp host remove x)')")" deny
+check "cmdsub inside dquotes -> deny"     "$(decide "$(bash_json 'echo "$(ctp host remove x)"')")" deny
+check "backtick cmdsub -> deny"           "$(decide "$(bash_json 'echo `ctp host remove x`')")" deny
+check "subshell -> deny"                  "$(decide "$(bash_json '( ctp host remove x )')")" deny
+check "assign cmdsub -> deny"             "$(decide "$(bash_json 'out=$(ctp host list foo)')")" deny
+check "nested cmdsub in dquotes -> deny"  "$(decide "$(bash_json 'echo "$(echo "$(ctp host remove x)")"')")" deny
+# single quotes expand nothing, so the command never runs there — not classified
+check "single-quoted literal -> none"     "$(decide "$(bash_json "echo '\$(ctp host remove x)'")")" none
+# and legitimate substitutions are NOT denied (no new false positives)
+check "legit cmdsub (git) -> none"        "$(decide "$(bash_json 'echo "$(git rev-parse HEAD)"')")" none
+check "legit assign cmdsub (grep) -> none" "$(decide "$(bash_json 'files=$(grep -rl foo .)')")" none
+check "legit subshell -> none"            "$(decide "$(bash_json '( cd /tmp && ls )')")" none
+check "legit process subst -> none"       "$(decide "$(bash_json 'diff <(sort a) <(sort b)')")" none
+check "legit param expansion -> none"     "$(decide "$(bash_json 'echo "${ctp_home}/bin"')")" none
 fi
 
 # ============================================================================
