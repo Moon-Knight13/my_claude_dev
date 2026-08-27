@@ -42,12 +42,35 @@ ask_var() { # ask_var VAR "prompt" "default"
 
 # --- 0. Where are we talking to? ---------------------------------------------
 host_step "[0/6] Target git server"
-ask_var GIT_HOST "Git server hostname" ""
+ask_var GIT_HOST "Git server hostname (bare hostname, no https://)" ""
 if [[ -z "${GIT_HOST:-}" ]]; then
     host_warn "no git host given — set GIT_HOST or answer the prompt"
     exit 2
 fi
-ask_var GIT_SSH_PORT "Git server SSH port" "22"
+# A URL pasted from the browser is the obvious thing to give this prompt, and
+# accepting it built a target of `git@https://host` that could never
+# authenticate — reported as an auth failure, which is a lie about what went
+# wrong. Normalise what can be normalised, refuse the rest.
+_raw_host="$GIT_HOST"
+GIT_HOST="${GIT_HOST#*://}"        # scheme
+GIT_HOST="${GIT_HOST#*@}"          # user@
+GIT_HOST="${GIT_HOST%%/*}"         # trailing path
+if [[ "$GIT_HOST" == *:* ]]; then  # host:port
+    GIT_SSH_PORT="${GIT_SSH_PORT:-${GIT_HOST##*:}}"
+    GIT_HOST="${GIT_HOST%%:*}"
+fi
+[[ "$GIT_HOST" != "$_raw_host" ]] && host_note "interpreted '${_raw_host}' as host '${GIT_HOST}'"
+if [[ -z "$GIT_HOST" || "$GIT_HOST" =~ [^A-Za-z0-9._-] ]]; then
+    host_warn "'${_raw_host}' is not a hostname — give the bare host, e.g. git.example.net"
+    exit 2
+fi
+# No default port. Defaulting to 22 at a site on a non-standard port fails in a
+# way that looks exactly like an authentication problem.
+ask_var GIT_SSH_PORT "Git server SSH port (OpenSSH default is 22; check your site)" ""
+if [[ ! "${GIT_SSH_PORT:-}" =~ ^[0-9]+$ ]]; then
+    host_warn "git server SSH port required (numeric)"
+    exit 2
+fi
 host_info "target: git@${GIT_HOST} port ${GIT_SSH_PORT}"
 
 # --- 1. Is an agent forwarded at all? ----------------------------------------
@@ -168,16 +191,31 @@ fi
 # is actually a remote-URL problem.
 host_step "[5/6] Repository remote and identity ($REPO_DIR)"
 if git -C "$REPO_DIR" rev-parse --git-dir >/dev/null 2>&1; then
+    _seen_urls=""
     while read -r _name _url _kind; do
         [[ -z "${_url:-}" ]] && continue
         host_note "remote ${_name} ${_kind:-} -> ${_url}"
+        # `git remote -v` prints fetch and push as separate lines. Judging each
+        # one repeated every finding verbatim, which reads as two problems.
+        case " $_seen_urls " in *" ${_name}=${_url} "*) continue ;; esac
+        _seen_urls="$_seen_urls ${_name}=${_url}"
         case "$_url" in
             https://*|http://*)
-                verdict "REMOTE ${_name} IS HTTPS: pushes use a token/password, not your SSH key" ;;
+                _rhost="${_url#*://}"; _rhost="${_rhost#*@}"
+                _rhost="${_rhost%%/*}"; _rhost="${_rhost%%:*}"
+                if [[ "$_rhost" != "$GIT_HOST" ]]; then
+                    # Running the diagnostic from a checkout of some OTHER repo
+                    # is normal. Saying "your pushes use a token" about a repo
+                    # that was never the subject reads as a finding when it is
+                    # not one.
+                    host_note "  (${_rhost} is a different server from the one tested — not a finding)"
+                else
+                    verdict "REMOTE ${_name} IS HTTPS: pushes to ${_rhost} use a token/password, not your SSH key"
+                fi ;;
             *"@"*)
                 _rhost="${_url#*@}"; _rhost="${_rhost%%:*}"; _rhost="${_rhost%%/*}"
                 [[ "$_rhost" != "$GIT_HOST" ]] && \
-                    verdict "REMOTE ${_name} points at ${_rhost}, not the host tested above" ;;
+                    host_note "  (${_rhost} is a different server from the one tested — not a finding)" ;;
         esac
     done < <(git -C "$REPO_DIR" remote -v 2>/dev/null | sort -u)
 
