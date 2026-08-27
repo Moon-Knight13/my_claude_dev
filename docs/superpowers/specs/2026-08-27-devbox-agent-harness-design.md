@@ -581,7 +581,27 @@ than by silently editing the section they contradict.
 | F3 vault first-run next-step notice | done | `provision-remote-box.sh` closing notes |
 | C tool bridge (vignette slice) | done, tests green; live run held for owner | `ctp-bridge.sh`, `lib/ctp-guard.sh`, `.claude/hooks/pretooluse-ctp.sh`, `.claude/skills/ctp-deploy/`, `test-ctp-bridge.sh` |
 | C user-scope install (gate present in range-checkout sessions) | done | `install-ctp-bridge.sh`, provisioner step 8, `test-ctp-bridge-install.sh` |
+| C vignette proven live end to end | done, on hardware | `ctp host list` ran through the bridge: hook asked → human approved → token consumed → venv + vault + `-w` → exit 0 |
 | D | not started (blocked on #37) | — |
+
+### The gate held; the plumbing was all environment
+
+Bringing C to a live green run surfaced seven bugs, and the shape of them is the
+lesson. The security logic (classification, the token handoff, argv passing) was
+right the first time and proven working end to end. Every one of the seven was an
+**environment fact** the `docker exec` reconstruction had to reproduce, invisible
+to a green test suite by nature: the installed command name (`ctp-bridge`, not
+`.sh`); the Bash tool having no TTY (the token handoff); shell redirection stripped
+before the wrapper sees argv; the venv that only an interactive `~/.zshrc`
+activates; zsh's NOMATCH aborting an unmatched glob; the container's default
+working directory vs the project directory (a bind mount); and `ANSIBLE_VAULT_PASSWORD_FILE`,
+another `~/.zshrc` export. The vendor tool has no supported non-interactive path
+(confirmed against its docs), so reconstructing only the deterministic setup — not
+sourcing the whole rc, which re-runs entrypoints and oh-my-zsh — is the correct
+architecture. Practical takeaway recorded for whoever extends this: **the live run
+on the box is this component's acceptance test, not a green suite.** All seven are
+covered by tests now so they cannot regress, but new environment facts will only
+appear on hardware.
 
 ### Deviations
 
