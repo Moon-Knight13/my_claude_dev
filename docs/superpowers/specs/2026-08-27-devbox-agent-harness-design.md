@@ -484,10 +484,9 @@ Three layers, each doing one job:
 1. **Wrapper script** — resolves the container, refuses when the container is
    absent or busy, invokes through a login shell, streams output, returns the
    real exit status. Safety lives in code, not in pattern matching.
-2. **Command classification** — read-only and single-host verbs run freely;
-   destructive verbs (removal, rebuild, from-scratch redeploy) require explicit
-   confirmation through the existing `confirm()` gate and are never
-   auto-confirmed by an agent.
+2. **Command classification** — see the confirmation policy below. The default
+   is that **every** verb is confirmed; classification exists to decide what may
+   *eventually* be exempted, not to grant exemptions on day one.
 3. **Skill layer** — gives Claude the deployment model so a failure is read
    correctly: which stage failed, what that stage owns, and whether a retry file
    makes a targeted re-run possible. Without this an agent guesses.
@@ -495,8 +494,33 @@ Three layers, each doing one job:
 A `PreToolUse` hook rejects attempts to reach the container directly, so the
 wrapper cannot be bypassed.
 
-**Explicitly rejected:** enforcing destructive-command safety through permission
-patterns alone. Matching freeform command strings is defeated by quoting and
+**Confirmation policy — set by the repository owner, 2026-08-27.**
+
+> Every tool command is confirmed manually until there are protections against a
+> model — Claude or local — accidentally running a destructive *or high-cost*
+> command.
+
+This is a standing constraint on C, not a phase of it. Concretely:
+
+- The wrapper ships confirm-on-everything. There is no allow-list at launch, and
+  an empty allow-list is the supported configuration, not a placeholder.
+- No agent may auto-confirm. `ASSUME_YES` and any equivalent must not reach the
+  wrapper's gate; a non-interactive caller is refused, never auto-approved.
+- Relaxing this needs the owner's explicit decision per verb, after the
+  classifier and its tests exist — not a judgement made while implementing.
+
+**Two axes, not one.** The original design treated safety as
+destructive-vs-read-only. That is insufficient. A whole-range deployment may
+destroy nothing and still be something no one wants triggered by a misread
+instruction: it consumes real time and real infrastructure budget. Classification
+therefore needs a **blast radius** axis (what does this change, and can it be
+undone) and a **cost** axis (what does running it consume, and who pays), and a
+verb is exempt only if it is low on both.
+
+The environment is a live range with production reach. Getting this wrong is not
+a bug report — it is an outage someone else has to fix.
+
+**Explicitly rejected:** enforcing safety through permission patterns alone. Matching freeform command strings is defeated by quoting and
 environment prefixes; it looks enforced and is not — the failure shape
 `docs/PROJECT.md` already warns about.
 

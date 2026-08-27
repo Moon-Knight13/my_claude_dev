@@ -191,6 +191,41 @@ decided the local model is load-bearing for them. That is the compromise between
 this rule and "Provisioning must not lie" — the report always states what is
 actually happening; only its severity is the developer's choice.
 
+### Build-tooling commands are confirmed manually
+
+Set by the repository owner, 2026-08-27:
+
+> Every tool command is confirmed manually until there are protections against a
+> model — Claude or local — accidentally running a destructive or high-cost
+> command.
+
+The tooling on a dev box deploys to a live range. Nothing in this repository may
+invoke it without a human saying yes to that specific invocation. That applies to
+Claude, to any subagent, and to the local model, which has no judgement about
+consequences at all.
+
+Practical consequences for anything built here:
+
+- A wrapper around the tooling ships **confirming everything**. An empty
+  allow-list is the supported configuration, not a placeholder to be filled in
+  later by whoever implements it.
+- `ASSUME_YES`, `--yes` and equivalents must not reach that gate. A
+  non-interactive caller is **refused**, never auto-approved — the whole point is
+  that a human is present.
+- Exempting a verb is the owner's decision, made per verb, after a classifier and
+  its tests exist. It is not a judgement call for whoever is writing the code.
+
+Classification needs **two** axes, not one. Destructive-versus-read-only is
+insufficient: a whole-range deployment may destroy nothing and still be something
+no one wants triggered by a misread instruction, because it consumes real time
+and real infrastructure. A verb is a candidate for exemption only when it is low
+on both **blast radius** (what it changes, and whether that is reversible) and
+**cost** (what running it consumes, and who pays).
+
+Pattern-matching command strings is not a protection — quoting and environment
+prefixes defeat it, and it looks enforced while not being. See the provisioning
+rule above for the same failure shape.
+
 ### Network changes are deliberate
 
 Adding an outbound host to the devcontainer firewall goes through
