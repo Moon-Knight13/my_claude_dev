@@ -1,0 +1,32 @@
+# ctp-bridge configuration — copy to .ctp-bridge.conf on the box and edit.
+#
+# This file is the BOUNDARY. The wrapper (scripts/ctp-bridge.sh) and the
+# PreToolUse hook (.claude/hooks/pretooluse-ctp.sh) both read it, and neither
+# trusts caller-supplied environment for these values — an agent that can set an
+# env var in the same call it makes could otherwise rewrite its own limits.
+#
+# .ctp-bridge.conf is gitignored: it lives on the box and is never committed. It
+# holds NO secrets — only a box name, a verb list, and paths to deny. Real
+# secret VALUES never appear here.
+#
+# Format: KEY=value, one per line. Lines starting with # are ignored. No shell
+# expansion is performed on values.
+
+# The single box this harness may target. Any mutating verb naming anything else
+# is refused. Set this to the training box you are iterating on — nothing else.
+# There is no wildcard and no list; one name, exactly.
+CTP_ALLOWED_TARGET=
+
+# The verbs the wrapper will run. This is an allow-list: a verb not named here is
+# refused, not passed through. The supported slice is deploy and deploy-role
+# only. secrets and make are refused outright regardless of this line.
+CTP_ALLOWED_VERBS=deploy deploy-role
+
+# Container override. Leave blank to derive catapult-<current-user> at runtime.
+CTP_CONTAINER=
+
+# Secret paths the hook refuses to let any tool read (Read tool or a Bash command
+# naming the path), so their contents never reach the transcript. Space-separated
+# glob patterns. Tilde expands to the target user's home. Extend per box; never
+# remove the vault password or private-key entries.
+CTP_SECRET_PATHS=/var/tmp/vlt_pf ~/.ssh/id_* ~/.zsh_history ~/.bash_history **/.env

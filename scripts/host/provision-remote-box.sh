@@ -369,3 +369,9 @@ fi
 host_step "Provisioning complete"
 host_note "If the docker group was just added, REBOOT the box for it to take effect."
 host_note "Killswitch audit log: sudo tail -f /var/log/claude-killswitch.log"
+# The build tooling's first-run (vault) configuration is interactive and
+# correctly manual — this script never touches credentials. But nothing else
+# tells the operator it is the next required step, so a freshly provisioned box
+# looks ready while ctp still cannot run. Point at it; do not perform it.
+host_note "Next, once per box: run 'make start' and complete the first-run (vault) config."
+host_note "  ctp cannot run until the vault is unlocked; the ctp bridge refuses until then."

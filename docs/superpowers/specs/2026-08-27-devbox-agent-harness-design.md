@@ -578,9 +578,34 @@ than by silently editing the section they contradict.
 | Local model serving end to end | done | verified against the real endpoint |
 | Graceful degradation when it is not serving | done | `LOCAL_MODEL_REQUIRED`, default WARN |
 | B provisioning honesty | done, verified on a live box | `provision-remote-box.sh`, `test-provision.sh` |
-| C, D | not started | — |
+| F3 vault first-run next-step notice | done | `provision-remote-box.sh` closing notes |
+| C tool bridge (vignette slice) | done, tests green; live run held for owner | `ctp-bridge.sh`, `lib/ctp-guard.sh`, `.claude/hooks/pretooluse-ctp.sh`, `.claude/skills/ctp-deploy/`, `test-ctp-bridge.sh` |
+| D | not started (blocked on #37) | — |
 
 ### Deviations
+
+**C ships scoped to the training-box vignette, not as a general ctp bridge.** The
+design described C against `ctp` broadly. As built, the wrapper reaches exactly
+`host deploy` and `host deploy-role` against **one** configured box
+(`.ctp-bridge.conf`); `list`/`vars`/`redeploy`/`remove`/`project` are out of the
+slice, and `secrets`/`make` are refused outright. Two reasons. First, the owner's
+manual-confirmation policy means classification-for-exemption is not built yet, so
+a narrow reachable set is the safe finished state, not a stub. Second, the enabling
+use case is the training-box loop (deploy → iterate playbooks → `deploy-role`),
+which needs only those two verbs; the rest widen the surface for no current gain.
+The design's intent — one script, one hook, gates in code not string-matching, the
+boundary outside caller control — is preserved. `vars` was additionally dropped
+from the reachable set because its output would stream box detail into the
+transcript; the shared-box transcript exposure drove that. Reads become an
+evidence-driven addition later, if justified, with `vars` output redacted.
+
+**The confirmation gate is two mechanisms, split by caller.** The design spoke of
+a single confirm gate. In practice the agent calls through the Bash tool, whose
+stdin is non-interactive — so the wrapper's own gate (which refuses non-interactive
+input, no auto-yes) would refuse every agent deploy, confirmed or not. The
+authoritative agent-path gate is therefore the `PreToolUse` hook returning `ask`,
+and the wrapper's stdin gate is the belt for a human running it directly. Both read
+the same shared guard, so they classify identically.
 
 **B″ ships opt-in, not on by default.** The design has the scoped agent carry the
 managed key alone and additional identities added only after an observed failure.

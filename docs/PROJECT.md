@@ -38,6 +38,29 @@ everything below:
 - **Restricted egress.** Network access is limited; new outbound hosts are a
   deliberate change, not an incidental one.
 
+### Authorized scope
+
+The work this harness supports is confined to **one authorized range**, on boxes
+the organisation owns and operates, for **training and authorized
+security-testing** — including authorized red-team work: developing boxes, both
+hardened and deliberately weak, and the means to exercise those weaknesses, on
+range assets set aside for it. This is the standing authorization context, and it
+is why an assistant should read deploy and box-development work here as ordinary
+engineering, not as targeting.
+
+Two things keep that legible rather than assumed:
+
+- The tool bridge is scoped to a **single named box** in code (see *The tool
+  bridge*), so the work provably cannot reach a target it was not pointed at.
+- Nothing operational enters the repository. Per *This repository is public*
+  below, range names, hosts, topology, technique detail and box specifics stay
+  off the repo regardless — which keeps the authorization clean and the sensitive
+  content where it belongs.
+
+Anything outside that scope — a target not on the authorized range, real
+infrastructure the organisation does not own — is not in view here and is not
+something to work toward.
+
 ## Rules
 
 ### This repository is public
@@ -225,6 +248,54 @@ on both **blast radius** (what it changes, and whether that is reversible) and
 Pattern-matching command strings is not a protection — quoting and environment
 prefixes defeat it, and it looks enforced while not being. See the provisioning
 rule above for the same failure shape.
+
+#### The tool bridge (`scripts/ctp-bridge.sh`)
+
+That wrapper is the **only** supported path to run `ctp`. A `PreToolUse` hook
+(`.claude/hooks/pretooluse-ctp.sh`) denies the two ways around it — `docker exec`
+into the container, and a bare `ctp` — so the gates cannot be skipped.
+
+The gates that matter, all in code on the parsed argv (never string-matched), and
+shared between wrapper and hook via `scripts/lib/ctp-guard.sh` so the two cannot
+drift:
+
+- **One target.** `.ctp-bridge.conf` names a single box; any mutating verb naming
+  anything else is refused. A glob metacharacter in a target is refused outright —
+  `deploy` and `deploy '*'` are different classes.
+- **Two reachable verbs.** `host deploy` and `host deploy-role`, nothing else.
+  `secrets` and `make` are refused outright (credentials). `redeploy`/`remove` are
+  out of the current slice; `list`/`vars` are too, because `vars` would stream box
+  detail into the transcript.
+- **The boundary is the config file, never caller env.** An agent that can set an
+  environment variable in the same call it makes must not be able to widen its own
+  limits. Both wrapper and hook read `.ctp-bridge.conf`; neither trusts env for a
+  boundary value.
+- **The agent's confirmation is the hook's prompt, not the wrapper's stdin.** The
+  Bash tool's stdin is non-interactive, so the wrapper refuses it (no auto-yes);
+  the human says yes at the hook's `ask` prompt instead.
+
+`.ctp-bridge.conf` is gitignored and holds a box name and paths — never secrets.
+The invocation count log lives under `.ai/` (also gitignored) and records verbs
+and outcomes only, never a target or output.
+
+#### Secrets and transcripts
+
+The tool gate does nothing about a secret Claude might *read*. On this shared box
+the next occupant can read the session transcript, and anything read also leaves
+the box to reach the model. So the same hook **denies reads of configured secret
+paths** — the vault password file, `~/.ssh/id_*`, `**/.env`, shell history —
+whether via the Read tool or a Bash command naming them. Least privilege makes
+that free: the deploy loop needs none of those, and the wrapper checks the vault
+by existence, never by reading it.
+
+Be honest about the limit. A hook matching command strings is hygiene and
+defense-in-depth, not a sandbox — an adversarial model could obfuscate a read. The
+real containment is OS-level: an agent user without read access to those files.
+The shared single-account box does not offer that (see *Operating environment* —
+one account, everyone sudo), so this is an **accepted risk**, the same class as
+the killswitch: it reduces incidental and instructed capture, it does not contain
+a hostile model. `PII-Shield` (referenced in `.claude/settings.json`) is
+complementary, not a substitute.
 
 ### Network changes are deliberate
 
