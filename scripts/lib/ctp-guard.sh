@@ -22,6 +22,7 @@ CTP_ALLOWED_TARGET=""
 CTP_ALLOWED_TEAM=""
 CTP_ALLOWED_VERBS="deploy deploy-role"
 CTP_CONTAINER=""
+CTP_PROJECT_DIR=""
 CTP_SECRET_PATHS=""
 
 ctp_load_config() {
@@ -39,6 +40,7 @@ ctp_load_config() {
             CTP_ALLOWED_TEAM)   CTP_ALLOWED_TEAM="${val//[[:space:]]/}" ;;
             CTP_ALLOWED_VERBS)  CTP_ALLOWED_VERBS="$val" ;;
             CTP_CONTAINER)      CTP_CONTAINER="$val" ;;
+            CTP_PROJECT_DIR)    CTP_PROJECT_DIR="$val" ;;
             CTP_SECRET_PATHS)   CTP_SECRET_PATHS="$val" ;;
         esac
     done < "$conf"

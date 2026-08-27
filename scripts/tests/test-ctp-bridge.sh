@@ -22,6 +22,7 @@ CTP_ALLOWED_TARGET=trainbox_t02
 CTP_ALLOWED_TEAM=t02
 CTP_ALLOWED_VERBS=deploy deploy-role
 CTP_CONTAINER=catapult-tester
+CTP_PROJECT_DIR=/srv/inventories/dcm
 CTP_SECRET_PATHS=/var/tmp/vlt_pf ~/.ssh/id_* ~/.zsh_history ~/.bash_history **/.env
 EOF
 
@@ -78,21 +79,27 @@ BIN="$TMP/bin"; mkdir -p "$BIN"
 # Mock docker: behaviour tuned by env the MOCK reads (not the wrapper's gates).
 cat > "$BIN/docker" <<'MOCK'
 #!/usr/bin/env bash
-case "$1 $2" in
-  "inspect -f")  echo true; exit 0 ;;   # container running
-esac
+if [[ "$1" == "inspect" && "$2" == "-f" ]]; then
+  # $3 is the go template: the Mounts query gets $MOCK_MOUNTS, else State.Running
+  if [[ "$3" == *Mounts* ]]; then printf '%s\n' "${MOCK_MOUNTS:-}"; else echo true; fi
+  exit 0
+fi
+# `docker exec [-i] [-w DIR] CONTAINER ...` — capture -w so a test can assert it
 if [[ "$1" == "exec" ]]; then
   shift
-  # drop -i and container name
-  [[ "$1" == "-i" ]] && shift
-  shift
+  WDIR=""
+  while [[ "${1:-}" == -* ]]; do
+    if [[ "$1" == "-w" ]]; then WDIR="$2"; shift 2; continue; fi
+    shift
+  done
+  shift   # container
   if [[ "$1" == "test" && "$2" == "-e" ]]; then
     [[ "${MOCK_VAULT_LOCKED:-0}" == "1" ]] && exit 1 || exit 0
   fi
   if [[ "$1" == "pgrep" || "$*" == *pgrep* ]]; then
     [[ "${MOCK_BUSY:-0}" == "1" ]] && exit 0 || exit 1
   fi
-  # the real run: echo the ctp argv so a test can inspect it
+  echo "WDIR: $WDIR"
   echo "RAN: $*"
   exit "${MOCK_RUN_RC:-0}"
 fi
@@ -141,6 +148,21 @@ PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_BRIDGE_STATE="$STATE" \
     bash "$ROOT/scripts/ctp-bridge.sh" host list trainbox_t02 </dev/null >/dev/null 2>&1
 check "expired token: refused (5)" "$?" 5
 
+# --- working directory: CTP_PROJECT_DIR unset -> translate CWD via bind mount -
+CONF2="$TMP/noproj.conf"; grep -v '^CTP_PROJECT_DIR=' "$CONF" > "$CONF2"
+HOSTPROJ="$TMP/host/proj"; mkdir -p "$HOSTPROJ/inventories/dcm"
+printf '%s\t%s\n' "$FUTURE" "host list trainbox_t02" > "$STATE/approval"
+out="$(cd "$HOSTPROJ/inventories/dcm" && PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF2" \
+    CTP_BRIDGE_STATE="$STATE" MOCK_MOUNTS="$HOSTPROJ"$'\t'"/srv" \
+    bash "$ROOT/scripts/ctp-bridge.sh" host list trainbox_t02 </dev/null 2>&1)"
+if printf '%s' "$out" | grep -Fq 'WDIR: /srv/inventories/dcm'; then
+    ok "CWD translated through bind mount to container path"
+else bad "CWD translated through bind mount ($(printf '%s' "$out" | grep WDIR: | head -1))"; fi
+# CWD outside any mount, no override -> refuse (4), never guess
+( cd "$TMP" && PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF2" CTP_BRIDGE_STATE="$STATE" \
+    MOCK_MOUNTS="$HOSTPROJ"$'\t'"/srv" bash "$ROOT/scripts/ctp-bridge.sh" host list trainbox_t02 </dev/null >/dev/null 2>&1 )
+check "CWD outside the mount -> refuse (4)" "$?" 4
+
 # --- exec prelude survives a box with no venv (zsh NOMATCH would abort) -------
 check "wrapper venv glob uses (N) NULL_GLOB" \
     "$(grep -o '\.venv/bin/activate(N)' "$ROOT/scripts/ctp-bridge.sh" | wc -l | tr -d ' ')" 2
@@ -171,6 +193,10 @@ if command -v script >/dev/null 2>&1; then
     if grep -q '.venv/bin/activate' "$TMP/run.out" && grep -q '.local/bin/env' "$TMP/run.out"; then
         ok "exec sources the venv + env prelude (ansible-playbook resolvable)"
     else bad "exec sources the venv + env prelude"; fi
+    # runs in the project dir (config CTP_PROJECT_DIR), not the container WORKDIR
+    if grep -Fq 'WDIR: /srv/inventories/dcm' "$TMP/run.out"; then
+        ok "exec sets -w to the project dir (CTP_PROJECT_DIR)"
+    else bad "exec sets -w to the project dir ($(grep WDIR: "$TMP/run.out" | head -1))"; fi
     if [[ -f "$TMP/count.log" ]] && grep -q "deploy-role" "$TMP/count.log" && ! grep -q "trainbox" "$TMP/count.log"; then
         ok "count log records verb+outcome, not the target"
     else bad "count log records verb+outcome, not the target"; fi

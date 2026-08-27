@@ -64,6 +64,32 @@ fi
 
 CONTAINER="$(ctp_container)"
 
+# --- resolve the container working directory ---------------------------------
+# ctp resolves playbook.yml relative to CWD, and the project is the inventory dir,
+# not the container's default WORKDIR. Prefer an explicit CTP_PROJECT_DIR
+# (container-side path); otherwise translate the caller's CWD through the
+# container's bind mount, discovered at runtime via `docker inspect` (Source ->
+# Destination) so no site path is baked into this public repo. Refuse if the CWD
+# is outside the mount and no override is set — never guess a directory.
+_resolve_workdir() {
+    if [[ -n "$CTP_PROJECT_DIR" ]]; then printf '%s' "$CTP_PROJECT_DIR"; return 0; fi
+    local src dst best_src="" best_dst="" rel
+    while IFS=$'\t' read -r src dst; do
+        [[ -n "$src" && -n "$dst" ]] || continue
+        if [[ "$PWD" == "$src" || "$PWD" == "$src"/* ]]; then
+            [[ ${#src} -gt ${#best_src} ]] && { best_src="$src"; best_dst="$dst"; }   # longest prefix wins
+        fi
+    done < <(docker inspect -f '{{range .Mounts}}{{if eq .Type "bind"}}{{.Source}}{{"\t"}}{{.Destination}}{{"\n"}}{{end}}{{end}}' "$CONTAINER" 2>/dev/null)
+    [[ -n "$best_src" ]] || return 1
+    rel="${PWD#"$best_src"}"
+    printf '%s%s' "$best_dst" "$rel"
+}
+WORKDIR="$(_resolve_workdir)" || {
+    host_warn "cannot map CWD ($PWD) into '$CONTAINER' — run from the project directory"
+    host_warn "under the container's bind mount, or set CTP_PROJECT_DIR in ~/.ctp-bridge.conf"
+    exit 4
+}
+
 # --- preconditions, by class -------------------------------------------------
 # Container must be up for anything. A mutating run additionally needs an unlocked
 # vault and no run already in flight; a read/inventory verb does not gate on those.
@@ -142,7 +168,7 @@ _log_count() { # verb class outcome — verbs/outcomes only, never target or out
 # qualifier makes an unmatched pattern expand to nothing instead. argv stays
 # positional.
 set +e
-docker exec -i "$CONTAINER" zsh -c '
+docker exec -i -w "$WORKDIR" "$CONTAINER" zsh -c '
     _src() { [ -f "$1" ] && . "$1" >/dev/null 2>&1; }
     _src "$HOME/.local/bin/env"
     for _v in "$HOME"/*/.venv/bin/activate(N) "$HOME"/.venv/bin/activate(N); do _src "$_v" && break; done

@@ -32,6 +32,13 @@ CTP_ALLOWED_VERBS=deploy deploy-role
 # Container override. Leave blank to derive catapult-<current-user> at runtime.
 CTP_CONTAINER=
 
+# Optional: the project directory INSIDE the container that ctp runs from (where
+# playbook.yml lives), e.g. /srv/inventories/<project>. Leave blank to translate
+# the directory you invoke the wrapper from through the container's bind mount at
+# runtime (run the wrapper from your range checkout). Set this only to pin a fixed
+# project regardless of CWD.
+CTP_PROJECT_DIR=
+
 # Secret paths the hook refuses to let any tool read (Read tool or a Bash command
 # naming the path), so their contents never reach the transcript. Space-separated
 # glob patterns. Tilde expands to the target user's home. Extend per box; never
