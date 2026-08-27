@@ -57,6 +57,8 @@ check "remove -> refuse"                      "$(cls host remove trainbox_t02)" 
 check "secrets -> refuse"                     "$(cls secrets edit)"                  refuse
 check "make -> refuse"                        "$(cls make start)"                    refuse
 check "unknown verb -> refuse"                "$(cls frobnicate all)"                refuse
+check "deploy with extra arg -> refuse"       "$(cls host deploy trainbox_t02 --danger)" refuse
+check "list with extra arg -> refuse"         "$(cls host list trainbox_t02 extra)"      refuse
 
 # team gate fails closed when unset
 ( CTP_ALLOWED_TEAM=""; check "no team configured -> mutating refused" "$(cls host deploy trainbox_t02)" refuse )
@@ -207,6 +209,15 @@ decide "$(bash_json "ctp-bridge host deploy trainbox_t02")" >/dev/null
 if [[ -f "$HSTATE/approval" ]] && grep -Fq 'host deploy trainbox_t02' "$HSTATE/approval"; then
     ok "ask writes an approval token bound to the argv"
 else bad "ask writes an approval token bound to the argv"; fi
+
+# redirection after the wrapper args is stripped: the bound token matches the argv
+# the wrapper will actually receive (the real 2>&1 | tail bug from the box).
+check "redirected wrapper call -> ask"    "$(decide "$(bash_json "ctp-bridge host list trainbox_t02 2>&1")")" ask
+rm -f "$HSTATE/approval"
+decide "$(bash_json "ctp-bridge host list trainbox_t02 2>&1 | tail -60")" >/dev/null
+if [[ -f "$HSTATE/approval" ]] && grep -Eq $'\thost list trainbox_t02$' "$HSTATE/approval"; then
+    ok "token bound to clean argv (redirection/pipe stripped)"
+else bad "token bound to clean argv (got: $(cat "$HSTATE/approval" 2>/dev/null))"; fi
 # a refused call writes NO token
 rm -f "$HSTATE/approval"
 decide "$(bash_json "ctp-bridge host deploy trainbox_t05")" >/dev/null

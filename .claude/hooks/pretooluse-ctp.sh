@@ -107,6 +107,21 @@ _base() { local p="$1"; printf '%s' "${p##*/}"; }
 # `ctp-bridge.sh` in the repo/tests. Match both; NOT test-ctp-bridge.sh.
 _is_wrapper_name() { case "$(_base "$1")" in ctp-bridge|ctp-bridge.sh) return 0 ;; *) return 1 ;; esac; }
 
+# _strip_redirection <args...> — echo the args with shell redirection removed, so
+# the argv the hook classifies and binds matches what the wrapper actually
+# receives (the shell strips `2>&1`, `> file`, `2>err` etc. before the wrapper
+# sees its argv). Box names never contain < or >, so this is safe.
+_strip_redirection() {
+    local t skip=0 out=()
+    for t in "$@"; do
+        if [[ "$skip" == 1 ]]; then skip=0; continue; fi           # operand of a bare operator
+        if [[ "$t" =~ ^[0-9]*(\>\>|\>|\<)$ || "$t" =~ ^\&\>\>?$ ]]; then skip=1; continue; fi  # >  >>  2>  <  &>  (+ target next)
+        if [[ "$t" == *'>'* || "$t" == *'<'* ]]; then continue; fi  # fused (>file, 2>&1, &>file, 2>err)
+        out+=("$t")
+    done
+    printf '%s\n' "${out[@]}"
+}
+
 # Replace segment separators with newlines, then examine each segment. A wrapper
 # INVOCATION (ctp-bridge.sh actually executed, directly or via an interpreter) is
 # classified; a segment that merely names the path (chmod, grep, cat, running the
@@ -138,12 +153,17 @@ while IFS= read -r _seg; do
     fi
 
     if [[ "$_is_wrapper" == 1 ]]; then
-        verdict="$(ctp_classify "${_wrapper_args[@]:-}")" && vrc=0 || vrc=$?
+        # Strip shell redirection so the classified/bound argv matches what the
+        # wrapper actually receives (the shell removes `2>&1`, `> file`, etc.).
+        _clean_args=()
+        while IFS= read -r _ca; do _clean_args+=("$_ca"); done < <(_strip_redirection "${_wrapper_args[@]:-}")
+        verdict="$(ctp_classify "${_clean_args[@]:-}")" && vrc=0 || vrc=$?
         if [[ "$vrc" -eq 0 ]]; then
-            # Human confirms at this prompt; leave the wrapper a token bound to this
-            # exact argv so it runs without a second (impossible, no-TTY) prompt.
-            _write_approval "${_wrapper_args[*]:-}"
-            emit ask "confirm build-tooling run: ctp ${_wrapper_args[*]:-}"
+            # Human confirms at this prompt; leave the wrapper a token bound to the
+            # exact argv it will receive so it runs without a second (impossible,
+            # no-TTY) prompt.
+            _write_approval "${_clean_args[*]:-}"
+            emit ask "confirm build-tooling run: ctp ${_clean_args[*]:-}"
         else
             emit deny "ctp bridge refuses this: ${verdict#refuse }"
         fi

@@ -88,7 +88,7 @@ ctp_has_glob() {
 #   - box allow-list: the target must equal CTP_ALLOWED_TARGET (one named box).
 # Both fail closed: an unset team or target refuses every mutating verb.
 ctp_classify() {
-    local a1="${1:-}" a2="${2:-}" a3="${3:-}" verb target
+    local a1="${1:-}" a2="${2:-}" a3="${3:-}" a4="${4:-}" verb target
     case "$a1" in
         secrets)
             printf 'refuse credential-verb-refused-outright'; return 1 ;;
@@ -114,6 +114,7 @@ ctp_classify() {
             # read-only verification. A concrete target only — no bulk dump of the
             # whole range into the transcript.
             [[ -n "$target" ]] || { printf 'refuse list-needs-a-target-no-bulk-listing'; return 1; }
+            [[ -z "$a4" ]] || { printf 'refuse unexpected-extra-args'; return 1; }
             [[ "$target" == "all" ]] && { printf 'refuse list-all-refused-no-bulk-dump'; return 1; }
             ctp_has_glob "$target" && { printf 'refuse glob-in-list-target-refused'; return 1; }
             printf 'confirm read list %s' "$target"; return 0 ;;
@@ -131,6 +132,7 @@ ctp_classify() {
     local allowed=" $CTP_ALLOWED_VERBS "
     [[ "$allowed" == *" $verb "* ]] || { printf 'refuse verb-not-in-config-allow-list:%s' "$verb"; return 1; }
     [[ -n "$target" ]] || { printf 'refuse mutating-verb-needs-a-target:%s' "$verb"; return 1; }
+    [[ -z "$a4" ]] || { printf 'refuse unexpected-extra-args'; return 1; }
     ctp_has_glob "$target" && { printf 'refuse glob-in-target-refused:%s' "$verb"; return 1; }
     # team gate (mandatory, fail closed)
     [[ -n "$CTP_ALLOWED_TEAM" ]] || { printf 'refuse no-authorised-team-configured'; return 1; }
