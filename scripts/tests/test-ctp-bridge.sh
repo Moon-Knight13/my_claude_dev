@@ -141,6 +141,22 @@ PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_BRIDGE_STATE="$STATE" \
     bash "$ROOT/scripts/ctp-bridge.sh" host list trainbox_t02 </dev/null >/dev/null 2>&1
 check "expired token: refused (5)" "$?" 5
 
+# --- exec prelude survives a box with no venv (zsh NOMATCH would abort) -------
+check "wrapper venv glob uses (N) NULL_GLOB" \
+    "$(grep -o '\.venv/bin/activate(N)' "$ROOT/scripts/ctp-bridge.sh" | wc -l | tr -d ' ')" 2
+if command -v zsh >/dev/null 2>&1; then
+    EMPTYH="$TMP/emptyhome"; mkdir -p "$EMPTYH"
+    out="$(HOME="$EMPTYH" zsh -c '
+        _src() { [ -f "$1" ] && . "$1" >/dev/null 2>&1; }
+        _src "$HOME/.local/bin/env"
+        for _v in "$HOME"/*/.venv/bin/activate(N) "$HOME"/.venv/bin/activate(N); do _src "$_v" && break; done
+        echo REACHED_CTP' 2>&1)"
+    [[ "$out" == *REACHED_CTP* ]] && ok "exec prelude reaches ctp with no venv present" \
+        || bad "exec prelude aborts with no venv: $out"
+else
+    echo "  --  zsh unavailable; skipping NULL_GLOB behaviour test"
+fi
+
 # Run path needs a tty (the gate refuses non-interactive by design). Use script(1)
 # to allocate one; skip honestly if unavailable.
 if command -v script >/dev/null 2>&1; then

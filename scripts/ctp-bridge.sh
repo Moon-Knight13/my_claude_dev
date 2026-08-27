@@ -136,13 +136,16 @@ _log_count() { # verb class outcome — verbs/outcomes only, never target or out
 # 127 without the venv. Reproduce ~/.zshrc's ESSENTIAL setup explicitly (not
 # `zsh -i`, and not sourcing ~/.zshrc wholesale — that drags in interactive-only
 # machinery): the env shim, the venv (glob-discovered, no site path hardcoded),
-# then the ctp function. Each guarded so a box lacking one still runs. argv stays
+# then the ctp function. Each guarded so a box lacking one still runs — including
+# the venv glob: zsh has NOMATCH on by default, so an unmatched pattern is a hard
+# error that aborts the non-interactive shell before ctp runs; the (N) NULL_GLOB
+# qualifier makes an unmatched pattern expand to nothing instead. argv stays
 # positional.
 set +e
 docker exec -i "$CONTAINER" zsh -c '
     _src() { [ -f "$1" ] && . "$1" >/dev/null 2>&1; }
     _src "$HOME/.local/bin/env"
-    for _v in "$HOME"/*/.venv/bin/activate "$HOME"/.venv/bin/activate; do _src "$_v" && break; done
+    for _v in "$HOME"/*/.venv/bin/activate(N) "$HOME"/.venv/bin/activate(N); do _src "$_v" && break; done
     _src "$HOME/autocomplete.zsh" || _src /home/builder/autocomplete.zsh
     ctp "$@"' _ "$@"
 run_rc=$?
