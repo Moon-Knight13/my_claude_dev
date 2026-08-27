@@ -553,7 +553,7 @@ than by silently editing the section they contradict.
 | A surface-aware day-0 check | done | `scripts/lib/surface.sh`, `check-day0.sh` |
 | Local model serving end to end | done | verified against the real endpoint |
 | Graceful degradation when it is not serving | done | `LOCAL_MODEL_REQUIRED`, default WARN |
-| B provisioning honesty | done | `provision-remote-box.sh`, `test-provision.sh` |
+| B provisioning honesty | done, verified on a live box | `provision-remote-box.sh`, `test-provision.sh` |
 | C, D | not started | — |
 
 ### Deviations
@@ -643,6 +643,32 @@ the marker problem: the run reports doing something it did not do. Fixed with
 **The failure gate had a hole.** It sat before the last two steps, so a failure
 in either could not have stopped the completion marker. Moved to after every
 step; `scripts/tests/test-provision.sh` asserts it.
+
+### Found by running provisioning on a real box
+
+Every one of these had been true of every provisioning run, and every one
+reported success or a plausible warning while doing the wrong thing. None were
+findable by reading the scripts — they needed a box.
+
+- **User-level steps ran as root** under `sudo` (`$HOME` = `/root`): extensions
+  searched for in root's home and reported missing, ansible settings merged into
+  a file no editor reads, plugins bound for `/root/.claude`, and a prompt
+  offering to add *root* to the docker group.
+- **The plugin installer called a bare `claude`**, which exists on PATH only in
+  the devcontainer. It died on line 21 on the surface it was written for.
+- **The marketplace was registered by bare name**, which registers nothing, so
+  every plugin install failed — and the failure printed
+  "already-present / failed (continuing)".
+- **`code` was looked for on PATH**, where it never is on a Remote-SSH box.
+- **`sudo` strips `SSH_AUTH_SOCK`**, so the agent check reported forwarding
+  broken when it was fine.
+- **Extensions were reinstalled on every run** and reported as "installed",
+  because `code --list-extensions` returns nothing useful when it is not
+  attached to a running server.
+
+The lesson worth keeping: this repository's honesty rules were written about
+provisioning and provisioning was the code violating them. A script that reports
+its own success is not evidence; running it where it is meant to run is.
 
 ### Found while wiring the local model up
 

@@ -106,7 +106,13 @@ host_step "[1/7] VSCode server extensions + claude on PATH"
 CLAUDE_EXT_JUST_INSTALLED=0
 if CODE_BIN="$(find_code)"; then
     for ext in anthropic.claude-code redhat.ansible; do
-        if run_as_target "$CODE_BIN" --list-extensions 2>/dev/null | grep -qix "$ext"; then
+        # Check the extensions directory FIRST. `code --list-extensions` returns
+        # nothing useful when it is not attached to a running server, so relying
+        # on it made every run reinstall extensions that were already there and
+        # report "installed" for a no-op.
+        if compgen -G "$CLAUDE_TARGET_HOME/.vscode-server/extensions/${ext}-*" >/dev/null 2>&1; then
+            host_info "$ext already installed"
+        elif run_as_target "$CODE_BIN" --list-extensions 2>/dev/null | grep -qix "$ext"; then
             host_info "$ext already installed"
         elif run_as_target "$CODE_BIN" --install-extension "$ext" >/dev/null 2>&1; then
             host_info "installed $ext"

@@ -261,6 +261,27 @@ if [[ -x "$_wrapper" ]]; then
     fi
 fi
 
+# ── 10. An already-installed extension is not reinstalled ───────────────────
+# `code --list-extensions` returns nothing useful when it is not attached to a
+# running server, so relying on it alone reported "installed" for a no-op on
+# every run.
+SB="$TMP/ext-idem"; make_sandbox "$SB"; mkdir -p "$SB/home"
+mkdir -p "$SB/home/.vscode-server/extensions/anthropic.claude-code-1.0.0" \
+         "$SB/home/.vscode-server/extensions/redhat.ansible-2.0.0"
+(
+    cd "$SB" || exit 0
+    env PATH="$SHIMS:/usr/bin:/bin" DEVBOX_MARKER_DIR="$SB/marker" HOME="$SB/home" \
+        CLAUDE_TARGET_USER="$(id -un)" CLAUDE_TARGET_HOME="$SB/home" \
+        GIT_CONFIG_GLOBAL="$SB/home/.gitconfig" \
+        bash scripts/host/provision-remote-box.sh --yes --verify-cmd 'true'
+) > "$TMP/out" 2>&1
+if grep -q "anthropic.claude-code already installed" "$TMP/out" \
+    && ! grep -q "installed anthropic.claude-code" "$TMP/out"; then
+    ok "present extension reported as already installed, not reinstalled"
+else
+    bad "extension idempotence" "$(grep -E 'claude-code' "$TMP/out" | head -2 | tr '\n' '|')"
+fi
+
 echo
 echo "== $pass passed, $fail failed =="
 (( fail == 0 ))
