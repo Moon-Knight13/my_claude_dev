@@ -198,10 +198,17 @@ _split_segments() {
         done
         if [[ -n "$q" ]]; then
             cur+=$'\n'                       # newline lives inside an open quote: keep it, no split
-        elif [[ -n "$hd_ready" ]]; then
-            hd="$hd_ready"; hd_ready=""; _flush   # heredoc body starts on the next line
         else
-            esc=0; _flush                    # a bare newline is a separator
+            # A delimiter word ended by the newline itself — `cat <<EOF` with
+            # nothing after it, the common form — is still open at this point;
+            # resolve it here so its body is registered as a heredoc and skipped.
+            # (Ending it by a space or a redirect resolves it in the char loop.)
+            [[ "$expect_delim" == 1 && -n "$delim" ]] && { hd_ready="$delim"; expect_delim=0; delim=""; delim_q=""; }
+            if [[ -n "$hd_ready" ]]; then
+                hd="$hd_ready"; hd_ready=""; _flush   # heredoc body starts on the next line
+            else
+                esc=0; _flush                # a bare newline is a separator
+            fi
         fi
     done
     _flush
