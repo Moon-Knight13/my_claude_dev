@@ -18,6 +18,17 @@ set -euo pipefail
 
 # shellcheck source=scripts/lib/subsystems.sh disable=SC1090,SC1091
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/subsystems.sh"
+# shellcheck source=scripts/lib/surface.sh disable=SC1090,SC1091
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/surface.sh"
+# Load .env here too. Check 11 reads LOCAL_MODEL_ENABLED and LOCAL_MODEL_ENDPOINT
+# directly, and without this it reads them from an environment where only the
+# devcontainer sets them — reporting on defaults rather than on the developer's
+# actual configuration. That is the failure documented in docs/PROJECT.md
+# § ".env only works because something loads it", in a checker whose job is to
+# catch it. Check 6 still asserts the plumbing in its own subshell, so this does
+# not weaken it.
+# shellcheck source=scripts/lib/load-env.sh disable=SC1090,SC1091
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/load-env.sh"
 
 PASS=0
 FAIL=0
@@ -211,20 +222,55 @@ fi
 echo ""
 echo "Optional"
 
-# 11. Ollama (host-side and optional — a WARN, never a FAIL: it cannot be
-# installed from inside the container, and day-0 must be able to go green with
-# just the two logins).
+# 11. Local model endpoint. Surface-aware, because "configured" and "reachable"
+# are the same thing on one surface and not the other:
+#
+#   devcontainer — the model runs on the developer's host, outside the container.
+#     It cannot be installed from in here and day-0 must go green with just the
+#     two logins, so unreachable is a WARN.
+#   box — the endpoint arrives over the reverse tunnel the laptop bootstrap
+#     writes into the SSH Host block. Enabled-but-unreachable is not an optional
+#     extra there: every routing decision silently falls back to Claude while
+#     .env and this check both report local routing on. That is the exact shape
+#     of the failure docs/PROJECT.md records for the .env loader, so it FAILs.
+#     Setting LOCAL_MODEL_ENABLED=false is the way to a green day-0 without a
+#     tunnel — the point is that the reported state matches the routed state.
 LOCAL_MODEL_ENABLED="${LOCAL_MODEL_ENABLED:-true}"
 if [[ "$LOCAL_MODEL_ENABLED" == "true" ]]; then
-    LOCAL_MODEL_ENDPOINT="${LOCAL_MODEL_ENDPOINT:-http://host.docker.internal:11434}"
-    if curl --silent --fail --connect-timeout 2 "$LOCAL_MODEL_ENDPOINT" >/dev/null 2>&1; then
-        check "Ollama reachable at $LOCAL_MODEL_ENDPOINT" "pass" ""
+    _surface="$(current_surface)"
+    if [[ "$_surface" == "box" ]]; then
+        LOCAL_MODEL_ENDPOINT="${LOCAL_MODEL_ENDPOINT:-http://127.0.0.1:11434}"
     else
-        check "Ollama reachable at $LOCAL_MODEL_ENDPOINT" "warn" \
+        LOCAL_MODEL_ENDPOINT="${LOCAL_MODEL_ENDPOINT:-http://host.docker.internal:11434}"
+    fi
+    if curl --silent --fail --connect-timeout 2 "$LOCAL_MODEL_ENDPOINT" >/dev/null 2>&1; then
+        check "local model reachable at $LOCAL_MODEL_ENDPOINT ($_surface)" "pass" ""
+    elif [[ "$_surface" == "box" ]]; then
+        # Unreachable is NOT a work stoppage: route-model.sh returns
+        # claude:…:local_unreachable_fallback and delegate-local.sh exits 3, so
+        # every task still gets done — by Claude. The local model is an
+        # optimisation, and the harness has to keep working without it.
+        #
+        # So this WARNs by default and FAILs only when the developer has said the
+        # local model is load-bearing for them (LOCAL_MODEL_REQUIRED=true). That
+        # keeps the report honest — it always states that everything is routing
+        # to Claude — without turning an optimisation being off into a red day-0.
+        #
+        # Deliberately does NOT suggest binding the model to 0.0.0.0. That advice
+        # belongs to the container surface only; on a box it would publish a
+        # personal machine's model onto the network the box sits on.
+        _hint="Local routing is ENABLED but nothing answers, so every task routes to Claude instead. Work continues — this is a lost optimisation, not a blocker. The endpoint arrives over the reverse tunnel in your laptop's SSH Host block (RemoteForward) — re-run scripts/local/bootstrap-devbox.sh on the machine running the model, then RECONNECT (the tunnel is established at connect time). Check from the box with: curl -sS $LOCAL_MODEL_ENDPOINT . Set LOCAL_MODEL_ENABLED=false in .env to silence this, or LOCAL_MODEL_REQUIRED=true to make it a hard failure."
+        if [[ "${LOCAL_MODEL_REQUIRED:-false}" == "true" ]]; then
+            check "local model reachable at $LOCAL_MODEL_ENDPOINT (box, required)" "fail" "$_hint"
+        else
+            check "local model reachable at $LOCAL_MODEL_ENDPOINT (box) — routing to Claude" "warn" "$_hint"
+        fi
+    else
+        check "local model reachable at $LOCAL_MODEL_ENDPOINT (devcontainer)" "warn" \
             "Optional local routing. Install + pull (https://ollama.com; ollama pull qwen2.5-coder:7b), then bind to 0.0.0.0 so the container can reach it (default 127.0.0.1 is loopback-only). See docs/TEMPLATE_GUIDE.md 'Bind Ollama so the container can reach it' — read the security disclaimer first. Or set LOCAL_MODEL_ENABLED=false in .env."
     fi
 else
-    echo "  --  Ollama check skipped (LOCAL_MODEL_ENABLED=false)"
+    echo "  --  local model check skipped (LOCAL_MODEL_ENABLED=false)"
 fi
 
 # 12. Visual explainer via GitHub Pages (optional — a WARN, never a FAIL). Only

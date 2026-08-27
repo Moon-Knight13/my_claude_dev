@@ -127,6 +127,44 @@ loader, `check-day0.sh` fails on "`.env` values reach the routing scripts"
 rather than going quiet — but the fix belongs upstream in the template, since
 the template ships both the `.env.example` and the scripts that ignored it.
 
+### Two traps in the local-model config
+
+Both were live for the whole life of the routing subsystem and neither failed
+loudly, which is why they survived.
+
+**Model names contain colons.** `route-model.sh` prints `provider:model:reason`,
+and every real Ollama tag — `qwen2.5-coder:7b` — has a colon in the middle field.
+`delegate-local.sh` split that string left to right, so the model was truncated at
+its first colon: the health preflight probed a model called `qwen2.5-coder` while
+routing had selected `qwen2.5-coder:7b`. Ollama resolves an untagged name by
+prefix, so `model_present` still passed and the only symptom was an occasional
+unexplained `health:probe_timeout` served from a health cache keyed to the wrong
+name. Provider and reason never contain a colon; the model may — so parse from
+both ends and treat the remainder as the model. `scripts/tests/test-delegation.sh`
+asserts the full tagged name reaches both the route log and the health cache.
+
+**A base model is not an instruct model.** The template shipped
+`LOCAL_MODEL_FAST_MODEL=qwen2.5-coder:1.5b-base`. Base models have had no
+instruction tuning: given "Reply with the single word OK" they *continue* the
+text rather than obeying it. The output is fluent English, so it passes the empty
+and degenerate output checks in `delegate-local.sh` and is returned as a
+successful delegation. Every fast-path task got plausible nonsense. Never put a
+`:*-base` tag in either model variable.
+
+### Local routing is an optimisation, not a dependency
+
+When the endpoint is unreachable, `route-model.sh` returns
+`claude:…:local_unreachable_fallback` and `delegate-local.sh` exits 3. Work still
+gets done — by Claude. Nothing in the harness may treat an absent local model as
+a blocker.
+
+`check-day0.sh` reports that state honestly without failing on it: on a box,
+enabled-but-unreachable is a WARN whose text says everything is routing to
+Claude. `LOCAL_MODEL_REQUIRED=true` turns it into a FAIL, for a developer who has
+decided the local model is load-bearing for them. That is the compromise between
+this rule and "Provisioning must not lie" — the report always states what is
+actually happening; only its severity is the developer's choice.
+
 ### Network changes are deliberate
 
 Adding an outbound host to the devcontainer firewall goes through

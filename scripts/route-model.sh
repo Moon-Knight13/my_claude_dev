@@ -18,7 +18,12 @@ CHANGED_FILES="${3:-1}"
 LOCAL_MODEL_ENABLED="${LOCAL_MODEL_ENABLED:-false}"
 LOCAL_MODEL_ENDPOINT="${LOCAL_MODEL_ENDPOINT:-http://host.docker.internal:11434}"
 LOCAL_MODEL_MODEL="${LOCAL_MODEL_MODEL:-local-default}"
-LOCAL_MODEL_FAST_MODEL="${LOCAL_MODEL_FAST_MODEL:-qwen2.5-coder:1.5b-base}"
+# Instruct-tuned, NOT the ":1.5b-base" variant this defaulted to. A base model
+# has had no instruction tuning: given "Reply with the single word OK" it
+# CONTINUES the text rather than obeying it, and the output is fluent enough to
+# pass delegate-local.sh's degenerate-output check. Every fast-path delegation
+# returned plausible nonsense.
+LOCAL_MODEL_FAST_MODEL="${LOCAL_MODEL_FAST_MODEL:-qwen2.5-coder:1.5b}"
 LOCAL_MODEL_FAST_TASK_TYPES="${LOCAL_MODEL_FAST_TASK_TYPES:-format,docs,tiny-refactor,rename,simple-test}"
 CLAUDE_MODEL="${CLAUDE_MODEL:-claude-default}"
 FORCE_CLAUDE="${FORCE_CLAUDE:-false}"

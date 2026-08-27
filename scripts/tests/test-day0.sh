@@ -80,7 +80,16 @@ make_sandbox() { # writes a derived-repo sandbox into $1
     local sb="$1"
     mkdir -p "$sb/scripts/lib" "$sb/.github" "$sb/.claude" "$sb/.ai"
     cp "$SCRIPTS/check-day0.sh" "$sb/scripts/"
-    cp "$SCRIPTS/lib/template-detect.sh" "$sb/scripts/lib/"
+    # Copy the WHOLE lib directory, not a hand-listed subset. Listing them by
+    # name meant every new `source` line in check-day0.sh broke all seven cases
+    # at once with "No such file or directory" — which is how this suite came to
+    # be 0/7 without anyone noticing it had stopped testing anything.
+    cp "$SCRIPTS"/lib/*.sh "$sb/scripts/lib/"
+    # Check 6 asserts that route-model.sh sources the .env loader, so the fixture
+    # needs the real script — asserting the plumbing means the plumbing must be
+    # present.
+    cp "$SCRIPTS/route-model.sh" "$sb/scripts/"
+    [[ -f "$SCRIPTS/../template.conf" ]] && cp "$SCRIPTS/../template.conf" "$sb/"
     git -C "$sb" init -q
     git -C "$sb" remote add origin https://github.com/mockuser/derived_repo.git
     # Fixture: fully configured unless a test removes something.
@@ -159,14 +168,34 @@ else
     bad "no project scope" "exit=$rc"
 fi
 
-# ── Case 6: Ollama down — WARN only, run still green ─────────────────────────
+# ── Case 6: local model down in a devcontainer — WARN only, run still green ──
 SB="$TMP/ollama"; make_sandbox "$SB"
-rc=$(run_check "$SB" MOCK_GH_AUTHED=true MOCK_GH_SCOPE=true MOCK_CLAUDE_LOGGEDIN=true MOCK_OLLAMA_UP=false)
-if [[ "$rc" == "0" ]] && grep -q "^ WARN Ollama reachable" "$TMP/out" \
+rc=$(run_check "$SB" CLAUDE_SURFACE=devcontainer MOCK_GH_AUTHED=true MOCK_GH_SCOPE=true MOCK_CLAUDE_LOGGEDIN=true MOCK_OLLAMA_UP=false)
+if [[ "$rc" == "0" ]] && grep -q "^ WARN local model reachable" "$TMP/out" \
     && grep -q "All day-0 steps complete." "$TMP/out"; then
-    ok "Ollama down -> WARN, exit stays 0"
+    ok "local model down (devcontainer) -> WARN, exit stays 0"
 else
-    bad "Ollama down" "exit=$rc; $(grep -E 'Ollama|Results' "$TMP/out")"
+    bad "local model down (devcontainer)" "exit=$rc; $(grep -E 'local model|Results' "$TMP/out")"
+fi
+
+# ── Case 6b: same on a box — still a WARN. The local model is an optimisation;
+# routing falls back to Claude and the work still gets done, so an unreachable
+# endpoint must not turn day-0 red. The message has to say what is happening.
+SB="$TMP/ollama-box"; make_sandbox "$SB"
+rc=$(run_check "$SB" CLAUDE_SURFACE=box MOCK_GH_AUTHED=true MOCK_GH_SCOPE=true MOCK_CLAUDE_LOGGEDIN=true MOCK_OLLAMA_UP=false)
+if [[ "$rc" == "0" ]] && grep -q "^ WARN local model reachable.*(box).*routing to Claude" "$TMP/out"; then
+    ok "local model down (box) -> WARN naming the fallback, exit stays 0"
+else
+    bad "local model down (box)" "exit=$rc; $(grep -E 'local model|Results' "$TMP/out")"
+fi
+
+# ── Case 6c: opt in to it being load-bearing — then it FAILs ─────────────────
+SB="$TMP/ollama-req"; make_sandbox "$SB"
+rc=$(run_check "$SB" CLAUDE_SURFACE=box LOCAL_MODEL_REQUIRED=true MOCK_GH_AUTHED=true MOCK_GH_SCOPE=true MOCK_CLAUDE_LOGGEDIN=true MOCK_OLLAMA_UP=false)
+if [[ "$rc" == "1" ]] && grep -q "^ FAIL local model reachable.*required" "$TMP/out"; then
+    ok "LOCAL_MODEL_REQUIRED=true -> FAIL, exit 1"
+else
+    bad "LOCAL_MODEL_REQUIRED=true" "exit=$rc; $(grep -E 'local model|Results' "$TMP/out")"
 fi
 
 # ── Case 7: template repo self-detection still short-circuits ────────────────
