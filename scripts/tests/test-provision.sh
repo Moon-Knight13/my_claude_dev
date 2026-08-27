@@ -203,6 +203,18 @@ else
     bad "root target warning" "no warning when CLAUDE_TARGET_HOME=/root"
 fi
 
+# ── 8. Marketplaces are added by owner/repo, never by bare name ─────────────
+# `claude plugin marketplace add claude-plugins-official` silently does not
+# register anything, and every later `plugin install <x>@claude-plugins-official`
+# then fails. Static check: any marketplace add in this repo must name a source.
+_bad_add="$(grep -rn --exclude-dir=tests "plugin marketplace add" "$SCRIPTS" 2>/dev/null \
+    | grep -vE "plugin marketplace add [\"'\$]*[A-Za-z0-9_.-]+/" || true)"
+if [[ -z "$_bad_add" ]]; then
+    ok "every 'plugin marketplace add' names an owner/repo source"
+else
+    bad "marketplace add by bare name" "$_bad_add"
+fi
+
 echo
 echo "== $pass passed, $fail failed =="
 (( fail == 0 ))

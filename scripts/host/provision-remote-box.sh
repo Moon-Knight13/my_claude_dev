@@ -128,25 +128,41 @@ else
     host_note "scripts/install-caveman.sh not found — skipping caveman"
 fi
 if [[ -f "$_REPO_ROOT/scripts/install-claude-plugins.sh" ]]; then
-    run_as_target bash "$_REPO_ROOT/scripts/install-claude-plugins.sh" || host_fail "install-claude-plugins.sh failed"
+    if CLAUDE_BIN_EARLY="$(find_claude)"; then
+        run_as_target env CLAUDE_BIN="$CLAUDE_BIN_EARLY" \
+            bash "$_REPO_ROOT/scripts/install-claude-plugins.sh" \
+            || host_fail "install-claude-plugins.sh failed"
+    else
+        host_fail "claude CLI not found — skipping the shared plugin installer"
+        host_note "connect once with the Claude Code extension so it unpacks, then re-run"
+    fi
 fi
 
 if CLAUDE_BIN="$(find_claude)"; then
     _plugins="$(run_as_target "$CLAUDE_BIN" plugin list 2>/dev/null || echo "")"
     if ! echo "$_plugins" | grep -q "claude-plugins-official"; then
-        if run_as_target "$CLAUDE_BIN" plugin marketplace add claude-plugins-official >/dev/null 2>&1; then
+        # The marketplace is added by owner/repo, not by bare name. Adding
+        # "claude-plugins-official" left it unregistered, so every subsequent
+        # `plugin install <x>@claude-plugins-official` failed — and the failure
+        # was reported as "already-present / failed (continuing)", which reads
+        # like nothing was wrong.
+        if _mkt_out="$(run_as_target "$CLAUDE_BIN" plugin marketplace add anthropics/claude-plugins-official 2>&1)"; then
             host_info "added marketplace claude-plugins-official"
         else
-            host_note "marketplace add reported already-present / failed (continuing)"
+            host_warn "marketplace add failed:"
+            printf '%s\n' "$_mkt_out" | tail -5 | while IFS= read -r _l; do host_note "    $_l"; done
         fi
     fi
     for p in skill-creator gitlab; do
         if echo "$_plugins" | grep -q "${p}@claude-plugins-official"; then
             host_info "${p}@claude-plugins-official already installed"
-        elif run_as_target "$CLAUDE_BIN" plugin install "${p}@claude-plugins-official" >/dev/null 2>&1; then
+        elif _pi_out="$(run_as_target "$CLAUDE_BIN" plugin install "${p}@claude-plugins-official" --scope user 2>&1)"; then
             host_info "installed ${p}@claude-plugins-official"
         else
+            # Print what actually went wrong. Discarding it turned every plugin
+            # problem into the same content-free line.
             host_fail "could not install ${p}@claude-plugins-official"
+            printf '%s\n' "$_pi_out" | tail -5 | while IFS= read -r _l; do host_note "    $_l"; done
         fi
     done
 else
