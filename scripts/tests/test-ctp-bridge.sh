@@ -122,6 +122,12 @@ run_wrap "" -- host deploy trainbox_t05;  check "wrong-team deploy refused (3)" 
 run_wrap "" -- host deploy otherbox_t02;  check "wrong-box deploy refused (3)" "$RC" 3
 MOCK_VAULT_LOCKED=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" bash "$ROOT/scripts/ctp-bridge.sh" host deploy trainbox_t02 </dev/null >/dev/null 2>&1
 check "vault locked refused (4)" "$?" 4
+MOCK_VAULT_LOCKED=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" bash "$ROOT/scripts/ctp-bridge.sh" host list trainbox_t02 </dev/null >/dev/null 2>&1
+check "vault locked refuses a read too (4)" "$?" 4
+# update-inventory (inventory class) does NOT gate on vault -> passes the vault
+# check and refuses later at the confirm gate (no token, non-interactive) = 5
+MOCK_VAULT_LOCKED=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" bash "$ROOT/scripts/ctp-bridge.sh" project update-inventory </dev/null >/dev/null 2>&1
+check "update-inventory skips the vault check (5, not 4)" "$?" 5
 MOCK_BUSY=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" bash "$ROOT/scripts/ctp-bridge.sh" host deploy trainbox_t02 </dev/null >/dev/null 2>&1
 check "busy refused (4)" "$?" 4
 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$TMP/nope.conf" bash "$ROOT/scripts/ctp-bridge.sh" host deploy trainbox_t02 </dev/null >/dev/null 2>&1
@@ -190,9 +196,10 @@ if command -v script >/dev/null 2>&1; then
         ok "confirm 'y' runs the exact positional argv"
     else bad "confirm 'y' runs the exact positional argv ($(grep RAN: "$TMP/run.out" | head -1))"; fi
     # the exec activates the venv (ansible-playbook lives there), not just autocomplete
-    if grep -q '.venv/bin/activate' "$TMP/run.out" && grep -q '.local/bin/env' "$TMP/run.out"; then
-        ok "exec sources the venv + env prelude (ansible-playbook resolvable)"
-    else bad "exec sources the venv + env prelude"; fi
+    if grep -q '.venv/bin/activate' "$TMP/run.out" && grep -q '.local/bin/env' "$TMP/run.out" \
+       && grep -q 'ANSIBLE_VAULT_PASSWORD_FILE' "$TMP/run.out"; then
+        ok "exec sources venv + env + vault-password-file prelude"
+    else bad "exec sources venv + env + vault-password-file prelude"; fi
     # runs in the project dir (config CTP_PROJECT_DIR), not the container WORKDIR
     if grep -Fq 'WDIR: /srv/inventories/dcm' "$TMP/run.out"; then
         ok "exec sets -w to the project dir (CTP_PROJECT_DIR)"

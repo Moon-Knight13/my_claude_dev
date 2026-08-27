@@ -91,18 +91,22 @@ WORKDIR="$(_resolve_workdir)" || {
 }
 
 # --- preconditions, by class -------------------------------------------------
-# Container must be up for anything. A mutating run additionally needs an unlocked
-# vault and no run already in flight; a read/inventory verb does not gate on those.
+# Container must be up for anything. Reads AND deploys need an unlocked vault:
+# `host list` decrypts the inventory, so a locked vault gives the same 20-line
+# ansible wall a deploy would — the clean one-line check belongs to both. Only a
+# mutating run gates on "no run already in flight".
 if ! docker inspect -f '{{.State.Running}}' "$CONTAINER" >/dev/null 2>&1; then
     host_warn "container '$CONTAINER' is not running — run 'make start' first"
     exit 4
 fi
-if [[ "$CLASS" == "mutating" ]]; then
+if [[ "$CLASS" != "inventory" ]]; then
     # Vault must be unlocked. Check EXISTENCE ONLY — never read the file's contents.
     if ! docker exec "$CONTAINER" test -e /var/tmp/vlt_pf 2>/dev/null; then
         host_warn "vault is locked (no /var/tmp/vlt_pf) — run 'make start' and complete first-run config"
         exit 4
     fi
+fi
+if [[ "$CLASS" == "mutating" ]]; then
     if docker exec "$CONTAINER" pgrep -f 'ansible-playbook|ctp ' >/dev/null 2>&1; then
         host_warn "a run is already in progress in '$CONTAINER' — refusing to start a second"
         exit 4
@@ -172,6 +176,7 @@ docker exec -i -w "$WORKDIR" "$CONTAINER" zsh -c '
     _src() { [ -f "$1" ] && . "$1" >/dev/null 2>&1; }
     _src "$HOME/.local/bin/env"
     for _v in "$HOME"/*/.venv/bin/activate(N) "$HOME"/.venv/bin/activate(N); do _src "$_v" && break; done
+    [ -f "$HOME/.vault/unlock-vault.sh" ] && export ANSIBLE_VAULT_PASSWORD_FILE="$HOME/.vault/unlock-vault.sh"
     _src "$HOME/autocomplete.zsh" || _src /home/builder/autocomplete.zsh
     ctp "$@"' _ "$@"
 run_rc=$?

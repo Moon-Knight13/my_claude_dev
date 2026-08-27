@@ -53,10 +53,28 @@ route around. Do not pass `--yes` or set `ASSUME_YES`; the gate refuses them.
    deploy because it reapplies the role only.
 7. Repeat 6. Reach for a full `deploy` again only if the base box itself is wrong.
 
+## The deployment model — read a failure by its stage
+
+A ctp deploy runs a fixed 12-step tree (per the vendor docs). Knowing which step
+failed tells you what owns the failure and whether a `deploy-role` re-run helps:
+
+1. variable loading · 2. deploy_vars (catapult defaults) · 3. machine_operations
+(VM create on vSphere/Providentia) · 4. configure_networking · 5. connection (SSH
+setup) · 6. accounts · 7. os_configuration · 8. customization_pre_vm_role ·
+9. **customization** (the app/role config — what you iterate) · 10.
+customization_post_vm_role · 11. finalize (test/cleanup) · 12. get_ip.
+
+Steps 1–8 are catapult building the box; step 9 is *your* role content; 10–12
+finish it. A failure in 1–7 is usually infrastructure (VM, network, SSH) — not
+your playbook, and not something to fix by editing the role. A failure at step 9
+is your content: fix the failing task and `deploy-role` again. `deploy-role`
+reapplies the role (roughly step 9) without rebuilding the box, so it only helps
+for step-9 failures.
+
 ## Reading a result instead of guessing
 
-The bridge returns the **real ctp exit status**. On failure, read the streamed
-output for which stage failed before changing anything:
+The bridge returns the **real ctp exit status**. On failure, map the output to the
+step above before changing anything:
 
 - **Connectivity / SSH stage** — the box is unreachable or its IP clashed. This
   is not a playbook bug; a full redeploy of the box is the vendor's remedy for a
