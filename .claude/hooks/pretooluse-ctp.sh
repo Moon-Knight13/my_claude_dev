@@ -86,6 +86,9 @@ _seg_cmdword() { # prints the effective first word of a segment (env prefixes st
 # _base <path> — basename without matching a mere substring: test-ctp-bridge.sh
 # must NOT read as ctp-bridge.sh.
 _base() { local p="$1"; printf '%s' "${p##*/}"; }
+# _is_wrapper_name <path> — the wrapper is `ctp-bridge` when installed on PATH and
+# `ctp-bridge.sh` in the repo/tests. Match both; NOT test-ctp-bridge.sh.
+_is_wrapper_name() { case "$(_base "$1")" in ctp-bridge|ctp-bridge.sh) return 0 ;; *) return 1 ;; esac; }
 
 # Replace segment separators with newlines, then examine each segment. A wrapper
 # INVOCATION (ctp-bridge.sh actually executed, directly or via an interpreter) is
@@ -100,18 +103,18 @@ while IFS= read -r _seg; do
 
     # Is the wrapper the executed command in this segment?
     _wrapper_args=()
-    if [[ "$(_base "$_cw")" == "ctp-bridge.sh" ]]; then
+    if _is_wrapper_name "$_cw"; then
         _seen=0
         for _tok in "${_sw[@]}"; do
             if [[ "$_seen" == 1 ]]; then _wrapper_args+=("$_tok"); continue; fi
-            [[ "$(_base "$_tok")" == "ctp-bridge.sh" ]] && _seen=1
+            _is_wrapper_name "$_tok" && _seen=1
         done
         _is_wrapper=1
     elif [[ "$_cw" =~ ^(bash|sh|zsh|dash)$ ]]; then
         _is_wrapper=0; _seen=0
         for _tok in "${_sw[@]}"; do
             if [[ "$_seen" == 1 ]]; then _wrapper_args+=("$_tok"); continue; fi
-            if [[ "$(_base "$_tok")" == "ctp-bridge.sh" ]]; then _seen=1; _is_wrapper=1; fi
+            if _is_wrapper_name "$_tok"; then _seen=1; _is_wrapper=1; fi
         done
     else
         _is_wrapper=0

@@ -58,11 +58,24 @@ host_info "hook    -> $HOOK"
 
 # --- 2. seed config (never overwrite an existing target) ---------------------
 if [[ -f "$CONF" ]]; then
-    host_note "kept existing $CONF (your CTP_ALLOWED_TARGET is preserved)"
+    host_note "kept existing $CONF (your settings are preserved)"
+    # Migrate: a config seeded before a key existed would silently lack it, and a
+    # missing required key (e.g. CTP_ALLOWED_TEAM) reads as "configured" while the
+    # gate is actually unset. Append any example key the config does not have, at
+    # its example (fail-closed) value, so it is visible to fill in.
+    _added=0
+    while IFS= read -r _k; do
+        if ! grep -q "^${_k}=" "$CONF"; then
+            grep "^${_k}=" "$SRC_CONF_EXAMPLE" >> "$CONF"
+            host_info "added missing key ${_k} to $CONF (set its value)"
+            _added=1
+        fi
+    done < <(grep -oE '^[A-Z_]+=' "$SRC_CONF_EXAMPLE" | sed 's/=$//')
+    [[ "$_added" == 0 ]] && host_note "config has all current keys"
 else
     install -m 0600 "$SRC_CONF_EXAMPLE" "$CONF"
-    host_info "seeded $CONF — set CTP_ALLOWED_TARGET to your box before deploying"
-    host_note "until it is set, every deploy is refused (safe default)."
+    host_info "seeded $CONF — set CTP_ALLOWED_TARGET and CTP_ALLOWED_TEAM before deploying"
+    host_note "until they are set, every deploy is refused (safe default)."
 fi
 
 # --- 3. merge the PreToolUse hook into user settings (no clobber) ------------

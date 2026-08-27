@@ -165,6 +165,11 @@ check "Bash cat ssh key (~) -> deny"      "$(decide "$(bash_json 'cat ~/.ssh/id_
 check "Bash docker exec bypass -> deny"   "$(decide "$(bash_json 'docker exec catapult-tester zsh -c ctp')")" deny
 check "Bash bare ctp -> deny"             "$(decide "$(bash_json 'ctp host deploy trainbox')")"      deny
 check "Bash make start -> deny"           "$(decide "$(bash_json 'make start')")"                    deny
+# the INSTALLED name is `ctp-bridge` (no .sh); the hook must recognise it too
+check "installed name deploy allowed -> ask"  "$(decide "$(bash_json "ctp-bridge host deploy trainbox_t02")")" ask
+check "installed name wrong team -> deny"      "$(decide "$(bash_json "ctp-bridge host deploy trainbox_t05")")" deny
+check "installed name abs path -> ask"         "$(decide "$(bash_json "/home/u/.local/bin/ctp-bridge host deploy trainbox_t02")")" ask
+check "installed name update-inventory -> ask" "$(decide "$(bash_json "ctp-bridge project update-inventory")")" ask
 check "Bash wrapper allowed -> ask"       "$(decide "$(bash_json "bash $ROOT/scripts/ctp-bridge.sh host deploy trainbox_t02")")" ask
 check "Bash wrapper wrong team -> deny"   "$(decide "$(bash_json "bash $ROOT/scripts/ctp-bridge.sh host deploy trainbox_t05")")" deny
 check "Bash wrapper update-inventory -> ask" "$(decide "$(bash_json "bash $ROOT/scripts/ctp-bridge.sh project update-inventory")")" ask

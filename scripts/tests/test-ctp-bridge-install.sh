@@ -39,10 +39,12 @@ check "kept pre-existing hook"        "$(jq '[.hooks.PreToolUse[] | select(.hook
 HOOK_ABS="$HOME_DIR/.claude/hooks/pretooluse-ctp.sh" \
   check "added our hook (absolute path)" "$(jq --arg h "$HOME_DIR/.claude/hooks/pretooluse-ctp.sh" '[.hooks.PreToolUse[] | select(.hooks[].command==$h)] | length' "$S")" 1
 
-# preserve an operator-set target across re-install
-echo 'CTP_ALLOWED_TARGET=mybox' > "$HOME_DIR/.ctp-bridge.conf"
+# preserve an operator-set target across re-install, and MIGRATE a config that
+# predates a required key: CTP_ALLOWED_TEAM must be appended, not left missing.
+printf 'CTP_ALLOWED_TARGET=mybox\n' > "$HOME_DIR/.ctp-bridge.conf"   # old-format conf
 run_install
 check "config preserved on re-install" "$(grep -c '^CTP_ALLOWED_TARGET=mybox' "$HOME_DIR/.ctp-bridge.conf")" 1
+check "missing key migrated in (CTP_ALLOWED_TEAM)" "$(grep -c '^CTP_ALLOWED_TEAM=' "$HOME_DIR/.ctp-bridge.conf")" 1
 # idempotent: still exactly one of our hook entries
 check "hook entry not duplicated" "$(jq --arg h "$HOME_DIR/.claude/hooks/pretooluse-ctp.sh" '[.hooks.PreToolUse[] | select(.hooks[].command==$h)] | length' "$S")" 1
 
@@ -57,6 +59,13 @@ DEC="$(printf '{"tool_name":"Bash","tool_input":{"command":"ctp host deploy mybo
     | HOME="$HOME_DIR" bash "$HOME_DIR/.claude/hooks/pretooluse-ctp.sh" 2>/dev/null \
     | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)"
 check "installed hook denies bare ctp (guard resolved from install)" "$DEC" deny
+
+# the installed hook recognises the INSTALLED wrapper name `ctp-bridge` (no .sh),
+# not just the repo filename — the real-world gap. update-inventory needs no team.
+DEC2="$(printf '{"tool_name":"Bash","tool_input":{"command":"ctp-bridge project update-inventory"}}' \
+    | HOME="$HOME_DIR" bash "$HOME_DIR/.claude/hooks/pretooluse-ctp.sh" 2>/dev/null \
+    | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)"
+check "installed hook asks for the installed 'ctp-bridge' name" "$DEC2" ask
 
 echo ""
 echo "Result: $PASS passed, $FAIL failed"
