@@ -69,10 +69,13 @@ if [[ "$FORCE" != "1" && -f "$MARKER" ]] && grep -q "^version=${PROVISION_VERSIO
 fi
 
 # --- locate the claude CLI (bundled with the VSCode extension if not on PATH) --
+# Both searches use CLAUDE_TARGET_HOME, not $HOME: under sudo the latter is
+# /root, where a developer's VSCode server has never been installed. That is why
+# provisioning reported "no 'code' shim found" on a box that plainly had one.
 find_claude() {
     if command -v claude >/dev/null 2>&1; then command -v claude; return 0; fi
     local c="" cand
-    for cand in "$HOME"/.vscode-server/extensions/anthropic.claude-code-*/resources/native-binary/claude; do
+    for cand in "$CLAUDE_TARGET_HOME"/.vscode-server/extensions/anthropic.claude-code-*/resources/native-binary/claude; do
         [[ -x "$cand" ]] && c="$cand"
     done
     [[ -n "$c" ]] && { echo "$c"; return 0; }
@@ -83,20 +86,26 @@ find_claude() {
 find_code() {
     if command -v code >/dev/null 2>&1; then command -v code; return 0; fi
     local c="" cand
-    for cand in "$HOME"/.vscode-server/bin/*/bin/remote-cli/code; do
+    for cand in "$CLAUDE_TARGET_HOME"/.vscode-server/bin/*/bin/remote-cli/code; do
         [[ -x "$cand" ]] && c="$cand"
     done
     [[ -n "$c" ]] && { echo "$c"; return 0; }
     return 1
 }
 
+host_step "Provisioning for ${CLAUDE_TARGET_USER} (home: ${CLAUDE_TARGET_HOME})"
+if [[ "$CLAUDE_TARGET_HOME" == "/root" ]]; then
+    host_warn "target home is /root — user-level steps would provision root, not a developer."
+    host_note "run with sudo from the developer's own shell so SUDO_USER is set."
+fi
+
 # --- 1. VSCode server extensions ---------------------------------------------
 host_step "[1/7] VSCode server extensions"
 if CODE_BIN="$(find_code)"; then
     for ext in anthropic.claude-code redhat.ansible; do
-        if "$CODE_BIN" --list-extensions 2>/dev/null | grep -qix "$ext"; then
+        if run_as_target "$CODE_BIN" --list-extensions 2>/dev/null | grep -qix "$ext"; then
             host_info "$ext already installed"
-        elif "$CODE_BIN" --install-extension "$ext" >/dev/null 2>&1; then
+        elif run_as_target "$CODE_BIN" --install-extension "$ext" >/dev/null 2>&1; then
             host_info "installed $ext"
         else
             host_warn "could not install $ext (install from the Extensions view)"
@@ -108,24 +117,24 @@ fi
 
 # --- 2. Ansible-lint + Docker ------------------------------------------------
 host_step "[2/7] Ansible-lint + Docker"
-bash "$_SCRIPT_DIR/setup-ansible-lint.sh" ${ASSUME_YES:+--yes} \
+run_as_target bash "$_SCRIPT_DIR/setup-ansible-lint.sh" ${ASSUME_YES:+--yes} \
     || host_fail "setup-ansible-lint.sh reported an issue"
 
 # --- 3. Caveman + Claude plugins ---------------------------------------------
 host_step "[3/7] Caveman + Claude plugins"
 if [[ -f "$_REPO_ROOT/scripts/install-caveman.sh" ]]; then
-    bash "$_REPO_ROOT/scripts/install-caveman.sh" || host_fail "install-caveman.sh failed"
+    run_as_target bash "$_REPO_ROOT/scripts/install-caveman.sh" || host_fail "install-caveman.sh failed"
 else
     host_note "scripts/install-caveman.sh not found — skipping caveman"
 fi
 if [[ -f "$_REPO_ROOT/scripts/install-claude-plugins.sh" ]]; then
-    bash "$_REPO_ROOT/scripts/install-claude-plugins.sh" || host_fail "install-claude-plugins.sh failed"
+    run_as_target bash "$_REPO_ROOT/scripts/install-claude-plugins.sh" || host_fail "install-claude-plugins.sh failed"
 fi
 
 if CLAUDE_BIN="$(find_claude)"; then
-    _plugins="$("$CLAUDE_BIN" plugin list 2>/dev/null || echo "")"
+    _plugins="$(run_as_target "$CLAUDE_BIN" plugin list 2>/dev/null || echo "")"
     if ! echo "$_plugins" | grep -q "claude-plugins-official"; then
-        if "$CLAUDE_BIN" plugin marketplace add claude-plugins-official >/dev/null 2>&1; then
+        if run_as_target "$CLAUDE_BIN" plugin marketplace add claude-plugins-official >/dev/null 2>&1; then
             host_info "added marketplace claude-plugins-official"
         else
             host_note "marketplace add reported already-present / failed (continuing)"
@@ -134,7 +143,7 @@ if CLAUDE_BIN="$(find_claude)"; then
     for p in skill-creator gitlab; do
         if echo "$_plugins" | grep -q "${p}@claude-plugins-official"; then
             host_info "${p}@claude-plugins-official already installed"
-        elif "$CLAUDE_BIN" plugin install "${p}@claude-plugins-official" >/dev/null 2>&1; then
+        elif run_as_target "$CLAUDE_BIN" plugin install "${p}@claude-plugins-official" >/dev/null 2>&1; then
             host_info "installed ${p}@claude-plugins-official"
         else
             host_fail "could not install ${p}@claude-plugins-official"
@@ -161,15 +170,8 @@ bash "$_SCRIPT_DIR/setup-killswitch.sh" ${ASSUME_YES:+--yes} \
 # perfectly until someone reads the attribution. Pass --git-identity-global only
 # on a box genuinely dedicated to you.
 host_step "[5/7] Git identity"
-_as_user() { # run as the invoking user, not root, so files stay theirs
-    if [[ -n "${SUDO_USER:-}" && "$(id -u)" -eq 0 ]]; then
-        sudo -u "$SUDO_USER" "$@"
-    else
-        "$@"
-    fi
-}
-_g_name="$(_as_user git config --global user.name 2>/dev/null || true)"
-_g_mail="$(_as_user git config --global user.email 2>/dev/null || true)"
+_g_name="$(run_as_target git config --global user.name 2>/dev/null || true)"
+_g_mail="$(run_as_target git config --global user.email 2>/dev/null || true)"
 if [[ -n "$_g_name" || -n "$_g_mail" ]]; then
     host_info "global git identity already set: ${_g_name:-<unset>} <${_g_mail:-unset}>"
     host_warn "this account is SHARED — that identity may belong to a colleague."
@@ -181,16 +183,16 @@ if [[ -n "${GIT_USER_NAME:-}" ]]; then
 fi
 if [[ -n "${GIT_USER_NAME:-}" && -n "${GIT_USER_EMAIL:-}" ]]; then
     # Repo-local first: always safe on a shared account.
-    _as_user git -C "$_REPO_ROOT" config user.name "$GIT_USER_NAME" \
-        && _as_user git -C "$_REPO_ROOT" config user.email "$GIT_USER_EMAIL" \
+    run_as_target git -C "$_REPO_ROOT" config user.name "$GIT_USER_NAME" \
+        && run_as_target git -C "$_REPO_ROOT" config user.email "$GIT_USER_EMAIL" \
         && host_info "set git identity for this repository checkout"
     if [[ "$GIT_IDENTITY_GLOBAL" == "1" ]]; then
         if [[ -n "$_g_name" || -n "$_g_mail" ]]; then
             host_warn "global identity already set — NOT overwriting it"
             host_note "clear it first if you meant to replace it: git config --global --unset user.name"
         else
-            _as_user git config --global user.name "$GIT_USER_NAME"
-            _as_user git config --global user.email "$GIT_USER_EMAIL"
+            run_as_target git config --global user.name "$GIT_USER_NAME"
+            run_as_target git config --global user.email "$GIT_USER_EMAIL"
             host_info "set GLOBAL git identity (shared account — every repo without an override uses it)"
         fi
     fi
@@ -220,7 +222,7 @@ if [[ -z "$VERIFY_CMD" ]]; then
     host_note "recorded in the marker as tool_verified=unconfigured."
 else
     host_info "running: $VERIFY_CMD"
-    if _verify_out="$(_as_user bash -lc "$VERIFY_CMD" 2>&1)"; then
+    if _verify_out="$(run_as_target bash -lc "$VERIFY_CMD" 2>&1)"; then
         TOOL_VERIFIED="yes"
         host_info "build tooling responded ($(printf '%s' "$_verify_out" | wc -l) line(s))"
     else
@@ -251,9 +253,16 @@ else
 fi
 if [[ -n "${SSH_AUTH_SOCK:-}" ]] && ssh-add -l >/dev/null 2>&1; then
     host_info "forwarded SSH agent reachable ($(ssh-add -l 2>/dev/null | wc -l) key(s) visible)"
+elif [[ -z "${SSH_AUTH_SOCK:-}" && "$(id -u)" -eq 0 ]]; then
+    # sudo strips SSH_AUTH_SOCK from the environment. Reporting that as "no
+    # forwarded key" sends the developer to debug forwarding that is fine.
+    host_note "SSH_AUTH_SOCK is unset because sudo dropped it — this says nothing"
+    host_note "about forwarding. Check from your own shell:  ssh-add -l"
 else
     host_note "no forwarded key visible in THIS shell. Verify from your interactive"
     host_note "VSCode session (useExecServer off + reconnected):  ssh-add -l"
+    host_note "after a reconnect the socket can be stale, not missing:"
+    host_note "    eval \"\$(bash scripts/host/fix-agent-sock.sh)\""
 fi
 
 # A failed step must NOT be recorded as a completed provision. Writing the

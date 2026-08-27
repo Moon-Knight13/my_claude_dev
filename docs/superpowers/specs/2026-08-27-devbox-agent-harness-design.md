@@ -632,6 +632,14 @@ repo-local override. That is the SSH identity failure of F7 in a different
 place — it works perfectly until someone reads the attribution.
 `--git-identity-global` opts in, and still refuses to overwrite.
 
+**Provisioning ran user-level steps as root.** Found by running the provisioner
+on a real box: `sudo` makes `$HOME` `/root`, so steps 1-3 searched, wrote and
+installed into root's home instead of the developer's. Not introduced by this
+work — it has been true of every provisioning run — but it is the same family as
+the marker problem: the run reports doing something it did not do. Fixed with
+`CLAUDE_TARGET_USER` / `CLAUDE_TARGET_HOME` and `run_as_target` in
+`host-common.sh`. Recorded in `docs/PROJECT.md`.
+
 **The failure gate had a hole.** It sat before the last two steps, so a failure
 in either could not have stopped the completion marker. Moved to after every
 step; `scripts/tests/test-provision.sh` asserts it.

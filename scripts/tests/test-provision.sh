@@ -177,6 +177,32 @@ else
     bad "--git-identity-global overwrite guard" "global='$_global_name'"
 fi
 
+# ── 7. User-level work targets the developer, not root ──────────────────────
+# Under sudo, $HOME is /root. Steps 1-3 do user-level work — VSCode extensions,
+# the Machine settings.json, caveman, the plugin set — and using $HOME there
+# provisioned root instead of the developer, silently, on every box.
+SB="$TMP/target"; make_sandbox "$SB"; mkdir -p "$SB/home"
+rc="$(provision "$SB" --verify-cmd 'true')"
+if grep -q "Provisioning for " "$TMP/out"; then
+    ok "run states which user it is provisioning for"
+else
+    bad "target user announced" "no 'Provisioning for' line in output"
+fi
+
+SB="$TMP/target-root"; make_sandbox "$SB"; mkdir -p "$SB/home"
+(
+    cd "$SB" || exit 0
+    env PATH="$SHIMS:$PATH" DEVBOX_MARKER_DIR="$SB/marker" HOME="$SB/home" \
+        CLAUDE_TARGET_USER=root CLAUDE_TARGET_HOME=/root \
+        GIT_CONFIG_GLOBAL="$SB/home/.gitconfig" \
+        bash scripts/host/provision-remote-box.sh --yes --verify-cmd 'true'
+) > "$TMP/out" 2>&1
+if grep -q "target home is /root" "$TMP/out"; then
+    ok "provisioning root instead of a developer is called out"
+else
+    bad "root target warning" "no warning when CLAUDE_TARGET_HOME=/root"
+fi
+
 echo
 echo "== $pass passed, $fail failed =="
 (( fail == 0 ))

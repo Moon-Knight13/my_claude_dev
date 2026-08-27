@@ -127,6 +127,32 @@ loader, `check-day0.sh` fails on "`.env` values reach the routing scripts"
 rather than going quiet — but the fix belongs upstream in the template, since
 the template ships both the `.env.example` and the scripts that ignored it.
 
+### sudo is for one step, not for the whole run
+
+`provision-remote-box.sh` is invoked with `sudo` because the killswitch needs
+root. Everything else it does is user-level — VSCode server extensions, the
+Machine `settings.json`, caveman, the Claude plugin set, git config, the docker
+group — and under `sudo`, `$HOME` is `/root`.
+
+Using it provisioned root instead of the developer, on every box, silently:
+extensions reported "not found" because the search looked in
+`/root/.vscode-server`; ansible settings were merged into
+`/root/.config/Code/User/settings.json`, a file no VSCode session reads; plugins
+would have installed into `/root/.claude`; and the docker-group step offered to
+add *root* to the docker group, which is meaningless.
+
+`scripts/host/lib/host-common.sh` resolves `CLAUDE_TARGET_USER` and
+`CLAUDE_TARGET_HOME` — who the work is *for*, whether or not the script was
+elevated — and `run_as_target` runs a command as them with the right `HOME`.
+Any user-level step added to a host script must go through it. The run announces
+the target user, and warns when that target is root.
+
+Two related traps in the same family: `code` is not on `PATH` on a Remote-SSH
+box (the shim lives under the VSCode server directory in the developer's home,
+so `command -v code` alone reports no CLI on boxes that have one), and `sudo`
+strips `SSH_AUTH_SOCK`, so an agent check run as root says nothing about whether
+forwarding works.
+
 ### Two traps in the local-model config
 
 Both were live for the whole life of the routing subsystem and neither failed
