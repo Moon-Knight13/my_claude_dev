@@ -255,6 +255,18 @@ That wrapper is the **only** supported path to run `ctp`. A `PreToolUse` hook
 (`.claude/hooks/pretooluse-ctp.sh`) denies the two ways around it — `docker exec`
 into the container, and a bare `ctp` — so the gates cannot be skipped.
 
+**Installed at user scope, not per-repo.** The work does not happen in this repo —
+it happens in the range checkout (e.g. `~/catapult/inventories/dcm`), and a hook
+registered only in this repo's `.claude/` would not load for a session started
+there. So `scripts/install-ctp-bridge.sh` (run by provisioning, step 8, or
+standalone) installs the wrapper to `~/.local/bin/ctp-bridge`, the guard to
+`~/.local/lib/ctp-bridge/`, the hook into `~/.claude/`, and seeds
+`~/.ctp-bridge.conf` — so the gate is present in **every** session on the account,
+whatever the CWD, and **nothing** is written into the range checkout (a tree you
+push). Run it as `ctp-bridge host deploy <box>` from the range checkout. The gate
+is inert until `CTP_ALLOWED_TARGET` is set — a provisioned box refuses every deploy
+until configured, which is the safe direction.
+
 The gates that matter, all in code on the parsed argv (never string-matched), and
 shared between wrapper and hook via `scripts/lib/ctp-guard.sh` so the two cannot
 drift:

@@ -14,9 +14,12 @@ box, that is a config change the owner makes — not something to work around.
 
 ## The only way to run ctp
 
-Run **`scripts/ctp-bridge.sh host <verb> <box>`**. Never `docker exec` into the
-container and never a bare `ctp` — a `PreToolUse` hook denies both, because the
-bridge is where every gate lives. Reachable verbs in this slice:
+Run **`ctp-bridge host <verb> <box>`** — the wrapper installed at user scope on
+the box (`~/.local/bin/ctp-bridge`; `scripts/ctp-bridge.sh` in this repo before
+install). It works from anywhere, including the range checkout where the work
+happens. Never `docker exec` into the container and never a bare `ctp` — a
+`PreToolUse` hook (installed into `~/.claude/`) denies both, because the bridge is
+where every gate lives. Reachable verbs in this slice:
 
 - `host deploy <box>` — full deploy of the box.
 - `host deploy-role <box>` — redeploy just the role; the quicker iteration path

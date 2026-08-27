@@ -580,6 +580,7 @@ than by silently editing the section they contradict.
 | B provisioning honesty | done, verified on a live box | `provision-remote-box.sh`, `test-provision.sh` |
 | F3 vault first-run next-step notice | done | `provision-remote-box.sh` closing notes |
 | C tool bridge (vignette slice) | done, tests green; live run held for owner | `ctp-bridge.sh`, `lib/ctp-guard.sh`, `.claude/hooks/pretooluse-ctp.sh`, `.claude/skills/ctp-deploy/`, `test-ctp-bridge.sh` |
+| C user-scope install (gate present in range-checkout sessions) | done | `install-ctp-bridge.sh`, provisioner step 8, `test-ctp-bridge-install.sh` |
 | D | not started (blocked on #37) | — |
 
 ### Deviations
@@ -598,6 +599,18 @@ boundary outside caller control — is preserved. `vars` was additionally droppe
 from the reachable set because its output would stream box detail into the
 transcript; the shared-box transcript exposure drove that. Reads become an
 evidence-driven addition later, if justified, with `vars` output redacted.
+
+**C is delivered at user scope on the box, not as repo-local config.** The design
+placed the hook in this repo's `.claude/`. But the work runs from the range
+checkout (`~/catapult/inventories/dcm`), and a repo-local hook does not load for a
+session started there — so the gate would be absent exactly where it is needed.
+`scripts/install-ctp-bridge.sh` therefore installs the wrapper, guard, hook and
+config at user scope (`~/.local`, `~/.claude`, `~/.ctp-bridge.conf`), and
+provisioning runs it as step 8. The wrapper and hook resolve their guard lib and
+config from fixed locations, so they are CWD-independent. Nothing is written into
+the range checkout, which is a tree the developer pushes. This is the C-scoped
+slice of what component D would generalise; D proper (the portable contract) is
+still blocked on #37.
 
 **The confirmation gate is two mechanisms, split by caller.** The design spoke of
 a single confirm gate. In practice the agent calls through the Bash tool, whose

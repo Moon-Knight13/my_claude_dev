@@ -26,6 +26,8 @@
 #   6. Build-tooling verification (only when you supply the command; the
 #      template cannot know it, and this repository is public)
 #   7. SSH agent-forwarding sanity check (downstream tooling needs the forwarded key)
+#   8. ctp tool bridge installed at user scope (gate present in every session,
+#      including those started from the range checkout; inert until configured)
 #
 # Reconnect-safe: a completion marker at /var/lib/claude-devbox/provisioned lets
 # a re-run on the SAME box short-circuit ("already provisioned"). The marker
@@ -39,7 +41,7 @@ _REPO_ROOT="$(cd "$_SCRIPT_DIR/../.." && pwd)"
 source "$_SCRIPT_DIR/lib/host-common.sh"
 
 # Bump when the provisioning steps change so existing boxes re-provision.
-PROVISION_VERSION=4
+PROVISION_VERSION=5
 # Overridable so scripts/tests/test-provision.sh can assert marker behaviour
 # without writing under /var on the machine running the tests.
 MARKER_DIR="${DEVBOX_MARKER_DIR:-/var/lib/claude-devbox}"
@@ -102,7 +104,7 @@ if [[ "$CLAUDE_TARGET_HOME" == "/root" ]]; then
 fi
 
 # --- 1. VSCode server extensions ---------------------------------------------
-host_step "[1/7] VSCode server extensions + claude on PATH"
+host_step "[1/8] VSCode server extensions + claude on PATH"
 CLAUDE_EXT_JUST_INSTALLED=0
 if CODE_BIN="$(find_code)"; then
     for ext in anthropic.claude-code redhat.ansible; do
@@ -167,12 +169,12 @@ WRAP
 fi
 
 # --- 2. Ansible-lint + Docker ------------------------------------------------
-host_step "[2/7] Ansible-lint + Docker"
+host_step "[2/8] Ansible-lint + Docker"
 run_as_target bash "$_SCRIPT_DIR/setup-ansible-lint.sh" ${ASSUME_YES:+--yes} \
     || host_fail "setup-ansible-lint.sh reported an issue"
 
 # --- 3. Caveman + Claude plugins ---------------------------------------------
-host_step "[3/7] Caveman + Claude plugins"
+host_step "[3/8] Caveman + Claude plugins"
 if [[ -f "$_REPO_ROOT/scripts/install-caveman.sh" ]]; then
     run_as_target bash "$_REPO_ROOT/scripts/install-caveman.sh" || host_fail "install-caveman.sh failed"
 else
@@ -230,7 +232,7 @@ else
 fi
 
 # --- 4. Killswitch -----------------------------------------------------------
-host_step "[4/7] Killswitch"
+host_step "[4/8] Killswitch"
 bash "$_SCRIPT_DIR/setup-killswitch.sh" ${ASSUME_YES:+--yes} \
     || host_fail "setup-killswitch.sh reported an issue"
 
@@ -245,7 +247,7 @@ bash "$_SCRIPT_DIR/setup-killswitch.sh" ${ASSUME_YES:+--yes} \
 # as the SSH one this repository just fixed — a wrong identity that works
 # perfectly until someone reads the attribution. Pass --git-identity-global only
 # on a box genuinely dedicated to you.
-host_step "[5/7] Git identity"
+host_step "[5/8] Git identity"
 _g_name="$(run_as_target git config --global user.name 2>/dev/null || true)"
 _g_mail="$(run_as_target git config --global user.email 2>/dev/null || true)"
 if [[ -n "$_g_name" || -n "$_g_mail" ]]; then
@@ -289,7 +291,7 @@ fi
 # The command is site-specific and this repository is public, so it is supplied
 # at run time. When it is not supplied we do not pretend: the step says so and
 # the marker records tool_verified=unconfigured.
-host_step "[6/7] Build tooling"
+host_step "[6/8] Build tooling"
 TOOL_VERIFIED="unconfigured"
 if [[ -z "$VERIFY_CMD" ]]; then
     host_note "no --verify-cmd given — this run CANNOT confirm the build tooling works."
@@ -317,7 +319,7 @@ fi
 # Downstream build tooling authenticates with the developer's FORWARDED
 # SSH key. Verify the box permits forwarding and (best-effort) that a forwarded
 # key is actually reachable. Read-only: we warn, we do NOT edit sshd here.
-host_step "[7/7] SSH agent forwarding"
+host_step "[7/8] SSH agent forwarding"
 _aaf="$(_sudo sshd -T 2>/dev/null | awk '/^allowagentforwarding/ {print $2}')"
 if [[ "$_aaf" == "no" ]]; then
     host_warn "sshd has 'AllowAgentForwarding no' — agent forwarding is BLOCKED."
@@ -339,6 +341,23 @@ else
     host_note "VSCode session (useExecServer off + reconnected):  ssh-add -l"
     host_note "after a reconnect the socket can be stale, not missing:"
     host_note "    eval \"\$(bash scripts/host/fix-agent-sock.sh)\""
+fi
+
+# --- 8. ctp tool bridge (user-scope gate) ------------------------------------
+# Install the gate at USER scope so it is present in Claude sessions started from
+# the range checkout, not just this repo. Runs as the developer (run_as_target)
+# so it lands in their home, never root's. Inert until they set CTP_ALLOWED_TARGET
+# — a provisioned box refuses every deploy until configured, which is the safe
+# direction.
+host_step "[8/8] ctp tool bridge (user-scope gate)"
+if command -v jq >/dev/null 2>&1; then
+    if run_as_target bash "$_REPO_ROOT/scripts/install-ctp-bridge.sh"; then
+        host_info "ctp bridge installed for ${CLAUDE_TARGET_USER} (set CTP_ALLOWED_TARGET in ~/.ctp-bridge.conf)"
+    else
+        host_fail "ctp bridge install failed"
+    fi
+else
+    host_fail "jq not installed — ctp bridge gate cannot be installed (its hook needs jq)"
 fi
 
 # A failed step must NOT be recorded as a completed provision. Writing the

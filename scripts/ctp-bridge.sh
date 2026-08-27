@@ -10,21 +10,43 @@
 # protections earn an exemption. This wrapper ships confirm-on-everything with no
 # allow-list to relax; an empty allow-list is the finished state, not a stub.
 #
-# Usage:
-#   scripts/ctp-bridge.sh host deploy <box>
-#   scripts/ctp-bridge.sh host deploy-role <box>
+# This script is CWD- and location-independent on purpose: it is installed at
+# user scope on the box (see scripts/install-ctp-bridge.sh) and invoked as
+# `ctp-bridge` from wherever the work happens — e.g. the range checkout, not this
+# repo. It resolves its guard lib and config from fixed locations, never relative
+# to a caller's directory.
+#
+# Usage (from anywhere):
+#   ctp-bridge host deploy <box>
+#   ctp-bridge host deploy-role <box>
 # Exit: the real ctp exit status on a run; non-zero with a reason on any refusal.
 set -euo pipefail
 
-_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-_ROOT="$(cd "$_HERE/.." && pwd)"
-# shellcheck source=scripts/host/lib/host-common.sh disable=SC1091
-source "$_HERE/host/lib/host-common.sh"
-# shellcheck source=scripts/lib/ctp-guard.sh disable=SC1091
-source "$_HERE/lib/ctp-guard.sh"
+# self-contained logging (no repo-relative dependency, so it runs when installed)
+host_info() { echo "  ++  $*"; }
+host_note() { echo "  --  $*"; }
+host_warn() { echo "  !!  $*" >&2; }
 
-CONF="${CTP_BRIDGE_CONF:-$_ROOT/.ctp-bridge.conf}"
-COUNT_LOG="${CTP_BRIDGE_LOG:-$_ROOT/.ai/ctp-bridge.log}"
+_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Find ctp-guard.sh across dev (repo) and installed (box) layouts. First hit wins.
+_find_guard() {
+    local c
+    for c in "${CTP_GUARD_LIB:-}" \
+             "$HOME/.local/lib/ctp-bridge/ctp-guard.sh" \
+             "$_HERE/ctp-guard.sh" \
+             "$_HERE/lib/ctp-guard.sh" \
+             "$_HERE/../lib/ctp-bridge/ctp-guard.sh" \
+             "$_HERE/../lib/ctp-guard.sh"; do
+        [[ -n "$c" && -f "$c" ]] && { printf '%s' "$c"; return 0; }
+    done
+    return 1
+}
+_GUARD="$(_find_guard)" || { host_warn "cannot locate ctp-guard.sh"; exit 2; }
+# shellcheck source=scripts/lib/ctp-guard.sh disable=SC1091
+source "$_GUARD"
+
+CONF="${CTP_BRIDGE_CONF:-$HOME/.ctp-bridge.conf}"
+COUNT_LOG="${CTP_BRIDGE_LOG:-$HOME/.local/state/ctp-bridge/count.log}"
 
 if ! ctp_load_config "$CONF"; then
     host_warn "no config at $CONF — copy .ctp-bridge.conf.example and set CTP_ALLOWED_TARGET"

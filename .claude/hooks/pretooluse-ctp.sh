@@ -16,10 +16,22 @@
 set -euo pipefail
 
 _HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-_ROOT="$(cd "$_HERE/../.." && pwd)"
+# Installed at user scope (~/.claude/hooks) on the box, but also runs from the
+# repo in dev/tests. Resolve the guard lib across both layouts; first hit wins.
+_find_guard() {
+    local c
+    for c in "${CTP_GUARD_LIB:-}" \
+             "$HOME/.local/lib/ctp-bridge/ctp-guard.sh" \
+             "$_HERE/ctp-guard.sh" \
+             "$_HERE/../../scripts/lib/ctp-guard.sh"; do
+        [[ -n "$c" && -f "$c" ]] && { printf '%s' "$c"; return 0; }
+    done
+    return 1
+}
+_GUARD="$(_find_guard)" || exit 0   # no guard, no opinion (fail open to other perms)
 # shellcheck source=scripts/lib/ctp-guard.sh disable=SC1091
-source "$_ROOT/scripts/lib/ctp-guard.sh"
-ctp_load_config "${CTP_BRIDGE_CONF:-$_ROOT/.ctp-bridge.conf}" || true
+source "$_GUARD"
+ctp_load_config "${CTP_BRIDGE_CONF:-$HOME/.ctp-bridge.conf}" || true
 
 emit() { # emit <allow|deny|ask> <reason>
     printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"%s","permissionDecisionReason":"%s"}}\n' \

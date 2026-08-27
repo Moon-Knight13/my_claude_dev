@@ -69,7 +69,8 @@ make_sandbox() { # writes a provisionable sandbox into $1
     # Stub every sub-installer: this suite tests the orchestrator's honesty, not
     # what the installers do.
     for stub in scripts/host/setup-ansible-lint.sh scripts/host/setup-killswitch.sh \
-                scripts/install-caveman.sh scripts/install-claude-plugins.sh; do
+                scripts/install-caveman.sh scripts/install-claude-plugins.sh \
+                scripts/install-ctp-bridge.sh; do
         printf '#!/usr/bin/env bash\nexit ${STUB_RC:-0}\n' > "$sb/$stub"
         chmod +x "$sb/$stub"
     done
