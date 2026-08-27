@@ -130,9 +130,21 @@ _log_count() { # verb class outcome — verbs/outcomes only, never target or out
     printf '%s\t%s\t%s\t%s\n' "$(date -u +%FT%TZ 2>/dev/null || echo unknown)" "$1" "$2" "$3" >> "$COUNT_LOG"
 }
 
+# The exec is a non-interactive, non-login zsh: it never sources ~/.zshrc, which
+# is what activates the Python venv that provides ansible-playbook. ctp itself is
+# on PATH via autocomplete.zsh, but any verb that shells out to ansible dies at
+# 127 without the venv. Reproduce ~/.zshrc's ESSENTIAL setup explicitly (not
+# `zsh -i`, and not sourcing ~/.zshrc wholesale — that drags in interactive-only
+# machinery): the env shim, the venv (glob-discovered, no site path hardcoded),
+# then the ctp function. Each guarded so a box lacking one still runs. argv stays
+# positional.
 set +e
-docker exec -i "$CONTAINER" zsh -c \
-    'source /home/builder/autocomplete.zsh >/dev/null 2>&1; ctp "$@"' _ "$@"
+docker exec -i "$CONTAINER" zsh -c '
+    _src() { [ -f "$1" ] && . "$1" >/dev/null 2>&1; }
+    _src "$HOME/.local/bin/env"
+    for _v in "$HOME"/*/.venv/bin/activate "$HOME"/.venv/bin/activate; do _src "$_v" && break; done
+    _src "$HOME/autocomplete.zsh" || _src /home/builder/autocomplete.zsh
+    ctp "$@"' _ "$@"
 run_rc=$?
 set -e
 _log_count "$VERB" "$CLASS" "exit_$run_rc"

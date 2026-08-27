@@ -151,6 +151,10 @@ if command -v script >/dev/null 2>&1; then
     if grep -Fq '_ host deploy-role trainbox_t02' "$TMP/run.out"; then
         ok "confirm 'y' runs the exact positional argv"
     else bad "confirm 'y' runs the exact positional argv ($(grep RAN: "$TMP/run.out" | head -1))"; fi
+    # the exec activates the venv (ansible-playbook lives there), not just autocomplete
+    if grep -q '.venv/bin/activate' "$TMP/run.out" && grep -q '.local/bin/env' "$TMP/run.out"; then
+        ok "exec sources the venv + env prelude (ansible-playbook resolvable)"
+    else bad "exec sources the venv + env prelude"; fi
     if [[ -f "$TMP/count.log" ]] && grep -q "deploy-role" "$TMP/count.log" && ! grep -q "trainbox" "$TMP/count.log"; then
         ok "count log records verb+outcome, not the target"
     else bad "count log records verb+outcome, not the target"; fi
