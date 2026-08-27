@@ -214,6 +214,14 @@ _split_segments() {
                     elif [[ "$nx" == '<' && "${L:j+2:1}" == '<' ]]; then
                         cur+='<<<'; j=$((j+2))                       # here-string, not a heredoc
                     elif [[ "$nx" == '<' && "${#kind[@]}" -eq 0 ]]; then
+                        # Heredocs are tracked only at the top level. KNOWN LIMITATION:
+                        # a heredoc opened INSIDE a command substitution or subshell —
+                        # `x=$(cat <<EOF ... EOF)` — is not registered, so its body is
+                        # parsed as commands and a body line starting `ctp`/`make` is
+                        # false-denied. This fails CLOSED (denies, never bypasses) and
+                        # the shape is rare, so it is left as-is; a full fix would move
+                        # the heredoc delimiter onto the kind/qsave stack so it pops with
+                        # its context instead of leaking to the enclosing one.
                         cur+='<<'; j=$((j+1)); expect_delim=1; delim=""; delim_q=""; hd_dash=0
                     else cur+="$ch"; fi ;;
                 '>') if [[ "$nx" == '(' ]]; then cur+='>('; j=$((j+1)); _push paren; else cur+="$ch"; fi ;;

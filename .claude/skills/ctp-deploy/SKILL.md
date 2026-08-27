@@ -46,6 +46,13 @@ playbook in the wrong place and fail with "playbook.yml could not be found". Eit
 invoke from the project root each time, or set `CTP_PROJECT_DIR` in `.ctp-bridge.conf`
 to pin the project regardless of where you are.
 
+**Known limitation (harmless).** The permission hook does not track a heredoc opened
+*inside* a command substitution — `x=$(cat <<EOF ... EOF)` — so if such a heredoc body
+happens to contain a line starting `ctp`/`make`, the whole command is denied even
+though that line is just data. It fails closed (denies, never lets something through),
+and the shape is rare. If you hit it, move the heredoc out of the `$( )` or write the
+body to a file first; there is nothing unsafe about the command itself.
+
 ## The developer loop
 
 1. Make the box on Providentia (outside ctp).
