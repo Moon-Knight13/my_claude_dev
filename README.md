@@ -38,11 +38,18 @@ powershell -ExecutionPolicy Bypass -File scripts\local\bootstrap-devbox.ps1
 It **prompts** for your per-dev values — box number, hostname prefix, your username, the box
 domain, and an optional IP — then:
 
-- reuses or generates an `ed25519` SSH key (`~/.ssh/id_ed25519_MCD`) and adds it to your agent;
-- writes an idempotent `~/.ssh/config` `Host` block with `ForwardAgent yes` (**outside the repo**);
+- asks the git server which of your existing keys it already accepts and **reuses** that one,
+  generating `~/.ssh/id_ed25519_<user>_<machine>` only when there is nothing to reuse — a
+  second, unregistered key would compete for position in agent order, which is the fault
+  the identity check below exists to catch;
+- writes an idempotent `~/.ssh/config` `Host` block with `IdentityFile` and `ForwardAgent` (**outside the repo**);
 - runs `ssh-copy-id` so login is passwordless — **your box password is entered live, once, and never stored**;
 - installs the VSCode **Remote-SSH** extension and sets `remote.SSH.useExecServer=false` + agent forwarding;
-- prints a reminder to add your **public** key to GitLab, then the connect + provision handoff.
+- prints a reminder to add your **public** key to the git server;
+- **verifies which identity the git server actually returns**, from this machine and from the
+  box, and pins the box to the right key only if the two disagree. A wrong key authenticates
+  *successfully*, so without this check nothing surfaces until a push is refused;
+- then the connect + provision handoff.
 
 The SSH key passphrase and the box password are entered interactively and are **never
 committed**. The domain is not hardcoded (this repo is public) — pass it via `DEVBOX_DOMAIN`
