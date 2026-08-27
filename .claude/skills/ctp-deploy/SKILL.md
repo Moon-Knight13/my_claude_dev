@@ -39,6 +39,13 @@ lives. Reachable verbs:
 refused outright. **Every** run is confirmed by the operator — policy, not a bug to
 route around. Do not pass `--yes` or set `ASSUME_YES`; the gate refuses them.
 
+**Run it from your range checkout root.** The wrapper maps the directory you launch
+it from to the project directory inside the container (where `playbook.yml` lives).
+A stale `cd` into a sub-directory — a role folder, say — makes a deploy look for the
+playbook in the wrong place and fail with "playbook.yml could not be found". Either
+invoke from the project root each time, or set `CTP_PROJECT_DIR` in `.ctp-bridge.conf`
+to pin the project regardless of where you are.
+
 ## The developer loop
 
 1. Make the box on Providentia (outside ctp).
@@ -86,6 +93,12 @@ step above before changing anything:
 - **Vault locked** — the bridge refuses before running and says to run
   `make start`. That is an owner step (credential entry); surface it, do not
   attempt it.
+- **`update-inventory` exits 1 but the tree is unchanged** — expected, not a
+  failure. With a dynamic inventory plugin (e.g. `providentia_v3`) there is nothing
+  static to write; ctp backgrounds the generate ("...in the background...") and its
+  own exit code is simply wrong. The bridge passes ctp's real status through
+  faithfully, so the 1 is ctp's, not the bridge's. Confirm the box with
+  `host list <box>` and carry on; do not treat the 1 as broken.
 
 A half-finished deploy leaves the box in an unknown state. Do not assume a retry
 is safe — inspect what the failing stage owns first, fix at that layer, then
