@@ -30,6 +30,9 @@ trap 'rm -rf "$TMP"' EXIT
 
 ALIAS="devbox07"
 HOST="devbox07.example.net"
+# Literal tilde on purpose: this is an ssh_config IdentityFile value, which ssh
+# itself expands — the shell must not.
+# shellcheck disable=SC2088
 KEY="~/.ssh/devbox07_key"
 TUNNEL="RemoteForward 127.0.0.1:11434 127.0.0.1:11434"
 
