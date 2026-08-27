@@ -122,13 +122,96 @@ _strip_redirection() {
     printf '%s\n' "${out[@]}"
 }
 
-# Replace segment separators with newlines, then examine each segment. A wrapper
-# INVOCATION (ctp-bridge.sh actually executed, directly or via an interpreter) is
-# classified; a segment that merely names the path (chmod, grep, cat, running the
-# test file) is not — that was the substring false-positive this bridge warns of.
-_segs="${CMD//&&/$'\n'}"; _segs="${_segs//||/$'\n'}"
-_segs="${_segs//;/$'\n'}"; _segs="${_segs//|/$'\n'}"
-while IFS= read -r _seg; do
+# _split_segments <cmd> — populate _SEGMENTS with the top-level shell command
+# segments, honouring single/double quotes (which may span lines) and skipping
+# heredoc bodies. A naive split on separators also breaks on the physical newlines
+# INSIDE a quoted string or a `cat <<EOF` body, so a commit message or a written
+# file whose line happens to start `ctp`/`make start` was mis-read as a command
+# and denied (fail-closed, but it blocked legitimate multi-line Bash). Splitting
+# with quote/heredoc awareness fixes that while still catching a real command on
+# its own line, after a pipe, or after `&&`. Separators outside quotes: ; | || &&
+# and newline (a lone & is left alone, so 2>&1 survives). Best-effort, matching
+# the bridge's documented hygiene posture; the wrapper re-classifies any real run.
+_SEGMENTS=()
+_split_segments() {
+    local cmd="$1"
+    local -a _lines=()
+    readarray -t _lines <<<"$cmd"
+    local q="" esc=0 cur="" hd="" hd_dash=0 expect_delim=0 delim="" delim_q="" hd_ready=""
+    local li nlines=${#_lines[@]}
+    _flush() { [[ -n "${cur//[[:space:]]/}" ]] && _SEGMENTS+=("$cur"); cur=""; }
+    for (( li=0; li<nlines; li++ )); do
+        local L="${_lines[li]}" m j ch nx
+        # inside a heredoc body: swallow whole lines until the delimiter line
+        if [[ -n "$hd" ]]; then
+            local cmp="$L"
+            [[ "$hd_dash" == 1 ]] && cmp="${cmp#"${cmp%%[!$'\t']*}"}"   # <<- strips leading tabs
+            [[ "$cmp" == "$hd" ]] && { hd=""; hd_dash=0; }
+            continue
+        fi
+        m=${#L}; j=0
+        while (( j < m )); do
+            ch="${L:j:1}"
+            if [[ "$q" == "'" ]]; then
+                cur+="$ch"; [[ "$ch" == "'" ]] && q=""; j=$((j+1)); continue
+            fi
+            if [[ "$q" == '"' ]]; then
+                cur+="$ch"
+                if [[ "$esc" == 1 ]]; then esc=0
+                elif [[ "$ch" == "\\" ]]; then esc=1
+                elif [[ "$ch" == '"' ]]; then q=""; fi
+                j=$((j+1)); continue
+            fi
+            if [[ "$expect_delim" == 1 ]]; then   # capturing a heredoc delimiter word
+                cur+="$ch"
+                if [[ -n "$delim_q" ]]; then
+                    [[ "$ch" == "$delim_q" ]] && delim_q="" || delim+="$ch"
+                    j=$((j+1)); continue
+                fi
+                case "$ch" in
+                    '-') [[ -z "$delim" ]] && hd_dash=1 || delim+="$ch" ;;
+                    ' '|$'\t') [[ -n "$delim" ]] && { hd_ready="$delim"; expect_delim=0; } ;;
+                    \'|\") delim_q="$ch" ;;
+                    ';'|'|'|'&') hd_ready="$delim"; expect_delim=0 ;;
+                    *) delim+="$ch" ;;
+                esac
+                j=$((j+1)); continue
+            fi
+            if [[ "$esc" == 1 ]]; then cur+="$ch"; esc=0; j=$((j+1)); continue; fi
+            nx="${L:j+1:1}"
+            case "$ch" in
+                \\) cur+="$ch"; esc=1 ;;
+                "'") cur+="$ch"; q="'" ;;
+                '"') cur+="$ch"; q='"' ;;
+                '<')
+                    if [[ "$nx" == '<' && "${L:j+2:1}" == '<' ]]; then
+                        cur+='<<<'; j=$((j+2))                       # here-string, not a heredoc
+                    elif [[ "$nx" == '<' ]]; then
+                        cur+='<<'; j=$((j+1)); expect_delim=1; delim=""; delim_q=""; hd_dash=0
+                    else cur+="$ch"; fi ;;
+                ';') _flush ;;
+                '|') _flush; [[ "$nx" == '|' ]] && j=$((j+1)) ;;
+                '&') if [[ "$nx" == '&' ]]; then _flush; j=$((j+1)); else cur+="$ch"; fi ;;
+                *)   cur+="$ch" ;;
+            esac
+            j=$((j+1))
+        done
+        if [[ -n "$q" ]]; then
+            cur+=$'\n'                       # newline lives inside an open quote: keep it, no split
+        elif [[ -n "$hd_ready" ]]; then
+            hd="$hd_ready"; hd_ready=""; _flush   # heredoc body starts on the next line
+        else
+            esc=0; _flush                    # a bare newline is a separator
+        fi
+    done
+    _flush
+}
+
+# A wrapper INVOCATION (ctp-bridge.sh actually executed, directly or via an
+# interpreter) is classified; a segment that merely names the path (chmod, grep,
+# cat, running the test file) is not — the substring false-positive this warns of.
+_split_segments "$CMD"
+for _seg in "${_SEGMENTS[@]:-}"; do
     [[ -n "$_seg" ]] || continue
     _cw="$(_seg_cmdword "$_seg")" || continue
     read -r -a _sw <<<"$_seg"
@@ -182,6 +265,6 @@ while IFS= read -r _seg; do
                 emit deny "reach ctp through scripts/ctp-bridge.sh, not docker exec into the container"
             fi ;;
     esac
-done <<<"$_segs"
+done
 
 pass

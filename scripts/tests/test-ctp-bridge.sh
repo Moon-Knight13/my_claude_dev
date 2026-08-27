@@ -283,6 +283,16 @@ check "Read approval token -> deny"  "$(decide "$(read_json "$APPROVAL_PATH")")"
 check "Write to secret path -> deny" "$(decide "$(printf '{"tool_name":"Write","tool_input":{"file_path":"%s"}}' "$APPROVAL_PATH")")" deny
 check "Bash write token -> deny"     "$(decide "$(bash_json "echo x > $APPROVAL_PATH")")" deny
 check "Edit .env -> deny"            "$(decide "$(printf '{"tool_name":"Edit","tool_input":{"file_path":"/app/.env"}}')")" deny
+
+# multi-line Bash must not be mis-segmented: a commit message or a heredoc body
+# whose line happens to start ctp/make is DATA, not a command. This was a real
+# false-deny on the box that forced `git commit -F` workarounds.
+check "multiline commit msg body -> none" "$(decide "$(bash_json "$(printf 'git commit -m "fix bridge\nctp host deploy notes\nmake start notes"')")")" none
+check "heredoc body with ctp/make -> none" "$(decide "$(bash_json "$(printf 'cat <<EOF > /tmp/n\nctp host deploy x\nmake start y\nEOF')")")" none
+check "quoted-delim heredoc body -> none"  "$(decide "$(bash_json "$(printf "cat <<'EOF' > /tmp/n\nctp host deploy x\nEOF")")")" none
+# but a genuine command on its own line, or after a pipe, is still caught
+check "newline-separated bare ctp -> deny" "$(decide "$(bash_json "$(printf 'echo hi\nctp host deploy x')")")" deny
+check "pipe into bare ctp -> deny"         "$(decide "$(bash_json 'true | ctp host deploy x')")" deny
 fi
 
 # ============================================================================
