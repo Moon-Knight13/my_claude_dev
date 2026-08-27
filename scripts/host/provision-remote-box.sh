@@ -15,7 +15,9 @@
 # quietly claim success.
 #
 # Does, in order (each step idempotent, destructive bits confirm-gated):
-#   1. VSCode server extensions: anthropic.claude-code, redhat.ansible
+#   1. VSCode server extensions (anthropic.claude-code, redhat.ansible) and a
+#      `claude` wrapper on the developer's PATH — the CLI ships inside the
+#      extension and is not otherwise reachable from a shell
 #   2. Ansible-lint settings + Docker prereqs (setup-ansible-lint.sh)
 #   3. Caveman (install-caveman.sh) + Claude plugins (repo set + official)
 #   4. Killswitch (setup-killswitch.sh)
@@ -100,19 +102,62 @@ if [[ "$CLAUDE_TARGET_HOME" == "/root" ]]; then
 fi
 
 # --- 1. VSCode server extensions ---------------------------------------------
-host_step "[1/7] VSCode server extensions"
+host_step "[1/7] VSCode server extensions + claude on PATH"
+CLAUDE_EXT_JUST_INSTALLED=0
 if CODE_BIN="$(find_code)"; then
     for ext in anthropic.claude-code redhat.ansible; do
         if run_as_target "$CODE_BIN" --list-extensions 2>/dev/null | grep -qix "$ext"; then
             host_info "$ext already installed"
         elif run_as_target "$CODE_BIN" --install-extension "$ext" >/dev/null 2>&1; then
             host_info "installed $ext"
+            [[ "$ext" == "anthropic.claude-code" ]] && CLAUDE_EXT_JUST_INSTALLED=1
         else
             host_warn "could not install $ext (install from the Extensions view)"
         fi
     done
 else
     host_warn "no 'code' shim found — open the Extensions view and install: anthropic.claude-code, redhat.ansible"
+fi
+
+# The CLI ships INSIDE the extension and is not on PATH, so `claude` fails in the
+# developer's own shells even on a fully provisioned box. A fixed symlink breaks
+# on every extension update, because the directory name carries the version — so
+# install a wrapper that resolves the glob at run time.
+if command -v claude >/dev/null 2>&1; then
+    host_info "claude already on PATH ($(command -v claude))"
+else
+    _wrapper_src="$(mktemp)"
+    cat > "$_wrapper_src" <<'WRAP'
+#!/usr/bin/env bash
+# Resolve the Claude Code CLI that ships inside the VSCode extension. Written by
+# provision-remote-box.sh. The glob is evaluated on every invocation so an
+# extension update does not break this.
+set -euo pipefail
+_bin=""
+for _cand in "$HOME"/.vscode-server/extensions/anthropic.claude-code-*/resources/native-binary/claude; do
+    [[ -x "$_cand" ]] && _bin="$_cand"
+done
+if [[ -z "$_bin" ]]; then
+    echo "claude: no CLI found under $HOME/.vscode-server/extensions/anthropic.claude-code-*" >&2
+    echo "install the Claude Code extension and connect once so it unpacks." >&2
+    exit 127
+fi
+exec "$_bin" "$@"
+WRAP
+    chmod 644 "$_wrapper_src"   # readable by the target user before install(1)
+    _wrapper_dst="$CLAUDE_TARGET_HOME/.local/bin/claude"
+    if [[ -f "$_wrapper_dst" ]] && cmp -s "$_wrapper_src" "$_wrapper_dst"; then
+        host_info "claude wrapper already current: $_wrapper_dst"
+    else
+        run_as_target mkdir -p "$CLAUDE_TARGET_HOME/.local/bin" \
+            && run_as_target install -m 755 "$_wrapper_src" "$_wrapper_dst" \
+            && host_info "installed claude wrapper: $_wrapper_dst"
+    fi
+    rm -f "$_wrapper_src"
+    if ! run_as_target bash -lc 'command -v claude >/dev/null 2>&1'; then
+        host_warn "${CLAUDE_TARGET_HOME}/.local/bin is not on ${CLAUDE_TARGET_USER}'s PATH"
+        host_note "add to your shell profile:  export PATH=\"\$HOME/.local/bin:\$PATH\""
+    fi
 fi
 
 # --- 2. Ansible-lint + Docker ------------------------------------------------
@@ -165,8 +210,17 @@ if CLAUDE_BIN="$(find_claude)"; then
             printf '%s\n' "$_pi_out" | tail -5 | while IFS= read -r _l; do host_note "    $_l"; done
         fi
     done
+elif [[ "$CLAUDE_EXT_JUST_INSTALLED" == "1" ]]; then
+    # Not the same as "missing". The extension went on disk moments ago and its
+    # binary is unpacked when VSCode next starts the server. Reporting this the
+    # same way as a genuinely absent CLI makes a normal first provision look
+    # broken.
+    host_fail "claude CLI not usable YET — the extension was installed during this run"
+    host_note "reconnect the Remote-SSH window so it unpacks, then re-run this script."
+    host_note "this is expected on a first provision; nothing is wrong."
 else
-    host_fail "claude CLI not found — official plugins not installed (connect once so the extension unpacks, then re-run)"
+    host_fail "claude CLI not found — official plugins not installed"
+    host_note "install the Claude Code extension, connect once so it unpacks, then re-run."
 fi
 
 # --- 4. Killswitch -----------------------------------------------------------

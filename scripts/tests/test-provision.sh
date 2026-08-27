@@ -215,6 +215,52 @@ else
     bad "marketplace add by bare name" "$_bad_add"
 fi
 
+# ── 9. The claude wrapper resolves the extension binary at run time ─────────
+# The CLI ships inside the VSCode extension and is not on PATH. A fixed symlink
+# breaks on every extension update because the directory carries the version, so
+# the wrapper must evaluate the glob when it runs, not when it was written.
+SB="$TMP/wrapper"; make_sandbox "$SB"; mkdir -p "$SB/home"
+_fake_ext="$SB/home/.vscode-server/extensions/anthropic.claude-code-1.0.0/resources/native-binary"
+mkdir -p "$_fake_ext"
+printf '#!/usr/bin/env bash\necho CLAUDE-1.0.0 "$@"\n' > "$_fake_ext/claude"
+chmod +x "$_fake_ext/claude"
+# PATH deliberately WITHOUT a `claude`: the wrapper exists precisely for the box
+# case where the CLI is not on PATH, so the suite's own claude shim must not be
+# visible here.
+SHIMS_NOCLAUDE="$TMP/shims-noclaude"; mkdir -p "$SHIMS_NOCLAUDE"
+for _sh in "$SHIMS"/*; do
+    [[ "$(basename "$_sh")" == "claude" ]] && continue
+    cp "$_sh" "$SHIMS_NOCLAUDE/"
+done
+(
+    cd "$SB" || exit 0
+    env PATH="$SHIMS_NOCLAUDE:/usr/bin:/bin" DEVBOX_MARKER_DIR="$SB/marker" HOME="$SB/home" \
+        CLAUDE_TARGET_USER="$(id -un)" CLAUDE_TARGET_HOME="$SB/home" \
+        GIT_CONFIG_GLOBAL="$SB/home/.gitconfig" \
+        bash scripts/host/provision-remote-box.sh --yes --verify-cmd 'true'
+) > "$TMP/out" 2>&1
+_wrapper="$SB/home/.local/bin/claude"
+if [[ -x "$_wrapper" ]] && HOME="$SB/home" "$_wrapper" --version 2>&1 | grep -q "CLAUDE-1.0.0"; then
+    ok "claude wrapper installed and resolves the extension binary"
+else
+    bad "claude wrapper" "not installed or did not resolve ($_wrapper)"
+fi
+
+# An extension update renames the versioned directory. A wrapper that resolved
+# the glob at write time would now be broken.
+if [[ -x "$_wrapper" ]]; then
+    mv "$SB/home/.vscode-server/extensions/anthropic.claude-code-1.0.0" \
+       "$SB/home/.vscode-server/extensions/anthropic.claude-code-2.0.0"
+    printf '#!/usr/bin/env bash\necho CLAUDE-2.0.0 "$@"\n' \
+        > "$SB/home/.vscode-server/extensions/anthropic.claude-code-2.0.0/resources/native-binary/claude"
+    chmod +x "$SB/home/.vscode-server/extensions/anthropic.claude-code-2.0.0/resources/native-binary/claude"
+    if HOME="$SB/home" "$_wrapper" --version 2>&1 | grep -q "CLAUDE-2.0.0"; then
+        ok "wrapper survives an extension version bump"
+    else
+        bad "wrapper after version bump" "$(HOME="$SB/home" "$_wrapper" --version 2>&1 | head -1)"
+    fi
+fi
+
 echo
 echo "== $pass passed, $fail failed =="
 (( fail == 0 ))

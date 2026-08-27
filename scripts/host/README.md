@@ -25,7 +25,13 @@ sudo bash scripts/host/provision-remote-box.sh --verify-cmd '<inventory-listing 
 
 Order it performs:
 
-1. **VSCode server extensions** — `anthropic.claude-code`, `redhat.ansible`.
+1. **VSCode server extensions** — `anthropic.claude-code`, `redhat.ansible` — and
+   a `claude` wrapper at `~/.local/bin/claude`. The CLI ships *inside* the
+   extension, so it is not on `PATH`: typing `claude` on a box fails even when
+   Claude Code is installed. The wrapper resolves the extension's binary at run
+   time rather than symlinking it, because the directory name carries the
+   version and a symlink would break on every extension update. If
+   `~/.local/bin` is not on your `PATH`, the step says so.
 2. **Ansible-lint** (`setup-ansible-lint.sh`) — merges the ansible settings into
    the Remote-SSH Machine `settings.json` and checks Docker prereqs.
 3. **Caveman + Claude plugins** — reuses `scripts/install-caveman.sh` and
@@ -47,6 +53,11 @@ Order it performs:
    it does not quietly claim success.
 7. **SSH agent-forwarding check** — verifies the box permits agent forwarding and
    that a forwarded key is reachable (read-only; see below).
+
+On a **first** provision the Claude Code extension may be installed during the
+run and not yet unpacked, so the plugin step cannot use the CLI. That is
+reported as "not usable YET — reconnect and re-run", distinct from a genuinely
+missing CLI: it is expected, and one reconnect fixes it.
 
 A failed step means **no marker and a non-zero exit**, so the next run retries
 instead of short-circuiting. That gate covers the whole run: it previously sat
