@@ -553,7 +553,8 @@ than by silently editing the section they contradict.
 | A surface-aware day-0 check | done | `scripts/lib/surface.sh`, `check-day0.sh` |
 | Local model serving end to end | done | verified against the real endpoint |
 | Graceful degradation when it is not serving | done | `LOCAL_MODEL_REQUIRED`, default WARN |
-| B (provisioning honesty), C, D | not started | — |
+| B provisioning honesty | done | `provision-remote-box.sh`, `test-provision.sh` |
+| C, D | not started | — |
 
 ### Deviations
 
@@ -614,6 +615,26 @@ key". Implemented as: probe every `~/.ssh/*.pub` against the git server with
 the server already accepts. Filename heuristics were rejected — the incident
 that motivated this section began with a key identified by name and deleted in
 error, and a key's name says nothing about which account it authenticates as.
+
+**B's verification command is supplied, not baked in.** The design says to add a
+step that runs the tool's inventory-listing command. The command names the
+tooling, and this repository is public, so it arrives as `--verify-cmd` (or
+`DEVBOX_TOOL_VERIFY_CMD`) at run time. When it is absent the step states that
+this run could not confirm the tooling works and the marker records
+`tool_verified=unconfigured` — the alternative, skipping silently, is the
+failure the step exists to fix.
+
+**B's git identity step is repo-local, not global.** The design says "set
+box-side git identity, prompted, idempotent, never overwriting". Implemented
+without `--global` by default: on a shared account the first developer to set a
+global identity becomes the committer identity for every colleague who has no
+repo-local override. That is the SSH identity failure of F7 in a different
+place — it works perfectly until someone reads the attribution.
+`--git-identity-global` opts in, and still refuses to overwrite.
+
+**The failure gate had a hole.** It sat before the last two steps, so a failure
+in either could not have stopped the completion marker. Moved to after every
+step; `scripts/tests/test-provision.sh` asserts it.
 
 ### Found while wiring the local model up
 

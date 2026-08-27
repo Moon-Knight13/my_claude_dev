@@ -500,9 +500,12 @@ cat <<EOF
   Then ON THE BOX, clone this repo (if not already) and run:
       git clone https://github.com/Moon-Knight13/my_claude_dev
       cd my_claude_dev
-      sudo bash scripts/host/provision-remote-box.sh
+      sudo bash scripts/host/provision-remote-box.sh --verify-cmd '<command>'
 
-  That installs the killswitch, Claude + Ansible extensions, caveman, and plugins.
+  That installs the killswitch, Claude + Ansible extensions, caveman and plugins,
+  sets your git identity, and — given --verify-cmd — proves the build tooling
+  actually works before it records the box as provisioned. Without that flag it
+  says so rather than claiming a golden state it never checked.
   Finally run 'make start' to configure the downstream build tooling (it prompts
   for a password interactively — that secret is never stored by these scripts).
 EOF

@@ -18,6 +18,9 @@ After you have Remote-SSH'd onto the box and cloned this repo there:
 cd my_claude_dev
 sudo bash scripts/host/provision-remote-box.sh          # interactive
 sudo bash scripts/host/provision-remote-box.sh --yes    # unattended
+
+# with the step that proves the build tooling actually works:
+sudo bash scripts/host/provision-remote-box.sh --verify-cmd '<inventory-listing command>'
 ```
 
 Order it performs:
@@ -29,8 +32,25 @@ Order it performs:
    `scripts/install-claude-plugins.sh`, then installs
    `skill-creator@claude-plugins-official` and `gitlab@claude-plugins-official`.
 4. **Killswitch** (`setup-killswitch.sh`).
-5. **SSH agent-forwarding check** — verifies the box permits agent forwarding and
+5. **Git identity** — prompted, and **repo-local by default**. `git config
+   --global` writes to the shared account's home, so the first developer to set
+   it silently becomes the committer identity for every colleague without an
+   override. It never overwrites an existing value, and `--git-identity-global`
+   opts in only on a box genuinely dedicated to you. The step prints the two
+   commands to run in your own project checkout.
+6. **Build tooling verification** — runs `--verify-cmd` and treats a failure as a
+   failed step, so the box gets no completion marker and a re-run retries. The
+   command is site-specific and this repository is public, so it is passed in
+   rather than baked in; use whatever proves your tooling can talk to its
+   inventory. Without it the step says plainly that this run could not confirm
+   the tooling works, and the marker records `tool_verified=unconfigured` —
+   it does not quietly claim success.
+7. **SSH agent-forwarding check** — verifies the box permits agent forwarding and
    that a forwarded key is reachable (read-only; see below).
+
+A failed step means **no marker and a non-zero exit**, so the next run retries
+instead of short-circuiting. That gate covers the whole run: it previously sat
+before the last two steps, where a late failure could not have stopped it.
 
 You can also run any step on its own, e.g.
 `bash scripts/host/setup-ansible-lint.sh`.
@@ -73,7 +93,7 @@ things must all be true:
    It only takes effect on a **fresh** connection, so fully close and reopen the
    Remote-SSH window after the first connect.
 4. **The box permits it** — `sshd -T | grep allowagentforwarding` → `yes`
-   (checked in provisioning step 5; `provision-remote-box.sh` warns if it's `no`).
+   (checked in provisioning step 7; `provision-remote-box.sh` warns if it's `no`).
 
 **Verify on the box:**
 

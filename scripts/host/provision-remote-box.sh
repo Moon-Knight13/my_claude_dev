@@ -4,14 +4,26 @@
 # checkout on the box (the local bootstrap clones it there). Needs sudo for the
 # host-level killswitch.
 #
-#   sudo bash scripts/host/provision-remote-box.sh [--yes]
+#   sudo bash scripts/host/provision-remote-box.sh [--yes] [--force]
+#       [--verify-cmd '<command that proves the build tooling works>']
+#       [--git-identity-global]
+#
+# --verify-cmd is how step 6 stops this script declaring a golden state it never
+# checked. Site-specific, so it is passed in rather than baked in (this repo is
+# public). Example shape: a command that lists the tooling's inventory. Without
+# it the step reports "not verified" and the marker records that — it does not
+# quietly claim success.
 #
 # Does, in order (each step idempotent, destructive bits confirm-gated):
 #   1. VSCode server extensions: anthropic.claude-code, redhat.ansible
 #   2. Ansible-lint settings + Docker prereqs (setup-ansible-lint.sh)
 #   3. Caveman (install-caveman.sh) + Claude plugins (repo set + official)
 #   4. Killswitch (setup-killswitch.sh)
-#   5. SSH agent-forwarding sanity check (downstream tooling needs the forwarded key)
+#   5. Git identity for this box (prompted; never overwrites, never global by
+#      default — see the shared-account note in the step itself)
+#   6. Build-tooling verification (only when you supply the command; the
+#      template cannot know it, and this repository is public)
+#   7. SSH agent-forwarding sanity check (downstream tooling needs the forwarded key)
 #
 # Reconnect-safe: a completion marker at /var/lib/claude-devbox/provisioned lets
 # a re-run on the SAME box short-circuit ("already provisioned"). The marker
@@ -25,16 +37,24 @@ _REPO_ROOT="$(cd "$_SCRIPT_DIR/../.." && pwd)"
 source "$_SCRIPT_DIR/lib/host-common.sh"
 
 # Bump when the provisioning steps change so existing boxes re-provision.
-PROVISION_VERSION=3
-MARKER_DIR=/var/lib/claude-devbox
+PROVISION_VERSION=4
+# Overridable so scripts/tests/test-provision.sh can assert marker behaviour
+# without writing under /var on the machine running the tests.
+MARKER_DIR="${DEVBOX_MARKER_DIR:-/var/lib/claude-devbox}"
 MARKER="$MARKER_DIR/provisioned"
 FORCE=0
-for a in "$@"; do
-    case "$a" in
+VERIFY_CMD="${DEVBOX_TOOL_VERIFY_CMD:-}"
+GIT_IDENTITY_GLOBAL=0
+while [[ $# -gt 0 ]]; do
+    case "$1" in
         --yes)   export ASSUME_YES=1 ;;
         --force) FORCE=1 ;;
-        *) host_warn "unknown arg: $a" ;;
+        --verify-cmd) VERIFY_CMD="${2:-}"; shift ;;
+        --verify-cmd=*) VERIFY_CMD="${1#*=}" ;;
+        --git-identity-global) GIT_IDENTITY_GLOBAL=1 ;;
+        *) host_warn "unknown arg: $1" ;;
     esac
+    shift
 done
 
 # Run a command as root whether or not we were invoked with sudo.
@@ -71,7 +91,7 @@ find_code() {
 }
 
 # --- 1. VSCode server extensions ---------------------------------------------
-host_step "[1/5] VSCode server extensions"
+host_step "[1/7] VSCode server extensions"
 if CODE_BIN="$(find_code)"; then
     for ext in anthropic.claude-code redhat.ansible; do
         if "$CODE_BIN" --list-extensions 2>/dev/null | grep -qix "$ext"; then
@@ -87,12 +107,12 @@ else
 fi
 
 # --- 2. Ansible-lint + Docker ------------------------------------------------
-host_step "[2/5] Ansible-lint + Docker"
+host_step "[2/7] Ansible-lint + Docker"
 bash "$_SCRIPT_DIR/setup-ansible-lint.sh" ${ASSUME_YES:+--yes} \
     || host_fail "setup-ansible-lint.sh reported an issue"
 
 # --- 3. Caveman + Claude plugins ---------------------------------------------
-host_step "[3/5] Caveman + Claude plugins"
+host_step "[3/7] Caveman + Claude plugins"
 if [[ -f "$_REPO_ROOT/scripts/install-caveman.sh" ]]; then
     bash "$_REPO_ROOT/scripts/install-caveman.sh" || host_fail "install-caveman.sh failed"
 else
@@ -125,27 +145,101 @@ else
 fi
 
 # --- 4. Killswitch -----------------------------------------------------------
-host_step "[4/5] Killswitch"
+host_step "[4/7] Killswitch"
 bash "$_SCRIPT_DIR/setup-killswitch.sh" ${ASSUME_YES:+--yes} \
     || host_fail "setup-killswitch.sh reported an issue"
 
-# A failed step must NOT be recorded as a completed provision. Writing the
-# marker anyway is what let a broken caveman install go unnoticed: the run
-# printed "complete", exited 0, and every re-run then short-circuited on
-# "Already provisioned".
-if (( ${#HOST_FAILURES[@]} > 0 )); then
-    host_step "Provisioning INCOMPLETE — ${#HOST_FAILURES[@]} step(s) failed"
-    for _f in "${HOST_FAILURES[@]}"; do host_warn "$_f"; done
-    host_note "No completion marker written, so a re-run retries these steps."
-    host_note "Check status any time with: bash scripts/check-day0.sh"
-    exit 1
+# --- 5. Git identity for this box --------------------------------------------
+# The setup guide has the developer set this by hand and it was never
+# implemented here. It is also the one step where the shared account changes the
+# right answer.
+#
+# NOT global by default. `git config --global` writes to the shared account's
+# home, so the first developer to run it silently becomes the committer identity
+# for every colleague who has no repo-local override. That is the same failure
+# as the SSH one this repository just fixed — a wrong identity that works
+# perfectly until someone reads the attribution. Pass --git-identity-global only
+# on a box genuinely dedicated to you.
+host_step "[5/7] Git identity"
+_as_user() { # run as the invoking user, not root, so files stay theirs
+    if [[ -n "${SUDO_USER:-}" && "$(id -u)" -eq 0 ]]; then
+        sudo -u "$SUDO_USER" "$@"
+    else
+        "$@"
+    fi
+}
+_g_name="$(_as_user git config --global user.name 2>/dev/null || true)"
+_g_mail="$(_as_user git config --global user.email 2>/dev/null || true)"
+if [[ -n "$_g_name" || -n "$_g_mail" ]]; then
+    host_info "global git identity already set: ${_g_name:-<unset>} <${_g_mail:-unset}>"
+    host_warn "this account is SHARED — that identity may belong to a colleague."
+    host_note "check before you commit, and override per repository if it is not yours."
+fi
+host_ask GIT_USER_NAME "Your git commit name (blank to skip)" ""
+if [[ -n "${GIT_USER_NAME:-}" ]]; then
+    host_ask GIT_USER_EMAIL "Your git commit email" ""
+fi
+if [[ -n "${GIT_USER_NAME:-}" && -n "${GIT_USER_EMAIL:-}" ]]; then
+    # Repo-local first: always safe on a shared account.
+    _as_user git -C "$_REPO_ROOT" config user.name "$GIT_USER_NAME" \
+        && _as_user git -C "$_REPO_ROOT" config user.email "$GIT_USER_EMAIL" \
+        && host_info "set git identity for this repository checkout"
+    if [[ "$GIT_IDENTITY_GLOBAL" == "1" ]]; then
+        if [[ -n "$_g_name" || -n "$_g_mail" ]]; then
+            host_warn "global identity already set — NOT overwriting it"
+            host_note "clear it first if you meant to replace it: git config --global --unset user.name"
+        else
+            _as_user git config --global user.name "$GIT_USER_NAME"
+            _as_user git config --global user.email "$GIT_USER_EMAIL"
+            host_info "set GLOBAL git identity (shared account — every repo without an override uses it)"
+        fi
+    fi
+    host_note "in YOUR project checkout, run the same two commands without --global:"
+    host_note "    git config user.name \"$GIT_USER_NAME\""
+    host_note "    git config user.email \"$GIT_USER_EMAIL\""
+else
+    host_note "skipped — set it per repository before you commit:"
+    host_note "    git config user.name \"...\" && git config user.email \"...\""
 fi
 
-# --- 5. SSH agent-forwarding sanity check ------------------------------------
+# --- 6. Build-tooling verification -------------------------------------------
+# Provisioning used to write its completion marker having never confirmed the
+# tooling the box exists to run actually works. That is the failure mode
+# docs/PROJECT.md § "Provisioning must not lie" was written about, still present
+# in the script that documents it.
+#
+# The command is site-specific and this repository is public, so it is supplied
+# at run time. When it is not supplied we do not pretend: the step says so and
+# the marker records tool_verified=unconfigured.
+host_step "[6/7] Build tooling"
+TOOL_VERIFIED="unconfigured"
+if [[ -z "$VERIFY_CMD" ]]; then
+    host_note "no --verify-cmd given — this run CANNOT confirm the build tooling works."
+    host_note "supply the command that lists your tooling's inventory, e.g.:"
+    host_note "    sudo bash scripts/host/provision-remote-box.sh --verify-cmd '<command>'"
+    host_note "recorded in the marker as tool_verified=unconfigured."
+else
+    host_info "running: $VERIFY_CMD"
+    if _verify_out="$(_as_user bash -lc "$VERIFY_CMD" 2>&1)"; then
+        TOOL_VERIFIED="yes"
+        host_info "build tooling responded ($(printf '%s' "$_verify_out" | wc -l) line(s))"
+    else
+        TOOL_VERIFIED="no"
+        # host_fail, not host_warn: a box that cannot run its own tooling has not
+        # reached the golden state, and must not get a completion marker.
+        host_fail "build tooling verification FAILED: $VERIFY_CMD"
+        printf '%s\n' "$_verify_out" | tail -15 | while IFS= read -r _l; do host_note "    $_l"; done
+        host_note "if this is an authentication failure, the forwarded agent is the usual cause:"
+        host_note "    bash scripts/host/diagnose-git-auth.sh"
+        host_note "    eval \"\$(bash scripts/host/fix-agent-sock.sh)\"   # stale socket after a reconnect"
+    fi
+fi
+
+# --- 7. SSH agent-forwarding sanity check ------------------------------------
 # Downstream build tooling authenticates with the developer's FORWARDED
 # SSH key. Verify the box permits forwarding and (best-effort) that a forwarded
 # key is actually reachable. Read-only: we warn, we do NOT edit sshd here.
-host_step "[5/5] SSH agent forwarding"
+host_step "[7/7] SSH agent forwarding"
 _aaf="$(_sudo sshd -T 2>/dev/null | awk '/^allowagentforwarding/ {print $2}')"
 if [[ "$_aaf" == "no" ]]; then
     host_warn "sshd has 'AllowAgentForwarding no' — agent forwarding is BLOCKED."
@@ -162,10 +256,27 @@ else
     host_note "VSCode session (useExecServer off + reconnected):  ssh-add -l"
 fi
 
+# A failed step must NOT be recorded as a completed provision. Writing the
+# marker anyway is what let a broken caveman install go unnoticed: the run
+# printed "complete", exited 0, and every re-run then short-circuited on
+# "Already provisioned".
+#
+# This gate sits AFTER every step. It used to sit before the last two, so a
+# failure in them could not have stopped the marker being written.
+if (( ${#HOST_FAILURES[@]} > 0 )); then
+    host_step "Provisioning INCOMPLETE — ${#HOST_FAILURES[@]} step(s) failed"
+    for _f in "${HOST_FAILURES[@]}"; do host_warn "$_f"; done
+    host_note "No completion marker written, so a re-run retries these steps."
+    host_note "Check status any time with: bash scripts/check-day0.sh"
+    exit 1
+fi
+
 # Record completion so a reconnect can skip. Best-effort; never fail the run.
+# tool_verified carries what this run actually established, so a later reader can
+# tell a verified box from one where nobody supplied the command.
 if _sudo mkdir -p "$MARKER_DIR" 2>/dev/null; then
-    printf 'version=%s\nprovisioned_at=%s\nhost=%s\n' \
-        "$PROVISION_VERSION" "$(date -Is)" "$(hostname)" \
+    printf 'version=%s\nprovisioned_at=%s\nhost=%s\ntool_verified=%s\n' \
+        "$PROVISION_VERSION" "$(date -Is)" "$(hostname)" "$TOOL_VERIFIED" \
         | _sudo tee "$MARKER" >/dev/null 2>&1 \
         && host_note "marker written: $MARKER (delete or use --force to reprovision)"
 fi

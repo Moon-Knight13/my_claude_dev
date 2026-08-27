@@ -42,6 +42,27 @@ confirm() {
     [[ "$reply" =~ ^[Yy]([Ee][Ss])?$ ]]
 }
 
+# --- prompt helper -----------------------------------------------------------
+# host_ask VAR "<prompt>" "<default>" — reads into VAR, honouring a value already
+# set in the environment. Never hangs: with --yes or a non-interactive stdin it
+# takes the default and says so, so an unattended run behaves predictably.
+host_ask() {
+    local __var="$1" __prompt="$2" __default="${3:-}" __reply
+    if [[ -n "${!__var:-}" ]]; then return 0; fi
+    if [[ "${ASSUME_YES:-0}" == "1" || ! -t 0 ]]; then
+        printf -v "$__var" '%s' "$__default"
+        [[ -n "$__default" ]] && host_note "using default for ${__prompt}: ${__default}"
+        return 0
+    fi
+    if [[ -n "$__default" ]]; then
+        printf '  ??  %s [%s]: ' "$__prompt" "$__default"
+    else
+        printf '  ??  %s: ' "$__prompt"
+    fi
+    read -r __reply
+    printf -v "$__var" '%s' "${__reply:-$__default}"
+}
+
 # --- sudo guard --------------------------------------------------------------
 # Ensure we can elevate; exit cleanly with guidance if not. Sets $SUDO ("" or
 # "sudo") for callers to prefix privileged commands.
