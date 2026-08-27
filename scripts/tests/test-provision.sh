@@ -282,6 +282,57 @@ else
     bad "extension idempotence" "$(grep -E 'claude-code' "$TMP/out" | head -2 | tr '\n' '|')"
 fi
 
+# ── 11. A second run changes nothing ────────────────────────────────────────
+# Idempotence is the contract: every step is safe to re-run, and a re-run must
+# not claim to have done work it did not do. --force is used so the marker
+# short-circuit does not hide step-level behaviour.
+SB="$TMP/idem"; make_sandbox "$SB"; mkdir -p "$SB/home"
+mkdir -p "$SB/home/.vscode-server/extensions/anthropic.claude-code-1.0.0" \
+         "$SB/home/.vscode-server/extensions/redhat.ansible-2.0.0"
+run_twice() {
+    (
+        cd "$SB" || exit 0
+        env PATH="$SHIMS:$PATH" DEVBOX_MARKER_DIR="$SB/marker" HOME="$SB/home" \
+            CLAUDE_TARGET_USER="$(id -un)" CLAUDE_TARGET_HOME="$SB/home" \
+            GIT_CONFIG_GLOBAL="$SB/home/.gitconfig" GIT_USER_NAME="Test Dev" \
+            GIT_USER_EMAIL="test@example.invalid" \
+            bash scripts/host/provision-remote-box.sh --yes --force --verify-cmd 'true'
+    ) > "$1" 2>&1
+    echo $?
+}
+rc1="$(run_twice "$TMP/run1")"
+_marker1="$(cat "$SB/marker/provisioned")"
+rc2="$(run_twice "$TMP/run2")"
+_marker2="$(cat "$SB/marker/provisioned")"
+
+if [[ "$rc1" == "0" && "$rc2" == "0" ]]; then
+    ok "both runs succeed"
+else
+    bad "repeat run exit codes" "first=$rc1 second=$rc2"
+fi
+
+# The marker is rewritten each run, so only the timestamp may differ.
+if [[ "$(grep -v provisioned_at <<<"$_marker1")" == "$(grep -v provisioned_at <<<"$_marker2")" ]]; then
+    ok "marker content stable across runs (timestamp aside)"
+else
+    bad "marker drift" "run1='$_marker1' run2='$_marker2'"
+fi
+
+# Nothing may be reinstalled or re-created on the second pass.
+_claims="$(grep -cE "^  \+\+  installed " "$TMP/run2" || true)"
+if [[ "${_claims:-0}" == "0" ]]; then
+    ok "second run claims no new installs"
+else
+    bad "second run reinstalls" "$(grep -E "^  \+\+  installed " "$TMP/run2" | tr '\n' '|')"
+fi
+
+# And the git identity written on the first pass must not be rewritten blindly.
+if grep -q "NOT overwriting\|already set" "$TMP/run2" || ! grep -q "set GLOBAL git identity" "$TMP/run2"; then
+    ok "second run does not overwrite an existing identity"
+else
+    bad "identity overwritten on re-run" "$(grep -i identity "$TMP/run2" | tr '\n' '|')"
+fi
+
 echo
 echo "== $pass passed, $fail failed =="
 (( fail == 0 ))

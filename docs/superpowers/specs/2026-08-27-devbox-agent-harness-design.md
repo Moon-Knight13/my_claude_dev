@@ -710,5 +710,10 @@ Per `docs/PROJECT.md` § Verification, plus:
 - Per-developer accounts on the boxes — organisational, not repository.
 - Automating vault initialisation, or handling the vault password anywhere.
 - Automating box allocation.
-- Extending the killswitch to SSH key material (filed as follow-on).
+- Extending the killswitch to SSH key material (filed as issue #36).
+- Making the board and day-0 subsystems work against GitLab (filed as issue #37);
+  component D is inert until that is decided.
+- Teaching the bootstraps to update an existing SSH `Host` block (filed as
+  issue #38). Today they leave it untouched and print a note, so a developer who
+  bootstrapped before a feature existed never receives it.
 - Anything that would place range material outside the box.
