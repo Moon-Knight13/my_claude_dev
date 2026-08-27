@@ -30,6 +30,11 @@ note() { echo "  --  $*"; }
 warn() { echo "  !!  $*" >&2; }
 step() { echo ""; echo ">> $*"; }
 
+# Managed-block helpers for the SSH config (issue #38): let a re-run add
+# directives an already-present Host block predates, without editing it.
+# shellcheck source=scripts/local/lib/ssh-config.sh disable=SC1091
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/ssh-config.sh"
+
 # Site-specific values are NOT hardcoded (this repo is public). Provide each via
 # its env var or the prompts below. SSH_KEY overrides the key path if yours
 # already lives somewhere else.
@@ -309,11 +314,26 @@ touch "$CFG"; chmod 600 "$CFG"
 # combined-format entries too) so a re-run never appends a duplicate.
 esc_host="${HOST//./\\.}"
 if grep -qiE "^[[:space:]]*Host[[:space:]]([^#]*[[:space:]])?(${ALIAS}|${esc_host})([[:space:]]|$)" "$CFG"; then
-    info "Host entry for ${HOST} already in $CFG — leaving it as-is"
-    note "if it lacks 'IdentityFile ${KEY}', add it: box login should not depend on agent order either"
-    if [[ -n "$TUNNEL_LINE" ]]; then
-        note "and add this line to carry the local model endpoint to the box:"
-        note "  ${TUNNEL_LINE#  }"
+    info "Host entry for ${HOST} already in $CFG — leaving your block as-is"
+    # A re-run must still pick up directives your original block predates
+    # (IdentityFile for the box key, RemoteForward for the local-model tunnel)
+    # without touching what you wrote. Any gaps go into a separate, clearly-
+    # marked block that SSH merges in additively (issue #38).
+    MISSING="$(ssh_managed_missing "$CFG" "$ALIAS" "$HOST" "$KEY" "${TUNNEL_LINE#  }")"
+    if [[ -n "$MISSING" ]]; then
+        note "your block is missing directives this script now sets:"
+        printf '%s\n' "$MISSING" | while IFS= read -r d; do note "    $d"; done
+        if confirm "add them in a marked 'devbox-managed' block? (your block stays untouched)"; then
+            printf '%s\n' "$MISSING" | ssh_write_managed_block "$CFG" "$ALIAS" "$HOST"
+            info "wrote devbox-managed block for '${ALIAS}' — delete it any time; SSH merges it"
+        else
+            note "skipped — add them by hand, or re-run and accept"
+        fi
+    elif grep -q "devbox-managed ${ALIAS} " "$CFG"; then
+        # Nothing missing but a managed block lingers (you folded the directives
+        # into your own block): clear ours so the file self-heals.
+        printf '' | ssh_write_managed_block "$CFG" "$ALIAS" "$HOST"
+        info "removed a now-redundant devbox-managed block for '${ALIAS}'"
     fi
 else
     {
