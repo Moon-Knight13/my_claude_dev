@@ -297,16 +297,12 @@
 
   <section>
     <p class="eyebrow">For engineers</p>
-    <h2>The six moving parts</h2>
+    <h2>The five moving parts</h2>
     <p class="section-note">Each is a self-contained piece of the template. Together they turn a blank repo into a governed, AI-assisted delivery pipeline.</p>
     <dl class="comp">
       <div>
         <dt>Devcontainer<span class="tag">.devcontainer/</span></dt>
         <dd>A reproducible dev environment with a <b>deny-by-default firewall</b> — egress is allowlisted, tooling is pre-installed, Claude auth is a mounted volume.</dd>
-      </div>
-      <div>
-        <dt>Remote dev boxes<span class="tag">scripts/local/ · scripts/host/</span></dt>
-        <dd>A laptop bootstrap wires up SSH, identity and Remote-SSH; an on-box provisioner brings a shared box to a known-good state and <b>refuses to record success it did not verify</b>.</dd>
       </div>
       <div>
         <dt>AI routing<span class="tag">scripts/route-model.sh</span></dt>
@@ -330,7 +326,7 @@
   <section>
     <p class="eyebrow">Under the hood</p>
     <h2>How the pieces actually work</h2>
-    <p class="section-note">Five close-ups: the sealed environment, the two engines behind the routing, the token compressor, getting onto a shared dev box, and the gates every change runs.</p>
+    <p class="section-note">Four close-ups: the sealed environment, the two engines behind the routing, the token compressor, and the gates every change runs.</p>
 
     <div class="dgram">
       <div class="dgram-h"><h3>The devcontainer</h3><span class="path">.devcontainer/</span></div>
@@ -391,7 +387,6 @@
         </div>
       </div>
       <p class="d-note">A task is classified by type and risk; any hard trigger — auth, networking, 8+ files — always escalates to Claude. The same decision shows up as the <b>Route</b> field on the board card.</p>
-      <p class="d-note">The local endpoint <b>differs by surface</b>. In the devcontainer the model runs on the host; on a remote box it runs on the developer's own machine and arrives over a reverse SSH tunnel. When nothing answers, routing falls back to Claude and the work still completes — local is an optimisation, never a dependency.</p>
     </div>
 
     <div class="dgram">
@@ -403,18 +398,6 @@
       <div class="cv-save">≈ one-third fewer output tokens — same technical content, less prose</div>
       <div class="statusline"><span class="dot">●</span> caveman · session 12.4k tok · ~$0.08 saved</div>
       <p class="d-note">Caveman trims Claude's wording down to the essentials, then a statusline reads the real per-session token counts from the transcript and prices them — so spend is visible while you work.</p>
-    </div>
-
-    <div class="dgram">
-      <div class="dgram-h"><h3>Getting onto a shared dev box</h3><span class="path">scripts/local/ · scripts/host/</span></div>
-      <div class="pipe">
-        <div class="check"><div class="cn">identity</div><div class="cw">Reuses a key the git server already accepts rather than generating a rival one, then checks which account the server actually returns.</div><div class="cs">bootstrap-devbox.sh</div></div>
-        <div class="check"><div class="cn">connection</div><div class="cw">Writes the SSH Host block, forwards the agent, and tunnels the local model endpoint through to the box.</div><div class="cs">~/.ssh/config</div></div>
-        <div class="check"><div class="cn">provision</div><div class="cw">Extensions, lint config, plugins, killswitch and git identity — as the developer, never as root.</div><div class="cs">provision-remote-box.sh</div></div>
-        <div class="check"><div class="cn">verify</div><div class="cw">Runs a command that proves the build tooling works. A failure withholds the completion marker, so a re-run retries.</div><div class="cs">--verify-cmd</div></div>
-        <div class="check"><div class="cn">diagnose</div><div class="cw">Reads the whole auth chain and names the stale-agent case by name instead of reporting a generic failure.</div><div class="cs">diagnose-git-auth.sh</div></div>
-      </div>
-      <p class="d-note">The account on these boxes is <b>shared</b> and everyone has sudo, so nothing identity-shaped is written unscoped: git identity is repo-local, the git-server pin is an alias, and only public key material ever reaches the box.</p>
     </div>
 
     <div class="dgram">

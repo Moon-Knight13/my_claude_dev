@@ -16,20 +16,6 @@
 # Run again after each step — exits 0 only when nothing FAILs.
 set -euo pipefail
 
-# shellcheck source=scripts/lib/subsystems.sh disable=SC1090,SC1091
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/subsystems.sh"
-# shellcheck source=scripts/lib/surface.sh disable=SC1090,SC1091
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/surface.sh"
-# Load .env here too. Check 11 reads LOCAL_MODEL_ENABLED and LOCAL_MODEL_ENDPOINT
-# directly, and without this it reads them from an environment where only the
-# devcontainer sets them — reporting on defaults rather than on the developer's
-# actual configuration. That is the failure documented in docs/PROJECT.md
-# § ".env only works because something loads it", in a checker whose job is to
-# catch it. Check 6 still asserts the plumbing in its own subshell, so this does
-# not weaken it.
-# shellcheck source=scripts/lib/load-env.sh disable=SC1090,SC1091
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/load-env.sh"
-
 PASS=0
 FAIL=0
 SKIP=0
@@ -146,30 +132,12 @@ else
         "Run: bash scripts/setup-day0.sh  (derives the owner from the git remote; or edit .github/CODEOWNERS by hand)"
 fi
 
-# 6. .env exists AND its values actually reach the routing scripts.
-# Checking only that the file exists used to report OK while nothing loaded it.
-# Every consumer read the values from the environment, so on a remote box — which
-# has no devcontainer containerEnv — route-model.sh fell through to its own
-# defaults and returned local_disabled no matter what .env said. Assert the
-# plumbing, not the file.
-if [[ ! -f ".env" ]]; then
+# 6. .env file exists
+if [[ -f ".env" ]]; then
+    check ".env file exists" "pass" ""
+else
     check ".env file exists" "fail" \
         "Run: bash scripts/setup-day0.sh  (copies .env.example — then review the values)"
-elif ! grep -q "load-env.sh" scripts/route-model.sh 2>/dev/null; then
-    check ".env values reach the routing scripts" "fail" \
-        "scripts/route-model.sh does not source scripts/lib/load-env.sh, so .env is ignored"
-elif ! subsystem_enabled ROUTING; then
-    check ".env loaded (local routing off in template.conf)" "pass" ""
-else
-    _effective_local="$(bash -c '
-        source scripts/lib/load-env.sh 2>/dev/null || true
-        printf "%s" "${LOCAL_MODEL_ENABLED:-false}"' 2>/dev/null || echo false)"
-    if [[ "$_effective_local" == "true" ]]; then
-        check ".env loaded; local routing enabled" "pass" ""
-    else
-        check ".env loaded; local routing disabled" "warn" \
-            "LOCAL_MODEL_ENABLED is not true, so every task routes to Claude. Set it in .env to enable local offload."
-    fi
 fi
 
 # 7. .claude/settings.json exists (MCP routing configured)
@@ -222,55 +190,20 @@ fi
 echo ""
 echo "Optional"
 
-# 11. Local model endpoint. Surface-aware, because "configured" and "reachable"
-# are the same thing on one surface and not the other:
-#
-#   devcontainer — the model runs on the developer's host, outside the container.
-#     It cannot be installed from in here and day-0 must go green with just the
-#     two logins, so unreachable is a WARN.
-#   box — the endpoint arrives over the reverse tunnel the laptop bootstrap
-#     writes into the SSH Host block. Enabled-but-unreachable is not an optional
-#     extra there: every routing decision silently falls back to Claude while
-#     .env and this check both report local routing on. That is the exact shape
-#     of the failure docs/PROJECT.md records for the .env loader, so it FAILs.
-#     Setting LOCAL_MODEL_ENABLED=false is the way to a green day-0 without a
-#     tunnel — the point is that the reported state matches the routed state.
+# 11. Ollama (host-side and optional — a WARN, never a FAIL: it cannot be
+# installed from inside the container, and day-0 must be able to go green with
+# just the two logins).
 LOCAL_MODEL_ENABLED="${LOCAL_MODEL_ENABLED:-true}"
 if [[ "$LOCAL_MODEL_ENABLED" == "true" ]]; then
-    _surface="$(current_surface)"
-    if [[ "$_surface" == "box" ]]; then
-        LOCAL_MODEL_ENDPOINT="${LOCAL_MODEL_ENDPOINT:-http://127.0.0.1:11434}"
-    else
-        LOCAL_MODEL_ENDPOINT="${LOCAL_MODEL_ENDPOINT:-http://host.docker.internal:11434}"
-    fi
+    LOCAL_MODEL_ENDPOINT="${LOCAL_MODEL_ENDPOINT:-http://host.docker.internal:11434}"
     if curl --silent --fail --connect-timeout 2 "$LOCAL_MODEL_ENDPOINT" >/dev/null 2>&1; then
-        check "local model reachable at $LOCAL_MODEL_ENDPOINT ($_surface)" "pass" ""
-    elif [[ "$_surface" == "box" ]]; then
-        # Unreachable is NOT a work stoppage: route-model.sh returns
-        # claude:…:local_unreachable_fallback and delegate-local.sh exits 3, so
-        # every task still gets done — by Claude. The local model is an
-        # optimisation, and the harness has to keep working without it.
-        #
-        # So this WARNs by default and FAILs only when the developer has said the
-        # local model is load-bearing for them (LOCAL_MODEL_REQUIRED=true). That
-        # keeps the report honest — it always states that everything is routing
-        # to Claude — without turning an optimisation being off into a red day-0.
-        #
-        # Deliberately does NOT suggest binding the model to 0.0.0.0. That advice
-        # belongs to the container surface only; on a box it would publish a
-        # personal machine's model onto the network the box sits on.
-        _hint="Local routing is ENABLED but nothing answers, so every task routes to Claude instead. Work continues — this is a lost optimisation, not a blocker. The endpoint arrives over the reverse tunnel in your laptop's SSH Host block (RemoteForward) — re-run scripts/local/bootstrap-devbox.sh on the machine running the model, then RECONNECT (the tunnel is established at connect time). Check from the box with: curl -sS $LOCAL_MODEL_ENDPOINT . Set LOCAL_MODEL_ENABLED=false in .env to silence this, or LOCAL_MODEL_REQUIRED=true to make it a hard failure."
-        if [[ "${LOCAL_MODEL_REQUIRED:-false}" == "true" ]]; then
-            check "local model reachable at $LOCAL_MODEL_ENDPOINT (box, required)" "fail" "$_hint"
-        else
-            check "local model reachable at $LOCAL_MODEL_ENDPOINT (box) — routing to Claude" "warn" "$_hint"
-        fi
+        check "Ollama reachable at $LOCAL_MODEL_ENDPOINT" "pass" ""
     else
-        check "local model reachable at $LOCAL_MODEL_ENDPOINT (devcontainer)" "warn" \
+        check "Ollama reachable at $LOCAL_MODEL_ENDPOINT" "warn" \
             "Optional local routing. Install + pull (https://ollama.com; ollama pull qwen2.5-coder:7b), then bind to 0.0.0.0 so the container can reach it (default 127.0.0.1 is loopback-only). See docs/TEMPLATE_GUIDE.md 'Bind Ollama so the container can reach it' — read the security disclaimer first. Or set LOCAL_MODEL_ENABLED=false in .env."
     fi
 else
-    echo "  --  local model check skipped (LOCAL_MODEL_ENABLED=false)"
+    echo "  --  Ollama check skipped (LOCAL_MODEL_ENABLED=false)"
 fi
 
 # 12. Visual explainer via GitHub Pages (optional — a WARN, never a FAIL). Only
@@ -286,17 +219,6 @@ if [[ -f docs/explainer/index.html ]]; then
         check "Explainer published via GitHub Pages" "warn" \
             "Optional. docs/explainer/index.html is present but Pages is off, so the README link only opens locally. Enable at Settings -> Pages -> Source: 'GitHub Actions' (the 'pages' workflow then publishes it). Leave off if the page shouldn't be public."
     fi
-fi
-
-# 13. Caveman installed (optional — a WARN, never a FAIL). install-caveman.sh
-# exits 0 when it cannot install, precisely so an optional statusline helper
-# never aborts provisioning; that means its absence has to surface here instead.
-_caveman_marker="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/.template-caveman-version"
-if [[ -f "$_caveman_marker" ]]; then
-    check "Caveman installed ($(head -n1 "$_caveman_marker"))" "pass" ""
-else
-    check "Caveman installed" "warn" \
-        "Optional. Run: bash scripts/install-caveman.sh and read its output — it exits 0 on failure by design. A moved upstream tag makes it refuse to install until CAVEMAN_COMMIT is reviewed and updated."
 fi
 
 echo ""

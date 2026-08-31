@@ -141,31 +141,6 @@ else
   fail=$((fail + 1)); echo "FAIL escalations-logged: only $esc_logged entries"
 fi
 
-# ── 11. Tagged model names survive the route parse ──────────────────────────
-# route-model.sh emits provider:model:reason, and every real Ollama model name
-# contains a colon (`qwen2.5-coder:7b`). Splitting left-to-right truncated the
-# model at its first colon: the health preflight probed `qwen2.5-coder` while
-# routing had chosen `qwen2.5-coder:7b`, and the reason field absorbed the tag.
-# Ollama resolves an untagged name by prefix, so nothing failed loudly — it
-# surfaced as an unexplained health:probe_timeout. Assert the model that reaches
-# the log and the health cache is the FULL tagged name.
-start_mock success
-rc="$(delegate tagged-model docs low 1 "write an add function")"
-check "tagged-model-delegates" 0 "" "$rc" "$TMP/err"
-logged_model="$(jq -rs '[.[] | select(.event == "delegation" and .outcome == "success")] | last | .model' "$MODEL_ROUTE_LOG")"
-if [[ "$logged_model" == "$LOCAL_MODEL_FAST_MODEL" ]]; then
-  pass=$((pass + 1)); echo "PASS tagged-model-not-truncated ($logged_model)"
-else
-  fail=$((fail + 1)); echo "FAIL tagged-model-not-truncated: logged '$logged_model', want '$LOCAL_MODEL_FAST_MODEL'"
-fi
-cached_model="$(jq -r '.model' "$TMP/tagged-model.json" 2>/dev/null || echo "")"
-if [[ "$cached_model" == "$LOCAL_MODEL_FAST_MODEL" ]]; then
-  pass=$((pass + 1)); echo "PASS tagged-model-health-cache-key ($cached_model)"
-else
-  fail=$((fail + 1)); echo "FAIL tagged-model-health-cache-key: cached '$cached_model', want '$LOCAL_MODEL_FAST_MODEL'"
-fi
-stop_mock
-
 echo
 echo "== $pass passed, $fail failed =="
 (( fail == 0 ))

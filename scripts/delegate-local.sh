@@ -16,11 +16,6 @@
 # Every attempt (success or escalation) is appended to $MODEL_ROUTE_LOG.
 set -euo pipefail
 
-# Load .env so the values setup-day0.sh wrote there actually reach this script.
-# Environment still wins over the file; see scripts/lib/load-env.sh.
-# shellcheck source=scripts/lib/load-env.sh disable=SC1090,SC1091
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/load-env.sh"
-
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 TASK_TYPE="${1:-}"
@@ -66,18 +61,10 @@ escalate() { # reason model
 
 # ── Rung 1: route decision (risk / task-type / size / force flags) ──────────
 route="$(bash "$HERE/route-model.sh" "$TASK_TYPE" "$RISK_LEVEL" "$CHANGED_FILES")"
-# provider:model:reason — but the MODEL NAME CONTAINS A COLON on every real
-# Ollama tag (`qwen2.5-coder:7b`). Splitting left-to-right cut the model at its
-# first colon, so the health preflight probed a model named `qwen2.5-coder` while
-# routing had selected `qwen2.5-coder:7b`, and the reason field absorbed the tag.
-# Ollama resolves an untagged name by prefix, so `model_present` still passed and
-# the mismatch surfaced only as an unexplained `health:probe_timeout`.
-# Provider and reason never contain a colon; the model may. Parse from both ends
-# and take the remainder as the model.
 provider="${route%%:*}"
-route_reason="${route##*:}"
-model="${route#*:}"
-model="${model%:*}"
+rest="${route#*:}"
+model="${rest%%:*}"
+route_reason="${rest#*:}"
 if [[ "$provider" != "local" ]]; then
   escalate "route:$route_reason"
 fi

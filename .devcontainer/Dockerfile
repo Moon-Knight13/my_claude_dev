@@ -185,27 +185,4 @@ USER root
 RUN chmod +x /usr/local/bin/init-firewall.sh && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" > /etc/sudoers.d/node-firewall && \
   chmod 0440 /etc/sudoers.d/node-firewall
-
-# Prefer IPv4 for every process that resolves through glibc.
-#
-# init-firewall.sh denies IPv6 egress wholesale (ip6tables policy DROP plus a
-# REJECT rule), and the allowed-domains ipset is IPv4-only by construction: it
-# skips IPv6 CIDRs from the GitHub meta feed and resolves `dig A` records only.
-# An IPv6 connection therefore can never succeed in this container.
-#
-# glibc's default RFC 3484 precedence still hands out AAAA records first for
-# hosts that publish them — api.anthropic.com does — so the Claude CLI kept
-# picking a path the firewall rejects in ~2ms, surfacing as ECONNRESET and
-# dropped sessions. Raising the precedence of IPv4-mapped addresses makes
-# getaddrinfo return A records first, so nothing attempts a route that is
-# guaranteed to be refused.
-#
-# Done here rather than via NODE_OPTIONS=--dns-result-order=ipv4first because
-# that only reaches Node: this covers the native claude binary, curl and git
-# too. Node honours it as well, preserving getaddrinfo order under the default
-# --dns-result-order=verbatim.
-#
-# If IPv6 egress is ever wanted, this and the ipset must change together —
-# flipping either alone reintroduces the same dead path.
-RUN printf 'precedence ::ffff:0:0/96  100\n' >> /etc/gai.conf
 USER node
