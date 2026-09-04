@@ -8,9 +8,9 @@ ok()   { echo "  OK  $1"; ((PASS++)) || true; }
 bad()  { echo " FAIL $1"; ((FAIL++)) || true; }
 check(){ if [[ "$2" == "$3" ]]; then ok "$1"; else bad "$1 (got '$2', want '$3')"; fi; }
 
-# shellcheck source=scripts/lib/cmd-segment.sh
+# shellcheck source=scripts/lib/cmd-segment.sh disable=SC1091
 source "$ROOT/scripts/lib/cmd-segment.sh"
-# shellcheck source=scripts/lib/git-guard.sh
+# shellcheck source=scripts/lib/git-guard.sh disable=SC1091
 source "$ROOT/scripts/lib/git-guard.sh"
 
 dec() { case "$(gitguard_classify "$1")" in ask:*) echo ask ;; deny:*) echo deny ;; *) echo none ;; esac; }
