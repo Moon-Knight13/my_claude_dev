@@ -51,3 +51,9 @@ ORCH_MODEL=richardyoung/qwen3-14b-abliterated:Q4_K_M|host-local|60|http://host.d
 # scripts/orchestrator/classifier-prompt.default.md); tuning stays on the local
 # model, so it never leaks to the cloud. Measure it with
 # scripts/orchestrator/eval-classifier.sh before you trust AUTO.
+#
+# PRIVACY: your tuned prompt file accumulates the sensitive patterns it is meant to
+# catch. Keep it on the box (never commit it) AND guard it from Claude's own tools
+# by adding its path to CTP_PII_PATHS in ~/.ctp-bridge.conf (the C1 path guard):
+#     CTP_PII_PATHS=~/.config/orchestrator/classifier-prompt.md ...
+# The classifier still reads it (it is not a Claude tool call); Claude cannot.

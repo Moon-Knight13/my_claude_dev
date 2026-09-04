@@ -27,5 +27,20 @@ Rules:
   "nonsensitive" leaks data; a wrong "sensitive" only keeps work local.
 - Output exactly one lowercase word: `sensitive` or `nonsensitive`. Nothing else.
 
-Owner note: tune this file for your organisation over time. It lives on the local
-model, so improving it never sends examples to the cloud.
+--------------------------------------------------------------------------------
+Owner note — privacy of THIS file:
+
+This shipped default is **committed and public** (and template-synced). Keep it
+**generic** — never put real organisation-specific sensitive examples here.
+
+Tune your real classifier prompt in a PRIVATE on-box copy:
+  ~/.config/orchestrator/classifier-prompt.md   (seed it from this file)
+
+That copy will accumulate the very patterns it is meant to catch, so:
+  • it lives only on the box (never committed), and
+  • add its path to CTP_PII_PATHS in ~/.ctp-bridge.conf so the C1 path guard
+    stops Claude's own tools from reading it:
+        CTP_PII_PATHS=~/.config/orchestrator/classifier-prompt.md ...
+
+The classifier reads it directly (not via a Claude tool), and only ever sends its
+content to your LOCAL model — so tuning never reaches the cloud.

@@ -454,7 +454,12 @@ acceptable). What matters if you change it:
   answer that is not a clean `nonsensitive` resolves to *sensitive*. It disables
   qwen3 thinking and asks for a one-word verdict at temperature 0; the owner tunes
   what "sensitive" means in `~/.config/orchestrator/classifier-prompt.md` (on the
-  local model, so tuning never leaks). There is **no** deterministic hard-floor
+  local model, so tuning never leaks). That tuned file accumulates the sensitive
+  patterns it is meant to catch, so it stays on the box (the committed
+  `classifier-prompt.default.md` must remain generic) and its path belongs in
+  `CTP_PII_PATHS`, so the C1 guard stops Claude's own tools reading it — the
+  classifier reads it directly (not a tool call), Claude cannot. There is **no**
+  deterministic hard-floor
   (owner decision): an LLM that mislabels a sensitive query as safe can still
   egress — the accepted residual risk, mitigated by `LOCAL-ONLY` + fail-closed and
   bounded by the eval (`scripts/orchestrator/eval-classifier.sh`, whose headline

@@ -217,7 +217,7 @@ scripts/             Bootstrap (incl. board), routing, CI helpers, and template 
 .devcontainer/       Dev environment (for developing this repo) — deny-by-default firewall, pre-installed tooling
 .claude/commands/    Claude Code skills (/bmad, /bmad-to-board, /next-issue, /run-epic, /day0-check, /route-task, /security-audit, /firewall-allow)
 .github/             Workflows (CI, secret scan, semgrep, container scan, weekly audit); issue & PR templates
-docs/                SAFETY_HARNESS.md, TEMPLATE_GUIDE.md, AI_ROUTING_POLICY.md, BMAD_WORKFLOW.md, KANBAN_WORKFLOW.md, explainer/
+docs/                SAFETY_HARNESS.md, ORCHESTRATOR.md, TEMPLATE_GUIDE.md, AI_ROUTING_POLICY.md, BMAD_WORKFLOW.md, KANBAN_WORKFLOW.md, explainer/
 ```
 
 ## License
