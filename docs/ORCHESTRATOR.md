@@ -43,7 +43,7 @@ router treats as sensitive ever reach an egressing endpoint?*
    3. eligible tiers:  sensitive -> {host-local, network-local}   (NO cloud)
                        else      -> {frontier, host-local, network-local}
    4. pick highest-rank model in an eligible tier
-   5. dispatch:  frontier -> claude -p   (A/B gates + caveman still apply)
+   5. dispatch:  frontier -> [sanitise ->] claude -p   (A/B gates + caveman apply)
                  local    -> Ollama /api/generate (reasoning-only for now)
    (belt-and-braces: refuse if a sensitive prompt resolved to an egressing tier)
 ```
@@ -68,6 +68,10 @@ demos and the invariant test.
 | `scripts/lib/orchestrator-route.sh` | Pure decision logic — config parse, mode resolution, `orch_classify`, eligible-tier resolver (the invariant), model pick. No I/O, so the invariant is unit-testable. |
 | `scripts/orchestrator/classify-sensitivity.sh` | The sensitivity judge — a thin wrapper that calls the **local** LLM and returns `sensitive`/`nonsensitive`. Never egresses; fails closed. |
 | `scripts/orchestrator/classifier-prompt.default.md` | The shipped, **generic** judgement prompt. Seed for the owner's private on-box copy. |
+| `scripts/orchestrator/sanitise.sh` | Cloud-handoff sanitiser (C2) — LOCAL LLM rephrase that strips incidental identifiers before egress. Transform-or-fail; never egresses. |
+| `scripts/orchestrator/sanitiser-prompt.default.md` | The shipped, generic rewrite prompt. Seed for the owner's private copy. |
+| `scripts/orchestrator/eval-sanitiser.sh` | Measures marker-survival — injected identifiers that must not appear in the rewrite. |
+| `scripts/tests/test-sanitiser.sh` | Sanitiser contract tests — transform-or-fail, never-egress (mocked model). |
 | `scripts/orchestrator/eval-classifier.sh` | Measures the judge against labelled fixtures; headline metric = sensitive-recall. |
 | `scripts/tests/fixtures/sensitivity-eval.jsonl` | Labelled eval cases (synthetic PII/IP + adversarial near-misses). |
 | `scripts/tests/test-orchestrator.sh` | Routing/invariant unit tests (22). |
@@ -132,6 +136,27 @@ It lists every miss so the prompt can be tuned. It needs a live model, so it is 
 `test-classifier.sh`). Treat a 100% score on the synthetic set as a floor, not
 proof; grow the fixtures from real (sanitised) misses.
 
+## The sanitiser (control C2)
+
+On the **cloud-handoff path only**, an opt-in (`ORCH_SANITISER`) step rewrites the
+prompt to strip incidental identifiers — names, emails, IPs, tokens, internal
+hostnames, codenames — into neutral placeholders (`PERSON_1`, `HOST_1`, …) before
+it reaches Claude, preserving the technical task. It is **defense-in-depth on top
+of the classifier, not the gate**: only a prompt already judged non-sensitive
+reaches it.
+
+- **Local-only LLM rephrase** — it reads the raw prompt, so it calls a local
+  endpoint and refuses a non-local one; it never egresses.
+- **Transform-or-fail** — on model error/timeout/empty rewrite it exits non-zero
+  with no output, and the front door applies `ORCH_SANITISE_ON_FAIL`:
+  `passthrough` (default — the classifier already cleared the prompt) or `block`.
+- **Held line** — it de-identifies *data*; it must not be used to disguise a
+  prohibited *action* as an allowed one (the rewrite is the same work).
+- **Measured, not assumed** — `eval-sanitiser.sh` injects known markers and checks
+  none survive the rewrite (marker-survival). An LLM sanitiser will miss some
+  categories out of the box (e.g. internal hostnames, codenames); the owner tunes
+  the private prompt (few-shot examples) and re-measures.
+
 ## Security properties & honest limits
 
 - **Structural invariant** (above) — the core guarantee.
@@ -157,8 +182,9 @@ own beyond the model calls it routes.
 
 The component is intentionally decoupled. To lift it upstream:
 
-- **Take:** `scripts/orchestrator/`, `scripts/lib/orchestrator-route.sh`,
-  `scripts/tests/test-orchestrator.sh`, `scripts/tests/test-classifier.sh`,
+- **Take:** `scripts/orchestrator/` (front door, classifier, sanitiser, evals,
+  default prompts), `scripts/lib/orchestrator-route.sh`, the tests
+  (`test-orchestrator.sh`, `test-classifier.sh`, `test-sanitiser.sh`),
   `scripts/tests/fixtures/sensitivity-eval.jsonl`, `.orchestrator.conf.example`,
   and this doc.
 - **Generic already:** the routing lib, the invariant, the classifier contract,
@@ -175,8 +201,6 @@ The component is intentionally decoupled. To lift it upstream:
 
 ## Roadmap (deferred slices)
 
-- **Sanitiser** — rephrase a non-sensitive prompt to strip incidental identifiers
-  before a cloud handoff (LLM-rephrase; control **C2**).
 - **Model-serving pool** — LiteLLM fronting the heterogeneous fleet with
   retry/fallback = bidirectional failover.
 - **Local executor** — run tool/shell work locally for sensitive tasks that need

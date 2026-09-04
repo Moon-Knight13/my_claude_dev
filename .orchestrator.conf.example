@@ -57,3 +57,26 @@ ORCH_MODEL=richardyoung/qwen3-14b-abliterated:Q4_K_M|host-local|60|http://host.d
 # by adding its path to CTP_PII_PATHS in ~/.ctp-bridge.conf (the C1 path guard):
 #     CTP_PII_PATHS=~/.config/orchestrator/classifier-prompt.md ...
 # The classifier still reads it (it is not a Claude tool call); Claude cannot.
+
+# --- Sanitiser (cloud-handoff path, control C2) -----------------------------
+# Defense-in-depth on the NON-sensitive path: before a prompt is handed to Claude,
+# rewrite it to strip incidental identifiers (names, emails, IPs, tokens, internal
+# hostnames, codenames) with neutral placeholders, preserving the task. LOCAL-only
+# LLM rephrase (it reads the raw prompt, so it never egresses). OPT-IN via
+# ORCH_SANITISER; if unset, the prompt is handed off unchanged (the classifier is
+# still the gate). Env / .env:
+#
+#   ORCH_SANITISER=scripts/orchestrator/sanitise.sh   # enable it
+#   ORCH_SANITISER_ENDPOINT=http://host.docker.internal:11434   # LOCAL only
+#   ORCH_SANITISER_MODEL=richardyoung/qwen3-14b-abliterated:Q4_K_M
+#   ORCH_SANITISER_TIMEOUT=60
+#   ORCH_SANITISER_KEEP_ALIVE=30m
+#   ORCH_SANITISER_PROMPT_FILE=~/.config/orchestrator/sanitiser-prompt.md
+#   ORCH_SANITISE_ON_FAIL=passthrough   # or 'block' — what to do if it can't sanitise
+#
+# passthrough (default): if the sanitiser fails, hand the ORIGINAL to Claude — the
+# classifier already cleared it as non-sensitive. block: refuse the handoff.
+#
+# Same PRIVACY rule as the classifier: tune ~/.config/orchestrator/sanitiser-prompt.md
+# (seed from scripts/orchestrator/sanitiser-prompt.default.md) and add its path to
+# CTP_PII_PATHS. Measure marker-stripping with scripts/orchestrator/eval-sanitiser.sh.

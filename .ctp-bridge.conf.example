@@ -58,8 +58,9 @@ CTP_SECRET_PATHS=/var/tmp/vlt_pf ~/.ssh/id_* ~/.zsh_history ~/.bash_history **/.
 # EMPTY IS THE DEFAULT (opt-in): nothing is denied until you add paths. Example:
 #   CTP_PII_PATHS=~/org-data/** ~/cases/**/*.csv /srv/customer/**
 #
-# If you run the local-model orchestrator, also list your TUNED classifier prompt
-# here — it accumulates the sensitive patterns it is built to catch, so Claude's
-# tools must not read it (the classifier reads it directly and still works):
-#   CTP_PII_PATHS=~/.config/orchestrator/classifier-prompt.md ~/org-data/**
+# If you run the local-model orchestrator, also list your TUNED classifier and
+# sanitiser prompts here — they accumulate the sensitive patterns they are built
+# to catch, so Claude's tools must not read them (the orchestrator reads them
+# directly and still works):
+#   CTP_PII_PATHS=~/.config/orchestrator/classifier-prompt.md ~/.config/orchestrator/sanitiser-prompt.md ~/org-data/**
 CTP_PII_PATHS=

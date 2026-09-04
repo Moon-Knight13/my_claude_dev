@@ -81,11 +81,25 @@ fi
 case "$P_TIER" in
     frontier)
         # Handoff to Claude headless. A/B gates + caveman apply on this path for
-        # free (the PreToolUse hook + commit guard front the CLI). Sanitiser is a
-        # later slice — for now the prompt is passed through unchanged, and it only
-        # ever reaches here for a NON-sensitive task.
+        # free (the PreToolUse hook + commit guard front the CLI). Only a
+        # NON-sensitive prompt ever reaches here.
         command -v claude >/dev/null 2>&1 || { echo "orchestrate.sh: 'claude' CLI not found for frontier handoff" >&2; exit 5; }
-        exec claude -p "$PROMPT" ;;
+        SEND="$PROMPT"
+        # C2 sanitiser (opt-in): strip incidental identifiers before egress. It is
+        # defense-in-depth on top of the classifier, not the gate. If it cannot
+        # sanitise, ORCH_SANITISE_ON_FAIL decides: passthrough (default — the
+        # classifier already cleared this prompt) or block.
+        if [[ -n "${ORCH_SANITISER:-}" && -x "${ORCH_SANITISER}" ]]; then
+            if _san="$(printf '%s' "$PROMPT" | "$ORCH_SANITISER")" && [[ -n "$_san" ]]; then
+                SEND="$_san"
+            else
+                case "${ORCH_SANITISE_ON_FAIL:-passthrough}" in
+                    block) echo "orchestrate.sh: sanitiser failed and ORCH_SANITISE_ON_FAIL=block; refusing handoff" >&2; exit 7 ;;
+                    *)     echo "orchestrate.sh: sanitiser failed; passing original through (classifier already cleared it)" >&2 ;;
+                esac
+            fi
+        fi
+        exec claude -p "$SEND" ;;
     host-local|network-local)
         # Reasoning-only local call (Ollama generate). The local shell-executor
         # path (D1 fallback) is a later slice.

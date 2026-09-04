@@ -469,11 +469,21 @@ acceptable). What matters if you change it:
   `.ai/orchestrator-log.jsonl` — never the prompt text, which may be the sensitive
   content the control exists to protect (same reasoning as the ctp and commit-
   guard logs).
+- **Sanitiser (control C2).** On the cloud-handoff path only, an opt-in
+  (`ORCH_SANITISER`) LOCAL-LLM rephrase (`scripts/orchestrator/sanitise.sh`)
+  strips incidental identifiers (names, emails, IPs, tokens, internal hostnames,
+  codenames) to neutral placeholders before a prompt reaches Claude, preserving
+  the task. It is defense-in-depth on top of the classifier, not the gate: it runs
+  **local-only** (refuses a non-local endpoint), and if it cannot sanitise,
+  `ORCH_SANITISE_ON_FAIL` decides — `passthrough` (default: the classifier already
+  cleared the prompt) or `block`. Held line: it de-identifies **data**, it must
+  **not** be used to disguise a prohibited **action** as an allowed one. Its
+  prompt is tuned/guarded exactly like the classifier's, and marker-stripping is
+  measured by `scripts/orchestrator/eval-sanitiser.sh`.
 - **Deferred slices** (see `_bmad-output/planning-artifacts/architecture-g3-local-orchestrator.md`):
-  the sanitiser (rephrase before a cloud handoff — the overlap with control C2),
   the LiteLLM multi-machine pool, and the local shell executor (which will route
-  through `safety-guard.sh` as enforcement point #2). The local-LLM classifier has
-  landed (above).
+  through `safety-guard.sh` as enforcement point #2). The local-LLM classifier and
+  the sanitiser have landed (above).
 
 ### Network changes are deliberate
 

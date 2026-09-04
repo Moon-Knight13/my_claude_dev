@@ -90,6 +90,30 @@ if grep -q 'secret sensitive prompt' "$TMP/log.jsonl" 2>/dev/null; then
     bad "log leaked the prompt text"
 else ok "log records metadata only, never the prompt"; fi
 
+echo "== C2 sanitiser wiring (frontier dispatch) =="
+MB="$TMP/bin2"; mkdir -p "$MB"
+# shellcheck disable=SC2016  # $2 is the mock's own runtime arg (claude -p <prompt>), must not expand now
+printf '#!/usr/bin/env bash\necho "CLAUDE_GOT:$2"\n' > "$MB/claude"; chmod +x "$MB/claude"
+UPSAN="$TMP/upsan.sh";  printf '#!/usr/bin/env bash\ntr "[:lower:]" "[:upper:]"\n' > "$UPSAN"; chmod +x "$UPSAN"
+FAILSAN="$TMP/failsan.sh"; printf '#!/usr/bin/env bash\nexit 1\n' > "$FAILSAN"; chmod +x "$FAILSAN"
+# dead local endpoint so the sensitive-path test can't make a real model call
+E=(ORCH_CONF="$CONF" ORCH_LOG="$TMP/log.jsonl" LOCAL_MODEL_ENDPOINT="http://127.0.0.1:9")
+# sanitiser transforms -> claude receives the sanitised (uppercased) prompt
+out="$(env "${E[@]}" PATH="$MB:$PATH" ORCH_SANITISER="$UPSAN" bash "$ORCH" --mode CLAUDE-ONLY 'hello world' 2>/dev/null)"
+check "sanitised prompt reaches claude" "$out" "CLAUDE_GOT:HELLO WORLD"
+# sanitiser fails + block -> refuse handoff (exit 7)
+env "${E[@]}" PATH="$MB:$PATH" ORCH_SANITISER="$FAILSAN" ORCH_SANITISE_ON_FAIL=block bash "$ORCH" --mode CLAUDE-ONLY 'hello' >/dev/null 2>&1; rc=$?
+check "sanitiser fail + block -> exit 7" "$rc" 7
+# sanitiser fails + passthrough (default) -> claude gets the original
+out="$(env "${E[@]}" PATH="$MB:$PATH" ORCH_SANITISER="$FAILSAN" bash "$ORCH" --mode CLAUDE-ONLY 'hello' 2>/dev/null)"
+check "sanitiser fail passthrough -> original" "$out" "CLAUDE_GOT:hello"
+# no sanitiser configured -> original reaches claude unchanged
+out="$(env "${E[@]}" PATH="$MB:$PATH" bash "$ORCH" --mode CLAUDE-ONLY 'hello' 2>/dev/null)"
+check "no sanitiser -> original to claude" "$out" "CLAUDE_GOT:hello"
+# a SENSITIVE prompt never reaches the frontier/claude even with a sanitiser set
+out="$(env "${E[@]}" PATH="$MB:$PATH" ORCH_SANITISER="$UPSAN" bash "$ORCH" --mode LOCAL-ONLY 'hello' 2>/dev/null)"
+case "$out" in *CLAUDE_GOT*) bad "INVARIANT: sensitive prompt reached claude via sanitiser path";; *) ok "sensitive never reaches claude (sanitiser irrelevant)";; esac
+
 echo
 echo "orchestrator: $PASS passed, $FAIL failed"
 [[ "$FAIL" -eq 0 ]]
