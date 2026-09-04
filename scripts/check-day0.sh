@@ -196,6 +196,27 @@ else
         "Run: bash scripts/install-claude-plugins.sh  (or restart the devcontainer to re-run postStartCommand)"
 fi
 
+# 8b. Commit guard (warn-only PII/secret scan). Installed at USER scope on a box
+# by provisioning (install-commit-guard.sh) so it covers every repo incl. the
+# range checkout; not applied in the devcontainer. It NEVER blocks a commit — it
+# prints and logs findings so a leaked secret can be rotated per SECURITY.md.
+_cg_runner="$HOME/.local/lib/commit-guard/commit-scan.sh"
+_cg_hooks="$(git config --global --get core.hooksPath 2>/dev/null || true)"
+if [[ -x "$_cg_runner" && "$_cg_hooks" == *commit-guard* ]]; then
+    if command -v gitleaks >/dev/null 2>&1; then
+        check "Commit guard installed (warn-only; gitleaks present)" "pass" ""
+    else
+        check "Commit guard installed, but gitleaks missing (scans no-op)" "warn" \
+            "Install gitleaks so staged content is scanned. The guard is warn-only either way — it never blocks a commit."
+    fi
+elif [[ "$(current_surface)" == "box" ]]; then
+    check "Commit guard installed (warn-only PII/secret scan)" "fail" \
+        "Run: bash scripts/install-commit-guard.sh (or re-run provisioning). Warn-only: never blocks a commit; prints/logs findings so secrets can be rotated per SECURITY.md. Bypassable with --no-verify — defense-in-depth, not a boundary."
+else
+    check "Commit guard (warn-only; box-only)" "skip" \
+        "not installed in the devcontainer — applied on a box by provisioning"
+fi
+
 # 9. GitHub bootstrap has been run (completion marker written by
 # bootstrap-github-settings.sh). setup-day0.sh applies it once gh is authed.
 if [[ -f ".ai/bootstrap-completed" ]]; then

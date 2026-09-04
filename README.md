@@ -117,6 +117,18 @@ disable it. The durable fix is org-level (per-dev accounts/keys, or each dev on 
 subscription). See [`scripts/host/README.md`](scripts/host/README.md) for the full run,
 verify, honest-limitations, and rollback details.
 
+### Commit guard (warn-only, on the box)
+
+Provisioning installs a user-scope commit guard so accidental secrets or PII are
+caught on **every** commit — human or agent — in any repo, including the range
+checkout. It is **warn-only**: it prints each finding and logs `rule/file/line`
+(never the value) to `~/.local/state/commit-guard/`, then lets the commit
+through. For a secret that means rotating it per [SECURITY.md](SECURITY.md) —
+warn-only shifts the mitigation to fast reaction, not prevention. Like the other
+on-box hooks it is defense-in-depth, not a boundary (`--no-verify` bypasses it).
+The blocking pre-commit + CI gitleaks gates still apply when developing this repo
+in the devcontainer.
+
 ## Developing this repo (devcontainer)
 
 Work *on this repo* happens inside a devcontainer carried over from
