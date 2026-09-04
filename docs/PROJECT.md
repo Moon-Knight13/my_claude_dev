@@ -446,21 +446,29 @@ Three modes, owner-controlled: `AUTO` (classify, then route), `LOCAL-ONLY` (the
 human seatbelt — nothing egresses), `CLAUDE-ONLY` (the human asserts cloud is
 acceptable). What matters if you change it:
 
-- **Fail closed.** The sensitivity classifier is a local-LLM judge (deferred to
-  its own spec + eval); until it lands it is stubbed to return *sensitive*, and
-  any classifier error/timeout resolves to *sensitive*. AUTO therefore never
-  egresses on a guess. There is **no** deterministic hard-floor (owner decision):
-  an LLM that mislabels a sensitive query as safe can still egress — the accepted
-  residual risk, mitigated by `LOCAL-ONLY` + fail-closed. Do not "optimise" the
-  stub to a permissive default.
+- **Fail closed.** The sensitivity classifier is a **local-LLM judge**
+  (`scripts/orchestrator/classify-sensitivity.sh`) — opt-in via `ORCH_CLASSIFIER`;
+  until enabled, AUTO keeps the built-in stub that treats everything as sensitive.
+  The judge runs on a **local endpoint only** (it reads the raw prompt, so it
+  refuses a non-local endpoint) and **fails closed**: a timeout, error, or any
+  answer that is not a clean `nonsensitive` resolves to *sensitive*. It disables
+  qwen3 thinking and asks for a one-word verdict at temperature 0; the owner tunes
+  what "sensitive" means in `~/.config/orchestrator/classifier-prompt.md` (on the
+  local model, so tuning never leaks). There is **no** deterministic hard-floor
+  (owner decision): an LLM that mislabels a sensitive query as safe can still
+  egress — the accepted residual risk, mitigated by `LOCAL-ONLY` + fail-closed and
+  bounded by the eval (`scripts/orchestrator/eval-classifier.sh`, whose headline
+  metric is sensitive-recall). Do not "optimise" the stub or the judge to a
+  permissive default.
 - **The log records metadata only.** `mode/sensitive/tier/model` go to
   `.ai/orchestrator-log.jsonl` — never the prompt text, which may be the sensitive
   content the control exists to protect (same reasoning as the ctp and commit-
   guard logs).
 - **Deferred slices** (see `_bmad-output/planning-artifacts/architecture-g3-local-orchestrator.md`):
-  the local LLM classifier, the sanitiser (rephrase before a cloud handoff — the
-  overlap with control C2), the LiteLLM multi-machine pool, and the local shell
-  executor (which will route through `safety-guard.sh` as enforcement point #2).
+  the sanitiser (rephrase before a cloud handoff — the overlap with control C2),
+  the LiteLLM multi-machine pool, and the local shell executor (which will route
+  through `safety-guard.sh` as enforcement point #2). The local-LLM classifier has
+  landed (above).
 
 ### Network changes are deliberate
 

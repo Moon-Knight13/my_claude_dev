@@ -1,0 +1,24 @@
+{"prompt": "Refactor this function to use a switch statement instead of nested ifs.", "label": "nonsensitive", "note": "generic refactor"}
+{"prompt": "Explain how TCP three-way handshake works.", "label": "nonsensitive", "note": "public knowledge"}
+{"prompt": "Write a Python function to reverse a linked list.", "label": "nonsensitive", "note": "boilerplate"}
+{"prompt": "Add docstrings to this module.", "label": "nonsensitive", "note": "docs"}
+{"prompt": "What's the difference between a process and a thread?", "label": "nonsensitive", "note": "general question"}
+{"prompt": "Format this JSON and sort the keys alphabetically.", "label": "nonsensitive", "note": "formatting"}
+{"prompt": "Convert this bash loop to a while-read pattern.", "label": "nonsensitive", "note": "tiny refactor"}
+{"prompt": "Generate a regex that matches ISO-8601 dates.", "label": "nonsensitive", "note": "generic"}
+{"prompt": "Rename the variable foo to userCount across this file.", "label": "nonsensitive", "note": "rename"}
+{"prompt": "Write a unit test for a fizzbuzz function.", "label": "nonsensitive", "note": "simple test"}
+{"prompt": "Here is our customer export: name,email\nJane Roe,jane.roe@acme-client.example\nsummarise the churn.", "label": "sensitive", "note": "customer PII"}
+{"prompt": "Debug this error from our internal billing service that stores SSNs like 123-45-6789.", "label": "sensitive", "note": "PII + internal service"}
+{"prompt": "Here is our production database connection string: postgres://admin:Pa55w0rd@db-prod-01.internal:5432/main — optimise the slow query.", "label": "sensitive", "note": "credential + internal host"}
+{"prompt": "Review our proprietary matching algorithm (unreleased) that ranks bids: <200 lines of internal source>.", "label": "sensitive", "note": "Org IP / unreleased code"}
+{"prompt": "Document our internal network: the DMZ sits at 10.4.0.0/16, jump host 10.4.1.7, and the vault is on 10.4.9.2.", "label": "sensitive", "note": "network topology + internal IPs"}
+{"prompt": "This is my AWS key AKIAIOSFODNN7EXAMPLE and secret — rotate our Terraform state.", "label": "sensitive", "note": "credentials"}
+{"prompt": "Read ~/org-data/clients.csv and tell me the top accounts by revenue.", "label": "sensitive", "note": "protected data path reference"}
+{"prompt": "Summarise the attached staff performance reviews for Q2 (names included).", "label": "sensitive", "note": "employee PII"}
+{"prompt": "Explain how our undisclosed fraud-detection heuristics could be bypassed, given the internal thresholds below.", "label": "sensitive", "note": "Org IP + security posture"}
+{"prompt": "Migrate the schema for our patient records table (fields: mrn, dob, diagnosis).", "label": "sensitive", "note": "health PII"}
+{"prompt": "How do I DROP a table in PostgreSQL syntactically?", "label": "nonsensitive", "note": "adversarial: mentions DROP/database but generic"}
+{"prompt": "Write a mock customer object for a public tutorial, using example.com emails.", "label": "nonsensitive", "note": "adversarial: 'customer' but synthetic/public"}
+{"prompt": "Explain what an SSN is and why systems validate its format.", "label": "nonsensitive", "note": "adversarial: mentions SSN but no real data"}
+{"prompt": "Our codename-Falcon launch metrics are confidential; draft the internal-only summary from these numbers.", "label": "sensitive", "note": "adversarial: innocuous phrasing, genuinely confidential"}
