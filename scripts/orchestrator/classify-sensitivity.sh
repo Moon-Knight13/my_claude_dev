@@ -74,15 +74,18 @@ RESP="$(curl -sfS --max-time "$TIMEOUT" "$ENDPOINT/api/generate" \
     -H 'Content-Type: application/json' \
     -d "$(jq -n --arg m "$MODEL" --arg p "$FULL" --arg s "$SYS" --arg k "$KEEP_ALIVE" \
         '{model:$m, prompt:$p, system:$s, stream:false, think:false, keep_alive:$k,
-          options:{temperature:0, num_predict:16, top_p:1}}')" 2>/dev/null \
+          options:{temperature:0, num_predict:256, top_p:1}}')" 2>/dev/null \
     | jq -r '.response' 2>/dev/null)" || verdict sensitive
 
-# Strip any qwen3 thinking block that slipped through (newline-flattened first so
-# the block is removable on one line), then strict-parse: lowercase, drop
-# whitespace/punctuation, and require the WHOLE answer to be exactly
-# "nonsensitive". A verbose or hedged answer -> fail closed (sensitive).
-RESP="$(printf '%s' "${RESP:-}" | tr '\n' ' ' | sed 's/<think>.*<\/think>//g')"
-CLEAN="$(printf '%s' "${RESP:-}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:][:punct:]')"
+# qwen3 emits a short reasoning remnant before the verdict even with thinking off
+# (a stray </think>, a \boxed{} wrapper). The verdict is the LAST non-empty line;
+# earlier reasoning lines — including any "not nonsensitive" — cannot unlock the
+# cloud. Take the last line, strip a \boxed{} wrapper + punctuation, and require
+# it to be exactly "nonsensitive". A truncated/missing/verbose verdict -> fail
+# closed (sensitive).
+LAST="$(printf '%s\n' "${RESP:-}" | sed 's|<think>.*</think>||g' | grep -vE '^[[:space:]]*$' | tail -1)"
+CLEAN="$(printf '%s' "${LAST:-}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:][:punct:]')"
+CLEAN="${CLEAN#boxed}"                             # unwrap a \boxed{verdict} remnant
 case "$CLEAN" in
     nonsensitive) verdict nonsensitive ;;
     *)            verdict sensitive ;;

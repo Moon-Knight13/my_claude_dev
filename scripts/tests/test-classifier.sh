@@ -48,6 +48,11 @@ check "trailing punctuation honoured"      "$(MOCK_RESP='nonsensitive.' run 'x')
 # qwen3 thinking block must be stripped before the verdict is read
 check "think block stripped (nonsens)"     "$(MOCK_RESP='<think>the task is a generic refactor</think>nonsensitive' run 'x')" nonsensitive
 check "think block stripped (sens)"        "$(MOCK_RESP='<think>has an email</think>sensitive' run 'x')" sensitive
+# realistic qwen3 multi-line output: reasoning remnant, verdict on the last line
+check "qwen3 multiline verdict (nonsens)"  "$(MOCK_RESP=$' \\boxed{nonsensitive}\n\n</think>\n\nnonsensitive' run 'x')" nonsensitive
+check "qwen3 boxed-only last line (sens)"  "$(MOCK_RESP=$'</think>\n\\boxed{sensitive}' run 'x')" sensitive
+# reasoning that says "not nonsensitive" above the verdict must NOT unlock cloud
+check "negation in reasoning ignored"      "$(MOCK_RESP=$'this is not nonsensitive\nsensitive' run 'x')" sensitive
 
 echo "== fail closed =="
 check "verbose answer -> sensitive"        "$(MOCK_RESP='Sure, this is nonsensitive!' run 'x')" sensitive
