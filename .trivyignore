@@ -1,0 +1,12 @@
+# Trivy vulnerability ignore list. One advisory ID per line; # for comments.
+# Every entry MUST carry a dated justification and a removal condition — this is
+# documented risk-acceptance, not a mute button.
+
+# CVE-2026-56854 — golang.org/x/crypto/ssh, embedded in the gitleaks and gh Go
+# binaries in this image. Justification: the devcontainer is a local dev sandbox
+# (not a shipped artifact) behind a deny-by-default firewall, and neither tool
+# exercises the vulnerable path here — gitleaks scans local repos, gh talks HTTPS;
+# neither runs an SSH server/client in this image. Fixed in x/crypto 0.55.0.
+# REMOVE this entry once gitleaks and gh ship releases rebuilt on x/crypto >=0.55.0
+# (Dependabot bumps GITLEAKS_VERSION / the gh pin). Added 2026-09-04. Tracked: #55.
+CVE-2026-56854

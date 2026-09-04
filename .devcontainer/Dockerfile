@@ -56,6 +56,7 @@ RUN apt-get update && apt-get -y upgrade && apt-get install -y --no-install-reco
   jq \
   nano \
   vim \
+  shellcheck \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install a modern pre-commit version at build time to avoid runtime PyPI access.

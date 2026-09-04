@@ -240,7 +240,13 @@ if command -v shellcheck &>/dev/null; then
         fi
     done < <(find scripts -name "*.sh" -print0)
 else
-    echo "  --  shellcheck not installed; skipping (apt-get install shellcheck)"
+    # Do NOT silently skip. CI runs the linter, so a silent local skip lets
+    # lint-only findings (SC2016, SC1091, ...) sail through review and fail CI
+    # instead. This gate runs only where the linter should exist (the devcontainer
+    # ships it; CI installs it), so treat its absence as a failure with a clear
+    # remedy rather than a pass.
+    check "shellcheck installed (local/CI parity)" "fail" \
+        "Install shellcheck so this gate matches CI: 'apt-get install -y shellcheck' (the devcontainer ships it; rebuild if missing)."
 fi
 
 # 8. CODEOWNERS placeholder guard (enforced in derived repos; no-op on the
