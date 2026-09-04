@@ -233,6 +233,20 @@ else
         "not installed in the devcontainer — applied on a box by provisioning"
 fi
 
+# 8b. PII/IP path guard (C1). The installed guard lib must define ctp_is_pii_path,
+# so the hook can deny tool reads/writes of configured Org-sensitive paths. A
+# stale install predating C1 has the hook but not the capability — catch it.
+_pii_lib="$HOME/.local/lib/ctp-bridge/ctp-guard.sh"
+if [[ -f "$_pii_lib" ]] && grep -q "ctp_is_pii_path" "$_pii_lib" 2>/dev/null; then
+    check "PII/IP path guard present (set CTP_PII_PATHS to use it)" "pass" ""
+elif [[ "$(current_surface)" == "box" ]]; then
+    check "PII/IP path guard present" "fail" \
+        "Run: bash scripts/install-ctp-bridge.sh (or re-run provisioning). Then list Org-data dirs in CTP_PII_PATHS in ~/.ctp-bridge.conf so their contents never reach the transcript."
+else
+    check "PII/IP path guard (box-only)" "skip" \
+        "not installed in the devcontainer — applied on a box by provisioning"
+fi
+
 # 9. GitHub bootstrap has been run (completion marker written by
 # bootstrap-github-settings.sh). setup-day0.sh applies it once gh is authed.
 if [[ -f ".ai/bootstrap-completed" ]]; then

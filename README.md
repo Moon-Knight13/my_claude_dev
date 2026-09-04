@@ -117,6 +117,22 @@ disable it. The durable fix is org-level (per-dev accounts/keys, or each dev on 
 subscription). See [`scripts/host/README.md`](scripts/host/README.md) for the full run,
 verify, honest-limitations, and rollback details.
 
+### The safety harness (on the box)
+
+When Claude works on a provisioned box, a set of controls sits between the agent
+and the box and turns the risky actions into a human decision — or refuses them
+outright. It is built backwards from four "what if" worries: Claude **leaking
+Org PII/IP** into the transcript, **committing secrets/PII**, running a
+**destructive command**, or making an **unauthorized web connection**. It is
+defense-in-depth and human-in-the-loop, deliberately **not** a sandbox — the
+shared-sudo box gives no OS isolation, an accepted risk.
+
+Each control is **demonstrable** — feed the PreToolUse hook a tool call and read
+its verdict, or ask Claude to do the risky thing and watch the confirm/deny. The
+full active-usage walkthrough and copy-paste demo is in
+**[docs/SAFETY_HARNESS.md](docs/SAFETY_HARNESS.md)**; the subsections below cover
+the built controls, and `check-day0.sh` reports each one's posture honestly.
+
 ### Commit guard (warn-only, on the box)
 
 Provisioning installs a user-scope commit guard so accidental secrets or PII are
@@ -128,6 +144,28 @@ warn-only shifts the mitigation to fast reaction, not prevention. Like the other
 on-box hooks it is defense-in-depth, not a boundary (`--no-verify` bypasses it).
 The blocking pre-commit + CI gitleaks gates still apply when developing this repo
 in the devcontainer.
+
+### Destructive-action gate (on the box)
+
+The same user-scope PreToolUse hook that fronts the build-tooling bridge also
+**confirms destructive shell commands** before an agent runs them — `rm -rf`,
+`shred`, `mkfs`, `dd of=`, `dropdb`, `DROP`/`TRUNCATE` SQL, `terraform destroy`,
+`kubectl delete`, `docker system prune`. With no human to confirm it **fails
+closed** to a deny. It classifies segmented command words (not raw strings) via
+the shared `cmd-segment.sh`, is model-agnostic (the classifier is a lib any
+executor routes through), and deliberately does **not** cover git/commit (the
+commit guard's domain) or `ctp` (already gated). Defense-in-depth, not a sandbox.
+
+### Keeping Org data out of Claude (path guard, on the box)
+
+Hooks can deny a read but **cannot redact tool output**, so the way to keep Org
+PII/IP out of the transcript is to refuse the read. List Org-data path globs in
+`CTP_PII_PATHS` (in `~/.ctp-bridge.conf`) and the hook denies any tool Read/Write
+or Bash command that names them — a separate, owner-tuned list from the credential
+`CTP_SECRET_PATHS`. **Opt-in** (empty by default). Path-based only; intelligent
+content-level redaction is the job of the local-model orchestrator (planned),
+which can rephrase sensitive content — including tool output — before Claude sees
+it. Defense-in-depth, not OS containment.
 
 ## Developing this repo (devcontainer)
 
@@ -151,7 +189,8 @@ Verify anytime with `bash scripts/check-day0.sh` — or from Claude: `/day0-chec
 
 📊 **[Open the visual overview →](https://moon-knight13.github.io/my_claude_dev/)** — a
 one-page briefing (technical and non-technical) covering the box provisioning flow,
-the devcontainer, the two routing engines, caveman token compression, and the CI gates.
+the devcontainer, the two routing engines, caveman token compression, the CI gates, and
+the on-box safety harness in action.
 Served from [`docs/explainer/`](docs/explainer/index.html); the page is self-contained, so
 you can also open the HTML locally.
 
@@ -178,7 +217,7 @@ scripts/             Bootstrap (incl. board), routing, CI helpers, and template 
 .devcontainer/       Dev environment (for developing this repo) — deny-by-default firewall, pre-installed tooling
 .claude/commands/    Claude Code skills (/bmad, /bmad-to-board, /next-issue, /run-epic, /day0-check, /route-task, /security-audit, /firewall-allow)
 .github/             Workflows (CI, secret scan, semgrep, container scan, weekly audit); issue & PR templates
-docs/                TEMPLATE_GUIDE.md, AI_ROUTING_POLICY.md, BMAD_WORKFLOW.md, KANBAN_WORKFLOW.md, explainer/
+docs/                SAFETY_HARNESS.md, TEMPLATE_GUIDE.md, AI_ROUTING_POLICY.md, BMAD_WORKFLOW.md, KANBAN_WORKFLOW.md, explainer/
 ```
 
 ## License

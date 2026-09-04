@@ -425,9 +425,27 @@
         <div class="check"><div class="cn">semgrep</div><div class="cw">SAST, including MITRE ATLAS rules for AI/ML risks.</div><div class="cs">semgrep.yml</div></div>
         <div class="check"><div class="cn">Trivy</div><div class="cw">Scans the container image for known CVEs.</div><div class="cs">container-scan.yml</div></div>
         <div class="check"><div class="cn">weekly audit</div><div class="cw">Scheduled repo-wide security sweep.</div><div class="cs">repository-audit.yml</div></div>
-        <div class="check"><div class="cn">commit guard</div><div class="cw">On a box: warn-only PII/secret scan on every commit — logs findings, never blocks.</div><div class="cs">on-box</div></div>
       </div>
-      <p class="d-note">Every gate is required, not advisory — a red check keeps the pull request from merging.</p>
+      <p class="d-note">Every gate is required, not advisory — a red check keeps the pull request from merging. These run in CI; the on-box runtime controls are below.</p>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">On a remote box · live</p>
+    <h2>The safety harness, in action</h2>
+    <p class="section-note">When Claude works on a shared dev box, these controls sit between the agent and the box and turn the risky actions into a human decision — or refuse them outright — <b>while you watch</b>. Built backwards from four things a developer worries an agent might do. Defense-in-depth and human-in-the-loop, deliberately <b>not</b> a sandbox: the shared-sudo box offers no OS isolation, so this stops the accidental and misread-instruction cases and puts a human in the loop for the dangerous ones — it does not contain a determined adversary.</p>
+
+    <div class="dgram">
+      <div class="dgram-h"><h3>Every agent tool call runs the gate first</h3><span class="path">~/.claude/hooks/pretooluse-ctp.sh</span></div>
+      <div class="pipe">
+        <div class="check"><div class="cn">worry ① leak PII/IP</div><div class="cw"><b>PII/IP path guard.</b> A tool Read/Write or Bash command touching an owner-listed Org-data path is <b>denied</b> — its contents never reach the transcript. Hooks cannot redact tool output, so the read is refused, not sanitised. Opt-in via CTP_PII_PATHS.</div><div class="cs">deny</div></div>
+        <div class="check"><div class="cn">worry ② commit secrets</div><div class="cw"><b>Commit guard.</b> Every commit — human or agent, any repo — is scanned for secrets and PII. <b>Warn + log</b>, never blocks: an intentional commit is never stopped, a real leak is impossible to miss and logged (rule/file/line, never the value) to rotate fast.</div><div class="cs">warn</div></div>
+        <div class="check"><div class="cn">worry ③ destructive act</div><div class="cw"><b>Destructive-action gate.</b> rm -rf, dropdb, DROP/TRUNCATE, terraform destroy, kubectl delete, docker prune — the human <b>confirms</b> before it runs. No human present ⇒ it fails closed to a deny. Model-agnostic: one classifier lib any executor routes through.</div><div class="cs">ask</div></div>
+        <div class="check"><div class="cn">worry ④ web connection</div><div class="cw"><b>Egress.</b> Covered on the box by the org's restricted network — new outbound hosts are already gated at the edge. A hook-level visibility layer is planned on top.</div><div class="cs">org net</div></div>
+        <div class="check"><div class="cn">build tooling</div><div class="cw"><b>Bridge.</b> The agent cannot drive the deploy wrapper or docker directly — bare access is <b>denied</b>; a permitted verb raises a confirm bound to that exact command; a refused verb is denied.</div><div class="cs">ask / deny</div></div>
+        <div class="check"><div class="cn">credentials</div><div class="cw"><b>Secret-read deny + killswitch.</b> Credential files (vault, ~/.ssh keys, .env, history) are unreadable by any tool; and once the last session ends, credentials left on the shared account are shredded so the next connector authenticates as themselves.</div><div class="cs">deny / shred</div></div>
+      </div>
+      <p class="d-note">The hook runs <b>outside</b> the agent's command, so the agent cannot disable it, and its limits come from a gitignored on-box config, never the agent's environment. Every control is <b>demonstrable</b> — feed the hook a tool call and read its verdict, or ask Claude to do the risky thing and watch the prompt. Full walkthrough: <span class="path">docs/SAFETY_HARNESS.md</span>. <span class="path">check-day0.sh</span> reports each control's posture honestly (present · warn-only · bypassable · box-only).</p>
     </div>
   </section>
 

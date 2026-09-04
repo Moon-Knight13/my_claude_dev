@@ -308,6 +308,24 @@ PII-Shield cannot be installed via `claude plugin install` — it uses a `.mcpb`
 3. First run downloads a ~634 MB NER model (one-time)
 4. Mappings expire after 7 days by default
 
+### On-box PII/IP path guard (read-deny)
+
+PII-Shield redacts content that *does* reach Claude; the path guard stops
+whole files from reaching it. On a **remote box**, the provisioned PreToolUse
+hook denies any tool Read/Write/Edit or Bash command that names an owner-listed
+Org-data path, so its contents never enter the transcript. List the paths in
+`CTP_PII_PATHS` in `~/.ctp-bridge.conf` (same glob syntax as the credential
+`CTP_SECRET_PATHS`, but a separate, independently-tuned list with its own deny
+reason). It is **opt-in** (empty by default) and **symmetric** (read and write).
+
+This is deliberate: a hook can deny a read but **cannot redact tool output**
+(`PostToolUse` runs after the tool), so for a file's contents the only reliable
+in-harness protection is to refuse the read. It is path-based — PII inside a
+non-listed file is not caught; intelligent content-level redaction (including of
+tool output) is the job of the planned local-model orchestrator, which reads and
+rephrases sensitive content before Claude sees it. Defense-in-depth, not OS
+containment. `check-day0.sh` asserts the capability is present on a box.
+
 ## CI and Quality Gates
 
 - Universal checks:

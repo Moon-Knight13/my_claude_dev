@@ -25,6 +25,7 @@ CTP_ALLOWED_VERBS=deploy deploy-role
 CTP_CONTAINER=catapult-tester
 CTP_PROJECT_DIR=/srv/inventories/dcm
 CTP_SECRET_PATHS=/var/tmp/vlt_pf ~/.ssh/id_* ~/.zsh_history ~/.bash_history **/.env
+CTP_PII_PATHS=~/org-data/** ~/cases/*.csv /srv/customer/** **/customer-list.csv
 EOF
 
 # ============================================================================
@@ -73,6 +74,20 @@ check "zsh_history is secret"       "$(sec /home/tester/.zsh_history)"  secret
 check ".env.example is NOT secret"  "$(sec /workspace/.env.example)"   ok
 check "ssh config is NOT secret"    "$(sec /home/tester/.ssh/config)"  ok
 check "README is NOT secret"        "$(sec /workspace/README.md)"      ok
+
+# C1 — PII/IP path matcher (separate list, separate verdict from secrets)
+pii() { ctp_is_pii_path "$1" && echo pii || echo ok; }
+check "org-data tree is pii"          "$(pii /home/tester/org-data/clients.csv)" pii
+check "cases csv is pii"              "$(pii /home/tester/cases/report.csv)"     pii
+check "customer tree is pii"          "$(pii /srv/customer/db.sql)"              pii
+check "customer-list anywhere is pii" "$(pii /var/tmp/customer-list.csv)"        pii
+check "notes file is NOT pii"         "$(pii /home/tester/notes/readme.md)"      ok
+check "README is NOT pii"             "$(pii /workspace/README.md)"              ok
+# the two lists are independent: a secret is not pii, a pii path is not secret
+check "secret path is NOT pii"        "$(pii /var/tmp/vlt_pf)"                    ok
+check "pii path is NOT secret"        "$(sec /home/tester/org-data/clients.csv)" ok
+# empty list (the opt-in default) matches nothing
+( CTP_PII_PATHS=""; check "empty pii list matches nothing" "$(pii /home/tester/org-data/clients.csv)" ok )
 
 # ============================================================================
 echo "== wrapper (mocked docker) =="
@@ -283,6 +298,14 @@ check "Read approval token -> deny"  "$(decide "$(read_json "$APPROVAL_PATH")")"
 check "Write to secret path -> deny" "$(decide "$(printf '{"tool_name":"Write","tool_input":{"file_path":"%s"}}' "$APPROVAL_PATH")")" deny
 check "Bash write token -> deny"     "$(decide "$(bash_json "echo x > $APPROVAL_PATH")")" deny
 check "Edit .env -> deny"            "$(decide "$(printf '{"tool_name":"Edit","tool_input":{"file_path":"/app/.env"}}')")" deny
+
+# C1 — PII/IP path guard at the hook: reads/writes of a configured Org path deny;
+# an unlisted path draws no opinion (no friction).
+check "Read PII path -> deny"        "$(decide "$(read_json /home/tester/org-data/clients.csv)")" deny
+check "Bash cat PII path -> deny"    "$(decide "$(bash_json "cat /home/tester/org-data/clients.csv")")" deny
+check "Bash <redirect PII -> deny"   "$(decide "$(bash_json "mail -s x foo < /srv/customer/db.sql")")" deny
+check "Write to PII path -> deny"    "$(decide "$(printf '{"tool_name":"Write","tool_input":{"file_path":"/srv/customer/out.csv"}}')")" deny
+check "Read unlisted path -> none"   "$(decide "$(read_json /home/tester/notes/readme.md)")" none
 
 # multi-line Bash must not be mis-segmented: a commit message or a heredoc body
 # whose line happens to start ctp/make is DATA, not a command. This was a real

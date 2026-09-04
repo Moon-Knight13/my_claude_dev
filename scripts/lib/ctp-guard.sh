@@ -24,6 +24,7 @@ CTP_ALLOWED_VERBS="deploy deploy-role"
 CTP_CONTAINER=""
 CTP_PROJECT_DIR=""
 CTP_SECRET_PATHS=""
+CTP_PII_PATHS=""
 
 ctp_load_config() {
     local conf="$1" line key val
@@ -43,6 +44,7 @@ ctp_load_config() {
             CTP_CONTAINER)      CTP_CONTAINER="$val" ;;
             CTP_PROJECT_DIR)    CTP_PROJECT_DIR="$val" ;;
             CTP_SECRET_PATHS)   CTP_SECRET_PATHS="$val" ;;
+            CTP_PII_PATHS)      CTP_PII_PATHS="$val" ;;
         esac
     done < "$conf"
     return 0
@@ -159,16 +161,17 @@ ctp_expand_tilde() {
     esac
 }
 
-# ctp_is_secret_path <path> — 0 if the path matches a configured secret glob, so
-# its contents must never be read into a transcript. Matches the raw and the
-# basename form so `.env` matches `**/.env`, and `/var/tmp/vlt_pf` matches itself.
-ctp_is_secret_path() {
-    local candidate pat epat base
-    candidate="$(ctp_expand_tilde "$1")"   # a literal ~ in the arg must match too
+# _ctp_path_in <path> <space-separated-globs> — 0 if <path> matches any glob in
+# the list. Matches the raw and the basename form so `.env` matches `**/.env`,
+# and `/var/tmp/vlt_pf` matches itself. Shared by the secret and PII matchers so
+# both use one hardened rule.
+_ctp_path_in() {
+    local candidate="$1" list="$2" pat epat base
+    candidate="$(ctp_expand_tilde "$candidate")"   # a literal ~ in the arg must match too
     base="${candidate##*/}"
-    for pat in $CTP_SECRET_PATHS; do
+    for pat in $list; do
         epat="$(ctp_expand_tilde "$pat")"
-        # shellcheck disable=SC2053  # glob match is intentional (secret-path patterns)
+        # shellcheck disable=SC2053  # glob match is intentional (path patterns)
         [[ "$candidate" == $epat ]] && return 0
         # a **/ prefix means "anywhere": match on the basename too
         # shellcheck disable=SC2053
@@ -178,3 +181,13 @@ ctp_is_secret_path() {
     done
     return 1
 }
+
+# ctp_is_secret_path <path> — 0 if the path matches a configured secret glob, so
+# its contents (credentials) must never be read into a transcript.
+ctp_is_secret_path() { _ctp_path_in "$1" "$CTP_SECRET_PATHS"; }
+
+# ctp_is_pii_path <path> — 0 if the path matches a configured Org PII/IP glob.
+# Separate list, separate reason from secrets: a data-governance boundary the
+# owner tunes independently (and that a future local-model front-door may treat
+# differently). Empty CTP_PII_PATHS (the default) matches nothing — opt-in.
+ctp_is_pii_path() { _ctp_path_in "$1" "$CTP_PII_PATHS"; }
