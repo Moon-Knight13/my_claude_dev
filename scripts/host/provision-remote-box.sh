@@ -26,8 +26,9 @@
 #   6. Build-tooling verification (only when you supply the command; the
 #      template cannot know it, and this repository is public)
 #   7. SSH agent-forwarding sanity check (downstream tooling needs the forwarded key)
-#   8. ctp tool bridge installed at user scope (gate present in every session,
-#      including those started from the range checkout; inert until configured)
+#   8. ctp tool bridge + destructive-action gate installed at user scope (gates
+#      present in every session, including those started from the range checkout;
+#      the safety gate confirms destructive commands like rm -rf / dropdb / destroy)
 #   9. Commit guard installed at user scope (warn-only PII/secret scan on every
 #      commit, in any repo incl. the range checkout; never blocks a commit)
 #
@@ -43,7 +44,7 @@ _REPO_ROOT="$(cd "$_SCRIPT_DIR/../.." && pwd)"
 source "$_SCRIPT_DIR/lib/host-common.sh"
 
 # Bump when the provisioning steps change so existing boxes re-provision.
-PROVISION_VERSION=6
+PROVISION_VERSION=7
 # Overridable so scripts/tests/test-provision.sh can assert marker behaviour
 # without writing under /var on the machine running the tests.
 MARKER_DIR="${DEVBOX_MARKER_DIR:-/var/lib/claude-devbox}"
@@ -345,16 +346,19 @@ else
     host_note "    eval \"\$(bash scripts/host/fix-agent-sock.sh)\""
 fi
 
-# --- 8. ctp tool bridge (user-scope gate) ------------------------------------
-# Install the gate at USER scope so it is present in Claude sessions started from
-# the range checkout, not just this repo. Runs as the developer (run_as_target)
+# --- 8. ctp tool bridge + safety gate (user-scope) ---------------------------
+# Install the gates at USER scope so they are present in Claude sessions started
+# from the range checkout, not just this repo. install-ctp-bridge.sh also ships
+# the destructive-action gate (cmd-segment.sh + safety-guard.sh) and seeds
+# ~/.config/safety-guard.conf, so a destructive command (rm -rf, dropdb,
+# terraform destroy, ...) prompts for human confirmation in the same hook. Runs as the developer (run_as_target)
 # so it lands in their home, never root's. Inert until they set CTP_ALLOWED_TARGET
 # — a provisioned box refuses every deploy until configured, which is the safe
 # direction.
-host_step "[8/9] ctp tool bridge (user-scope gate)"
+host_step "[8/9] ctp tool bridge + destructive-action gate (user-scope)"
 if command -v jq >/dev/null 2>&1; then
     if run_as_target bash "$_REPO_ROOT/scripts/install-ctp-bridge.sh"; then
-        host_info "ctp bridge installed for ${CLAUDE_TARGET_USER} (set CTP_ALLOWED_TARGET in ~/.ctp-bridge.conf)"
+        host_info "ctp bridge + safety gate installed for ${CLAUDE_TARGET_USER} (set CTP_ALLOWED_TARGET in ~/.ctp-bridge.conf; safety gate confirms destructive commands)"
     else
         host_fail "ctp bridge install failed"
     fi

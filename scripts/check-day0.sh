@@ -217,6 +217,22 @@ else
         "not installed in the devcontainer — applied on a box by provisioning"
 fi
 
+# 8b. Destructive-action gate (safety-guard). Installed at USER scope on a box by
+# provisioning (install-ctp-bridge.sh, step 8): the PreToolUse hook confirms
+# destructive commands (rm -rf, dropdb, terraform destroy, ...) before they run,
+# failing closed to a deny with no human present. Not installed in the devcontainer.
+_sg_lib="$HOME/.local/lib/ctp-bridge/safety-guard.sh"
+_sg_hook="$HOME/.claude/hooks/pretooluse-ctp.sh"
+if [[ -f "$_sg_lib" ]] && grep -q "safety_classify" "$_sg_hook" 2>/dev/null; then
+    check "Destructive-action gate installed (defense-in-depth, not a sandbox)" "pass" ""
+elif [[ "$(current_surface)" == "box" ]]; then
+    check "Destructive-action gate installed" "fail" \
+        "Run: bash scripts/install-ctp-bridge.sh (or re-run provisioning). It confirms destructive commands via the PreToolUse hook. Defeatable by obfuscation — defense-in-depth, not a sandbox."
+else
+    check "Destructive-action gate (box-only)" "skip" \
+        "not installed in the devcontainer — applied on a box by provisioning"
+fi
+
 # 9. GitHub bootstrap has been run (completion marker written by
 # bootstrap-github-settings.sh). setup-day0.sh applies it once gh is authed.
 if [[ -f ".ai/bootstrap-completed" ]]; then

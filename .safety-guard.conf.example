@@ -1,0 +1,11 @@
+# safety-guard.conf — destructive-action gate config.
+# Installed to ~/.config/safety-guard.conf; read by scripts/lib/safety-guard.sh.
+# Parsed as KEY=VALUE, NEVER sourced, and NEVER read from the caller's environment
+# (an agent must not be able to widen its own limits in the same call it makes).
+# Holds no secrets.
+#
+# SAFETY_ALLOWLIST: space-separated command words the OWNER has chosen to exempt
+# from the destructive-action gate. EMPTY IS THE SUPPORTED DEFAULT — every command
+# the classifier flags is confirmed by a human. Exempt a verb only per-verb, after
+# weighing BOTH blast radius and cost (see docs/PROJECT.md), never as a shortcut.
+SAFETY_ALLOWLIST=
