@@ -58,3 +58,6 @@ coverage/
 # but ignore any repo-local copy created during dev/testing)
 commit-guard-findings.jsonl
 .commit-guard/
+
+# destructive-action gate on-box config (an allow-list, not secrets)
+safety-guard.conf

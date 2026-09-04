@@ -349,6 +349,43 @@ Two properties matter if you change it:
   warn-only, bypassable), and warns if `gitleaks` is absent so the scan is not
   silently a no-op.
 
+### The destructive-action gate
+
+The same user-scope PreToolUse hook that fronts the tool bridge now also gates
+**destructive shell commands** — the first control of a proportionate agent safety
+harness. `scripts/lib/safety-guard.sh` classifies a command and returns
+`ask` (the human confirms in Claude Code) or, with no human present, the harness
+resolves that to a **deny** — it fails closed, and there is no `--yes`/`ASSUME_YES`
+path to it. Empty allow-list is the supported default: everything the classifier
+flags is confirmed. An owner exempts a verb per-verb in `~/.config/safety-guard.conf`
+(parsed, never sourced, never read from caller env), only after weighing **both**
+blast radius and cost — the same two-axis rule as the tool bridge.
+
+Scope is generic **filesystem / infra / database** commands (`rm -rf`, `shred`,
+`mkfs`, `dd of=`, `dropdb`, `DROP`/`TRUNCATE` SQL, `terraform destroy`,
+`kubectl delete`, `docker system prune`/`rm -f`). It deliberately does **not**
+cover git or commit actions — those are the commit guard's domain — and it does
+**not** re-gate `ctp`, which keeps its dedicated gate above (double-gating it would
+just add noise).
+
+Two properties matter if you change it:
+
+- **It classifies segmented command words, never a raw string.** The
+  quote/heredoc/subshell segmentation from #40-42 was factored into
+  `scripts/lib/cmd-segment.sh` so the ctp path and this classifier share one
+  hardened implementation instead of drifting. That is why `git commit -m "drop
+  the users table"` and a `DROP` inside a heredoc body are **not** flagged, while
+  `FOO=1 dropdb prod` and `$(rm -rf x)` are — the classifier sees the real command
+  word after env prefixes are stripped and substitutions are descended.
+- **It is model-agnostic and honest about its reach.** The classifier is a lib —
+  the single choke point any executor routes through. Claude's hook is enforcement
+  point #1; a future local-model orchestrator calls the same lib rather than a
+  second copy. It stops the accidental and the misread-instruction cases; an
+  adversarial model can still obfuscate around string classification, so like the
+  secret-read hook it is defense-in-depth, not a sandbox — the real containment is
+  OS-level, which the shared-sudo box does not provide (accepted risk).
+  `check-day0.sh` reports it honestly on a box.
+
 ### Network changes are deliberate
 
 Adding an outbound host to the devcontainer firewall goes through

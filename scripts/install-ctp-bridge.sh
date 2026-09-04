@@ -24,20 +24,24 @@ source "$_HERE/host/lib/host-common.sh"
 
 SRC_WRAPPER="$_HERE/ctp-bridge.sh"
 SRC_GUARD="$_HERE/lib/ctp-guard.sh"
+SRC_SEG="$_HERE/lib/cmd-segment.sh"
+SRC_SAFETY="$_HERE/lib/safety-guard.sh"
 SRC_HOOK="$_REPO/.claude/hooks/pretooluse-ctp.sh"
 SRC_CONF_EXAMPLE="$_REPO/.ctp-bridge.conf.example"
+SRC_SAFETY_CONF="$_REPO/.safety-guard.conf.example"
 
 LIB_DIR="$HOME/.local/lib/ctp-bridge"
 BIN="$HOME/.local/bin/ctp-bridge"
 HOOK_DIR="$HOME/.claude/hooks"
 HOOK="$HOOK_DIR/pretooluse-ctp.sh"
 CONF="$HOME/.ctp-bridge.conf"
+SAFETY_CONF="$HOME/.config/safety-guard.conf"
 STATE_DIR="$HOME/.local/state/ctp-bridge"
 SETTINGS="$HOME/.claude/settings.json"
 
 host_step "Installing ctp tool bridge for $(id -un) (home: $HOME)"
 
-for f in "$SRC_WRAPPER" "$SRC_GUARD" "$SRC_HOOK" "$SRC_CONF_EXAMPLE"; do
+for f in "$SRC_WRAPPER" "$SRC_GUARD" "$SRC_SEG" "$SRC_SAFETY" "$SRC_HOOK" "$SRC_CONF_EXAMPLE" "$SRC_SAFETY_CONF"; do
     [[ -f "$f" ]] || host_fail "missing source: $f"
 done
 (( ${#HOST_FAILURES[@]} == 0 )) || { host_warn "cannot install; source files missing"; exit 1; }
@@ -50,10 +54,14 @@ fi
 # --- 1. copy scripts to fixed locations --------------------------------------
 mkdir -p "$LIB_DIR" "$(dirname "$BIN")" "$HOOK_DIR" "$STATE_DIR"
 install -m 0644 "$SRC_GUARD" "$LIB_DIR/ctp-guard.sh"
+install -m 0644 "$SRC_SEG" "$LIB_DIR/cmd-segment.sh"
+install -m 0644 "$SRC_SAFETY" "$LIB_DIR/safety-guard.sh"
 install -m 0755 "$SRC_WRAPPER" "$BIN"
 install -m 0755 "$SRC_HOOK" "$HOOK"
 host_info "wrapper -> $BIN"
 host_info "guard   -> $LIB_DIR/ctp-guard.sh"
+host_info "segment -> $LIB_DIR/cmd-segment.sh"
+host_info "safety  -> $LIB_DIR/safety-guard.sh"
 host_info "hook    -> $HOOK"
 
 # --- 2. seed config (never overwrite an existing target) ---------------------
@@ -76,6 +84,15 @@ else
     install -m 0600 "$SRC_CONF_EXAMPLE" "$CONF"
     host_info "seeded $CONF — set CTP_ALLOWED_TARGET and CTP_ALLOWED_TEAM before deploying"
     host_note "until they are set, every deploy is refused (safe default)."
+fi
+
+# --- 2b. seed the destructive-action gate config (never overwrite) -----------
+mkdir -p "$(dirname "$SAFETY_CONF")"
+if [[ -f "$SAFETY_CONF" ]]; then
+    host_note "kept existing $SAFETY_CONF"
+else
+    install -m 0644 "$SRC_SAFETY_CONF" "$SAFETY_CONF"
+    host_info "seeded $SAFETY_CONF (destructive-action gate; empty allow-list = confirm everything)"
 fi
 
 # --- 3. merge the PreToolUse hook into user settings (no clobber) ------------
