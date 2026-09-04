@@ -322,6 +322,33 @@ the killswitch: it reduces incidental and instructed capture, it does not contai
 a hostile model. `PII-Shield` (referenced in `.claude/settings.json`) is
 complementary, not a substitute.
 
+### Accidental commits: the warn-only commit guard
+
+Provisioning installs a commit guard at user scope
+(`scripts/install-commit-guard.sh`, step 9) that scans staged content for secrets
+and PII on every commit. It is **warn-only by owner decision, for both PII and
+secrets** — intentional commits must never be blocked. On a finding it prints a
+warning and appends `{rule, file, line}` to
+`~/.local/state/commit-guard/findings.jsonl`; it **never** stores the matched
+value, because a log full of real secrets would only relocate the leak — the same
+reasoning as the ctp log recording verbs/outcomes but never targets.
+
+Two properties matter if you change it:
+
+- **It covers every repo, not just this one.** The installer sets the user's
+  global `core.hooksPath`, so the hook fires in the range checkout too, with the
+  gitleaks config carried alongside the runner — nothing is written into that
+  pushed tree. It chains to a repo-local `pre-commit` hook if one exists, so a
+  repo using the pre-commit framework still runs (and can still block on) its own
+  hooks; only this guard is warn-only.
+- **Warn-only shifts the mitigation, and it is bypassable.** Nothing stops the
+  push, so a secret finding must be acted on — rotate/clean per `SECURITY.md`.
+  `--no-verify` and direct index writes bypass any git hook. This cuts accidental
+  leaks; it does not contain a determined actor — the same accepted-risk framing
+  as the secret-read hook. `check-day0.sh` reports it honestly on a box (present,
+  warn-only, bypassable), and warns if `gitleaks` is absent so the scan is not
+  silently a no-op.
+
 ### Network changes are deliberate
 
 Adding an outbound host to the devcontainer firewall goes through

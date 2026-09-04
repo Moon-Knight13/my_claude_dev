@@ -425,6 +425,7 @@
         <div class="check"><div class="cn">semgrep</div><div class="cw">SAST, including MITRE ATLAS rules for AI/ML risks.</div><div class="cs">semgrep.yml</div></div>
         <div class="check"><div class="cn">Trivy</div><div class="cw">Scans the container image for known CVEs.</div><div class="cs">container-scan.yml</div></div>
         <div class="check"><div class="cn">weekly audit</div><div class="cw">Scheduled repo-wide security sweep.</div><div class="cs">repository-audit.yml</div></div>
+        <div class="check"><div class="cn">commit guard</div><div class="cw">On a box: warn-only PII/secret scan on every commit — logs findings, never blocks.</div><div class="cs">on-box</div></div>
       </div>
       <p class="d-note">Every gate is required, not advisory — a red check keeps the pull request from merging.</p>
     </div>

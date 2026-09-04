@@ -53,3 +53,8 @@ coverage/
 
 # ctp tool bridge on-box config, never committed (a box name, not secrets)
 .ctp-bridge.conf
+
+# commit guard on-box findings log (rule/file/line only; lives in ~/.local/state,
+# but ignore any repo-local copy created during dev/testing)
+commit-guard-findings.jsonl
+.commit-guard/

@@ -70,7 +70,7 @@ make_sandbox() { # writes a provisionable sandbox into $1
     # what the installers do.
     for stub in scripts/host/setup-ansible-lint.sh scripts/host/setup-killswitch.sh \
                 scripts/install-caveman.sh scripts/install-claude-plugins.sh \
-                scripts/install-ctp-bridge.sh; do
+                scripts/install-ctp-bridge.sh scripts/install-commit-guard.sh; do
         # shellcheck disable=SC2016  # ${STUB_RC} is stub-script content, expanded at stub runtime
         printf '#!/usr/bin/env bash\nexit ${STUB_RC:-0}\n' > "$sb/$stub"
         chmod +x "$sb/$stub"

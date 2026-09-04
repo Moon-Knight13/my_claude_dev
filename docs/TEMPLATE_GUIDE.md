@@ -246,7 +246,8 @@ Bootstrap safety defaults:
 
 - Deny-by-default egress firewall in devcontainer (IPv4 + IPv6). Use `/firewall-allow` to add a new egress host to the allowlist.
 - Host access limited to local model endpoint on TCP 11434.
-- Secrets blocked locally by pre-commit and in CI by gitleaks workflow.
+- Secrets blocked locally by pre-commit and in CI by gitleaks workflow (devcontainer + CI).
+- On a remote box: a **warn-only** commit guard scans staged content for secrets/PII on every commit in any repo (incl. the range checkout); it never blocks — it prints and logs findings so a leaked secret can be rotated per SECURITY.md.
 - Semgrep policy checks in local and CI workflows with SARIF upload to GitHub Security tab.
 - Default-branch ruleset (required PR reviews + required status checks, no force-push/deletion) configured by the bootstrap script.
 
@@ -271,6 +272,23 @@ The following PII types are blocked at pre-commit and re-checked in CI:
 In addition, the built-in gitleaks ruleset (100+ rules) covers all common API keys and tokens: AWS, GitHub, Stripe, Slack, Google, Azure, Twilio, Sendgrid, Shopify, and more.
 
 All PII rules skip `tests/` and `docs/` paths by default. To add a custom allowlist for your project, add entries to `.gitleaks.toml`.
+
+### On-box commit guard (warn-only)
+
+The pre-commit blocking above runs in the devcontainer and CI. A **remote box**
+gets a complementary layer installed at user scope by provisioning
+(`scripts/install-commit-guard.sh`, step 9): a global `core.hooksPath` pre-commit
+hook that runs the same gitleaks ruleset (secrets **and** the `pii-*` rules)
+against staged content on **every** commit — human or agent — in **any** repo,
+including the range checkout, with the config carried alongside it so nothing is
+written into the pushed tree.
+
+It is deliberately **warn-only** for both PII and secrets: it prints each finding
+and appends `{rule, file, line}` — never the matched value — to
+`~/.local/state/commit-guard/findings.jsonl`, then lets the commit proceed. The
+mitigation for a secret is therefore fast reaction (rotate/clean per
+[SECURITY.md](../SECURITY.md)), not prevention. Like the other on-box hooks it is
+defense-in-depth, not a boundary — `--no-verify` bypasses any git hook.
 
 ### Code-time PII detection (semgrep)
 
