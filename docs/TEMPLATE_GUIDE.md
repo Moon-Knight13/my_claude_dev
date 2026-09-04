@@ -344,6 +344,20 @@ containment. `check-day0.sh` asserts the capability is present on a box.
   meant a freshly stamped repo went red the moment it added a `package.json` —
   before it had written any CI at all. Add the hook to turn the gate on.
 
+### GitLab backstop (`.gitlab-ci.yml`)
+
+The harness is intended to run with **GitLab as the primary forge and GitHub
+Actions as legacy/failover**. `.gitlab-ci.yml` mirrors the security gates so the
+same guarantees hold on GitLab: **gitleaks** (same image digest + `.gitleaks.toml`),
+**semgrep** (same digest + `.semgrep.yml` + `p/secrets`/`p/security-audit`), and
+**validate-template** + the conditional stack lint/test (same marker detection).
+It runs on merge requests and the default branch. Container scanning (Trivy) is
+deliberately not mirrored — it builds the devcontainer image and belongs in a
+heavier scheduled pipeline. The file is inert on GitHub (only GitLab reads it),
+so it is safe to carry in either place. The board / day-0 gh-CLI machinery is a
+separate portability question (issue #37); the backstop carries only the
+host-agnostic gates.
+
 ## Optional Subsystems
 
 Not every project wants everything the template ships. `template.conf` at the
