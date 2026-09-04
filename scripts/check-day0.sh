@@ -233,6 +233,21 @@ else
         "not installed in the devcontainer — applied on a box by provisioning"
 fi
 
+# 8b. Destructive-git gate (git-guard, control 2b). The PreToolUse hook confirms
+# force-push, reset --hard, clean -f, branch -D, checkout --force before an agent
+# runs them (git is out of the destructive-action gate's scope by decision).
+_gg_lib="$HOME/.local/lib/ctp-bridge/git-guard.sh"
+_gg_hook="$HOME/.claude/hooks/pretooluse-ctp.sh"
+if [[ -f "$_gg_lib" ]] && grep -q "gitguard_classify" "$_gg_hook" 2>/dev/null; then
+    check "Destructive-git gate installed (force-push/reset --hard/clean/branch -D)" "pass" ""
+elif [[ "$(current_surface)" == "box" ]]; then
+    check "Destructive-git gate installed" "fail" \
+        "Run: bash scripts/install-ctp-bridge.sh (or re-run provisioning). It confirms destructive git ops via the PreToolUse hook. Defeatable by obfuscation — defense-in-depth, not a sandbox."
+else
+    check "Destructive-git gate (box-only)" "skip" \
+        "not installed in the devcontainer — applied on a box by provisioning"
+fi
+
 # 8b. PII/IP path guard (C1). The installed guard lib must define ctp_is_pii_path,
 # so the hook can deny tool reads/writes of configured Org-sensitive paths. A
 # stale install predating C1 has the hook but not the capability — catch it.

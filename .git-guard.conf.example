@@ -1,0 +1,19 @@
+# git-guard configuration — copy to ~/.config/git-guard.conf on the box and edit.
+#
+# Control 2b: the PreToolUse hook confirms DESTRUCTIVE git operations before an
+# agent runs them. Parsed, never sourced. Holds NO secrets — only an allow-list.
+#
+# Format: KEY=value, one per line; # starts a comment.
+
+# Per-op exemptions. An op named here is NOT confirmed (runs without a prompt).
+# EMPTY IS THE DEFAULT: every destructive git op below is confirmed.
+# Op names:
+#   force-push      git push --force / -f / --force-with-lease
+#   reset-hard      git reset --hard
+#   clean           git clean -f (deletes untracked files)
+#   branch-delete   git branch -D (force-delete a branch)
+#   checkout-force  git checkout/switch --force (discards local changes)
+#
+# Example (exempt force-push only, e.g. on a throwaway range checkout):
+#   GITGUARD_ALLOWLIST=force-push
+GITGUARD_ALLOWLIST=

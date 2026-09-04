@@ -386,6 +386,22 @@ Two properties matter if you change it:
   OS-level, which the shared-sudo box does not provide (accepted risk).
   `check-day0.sh` reports it honestly on a box.
 
+### Destructive git operations (2b)
+
+The destructive-action gate above deliberately leaves git alone — by owner
+decision, **all git/commit actions are the commit guard's (B's) domain**. But the
+commit guard is a *pre-commit* hook, and the dangerous git ops are not commits and
+fire no git hook: `git push --force`, `reset --hard`, `clean -f`, `branch -D`,
+`checkout/switch --force`. So `scripts/lib/git-guard.sh` gates those at the **same
+PreToolUse choke point** as A — `gitguard_classify` returns `ask` (human confirms;
+no human ⇒ deny, fail closed). It classifies the segmented command word (shared
+`cmd-segment.sh`), so a commit message that merely says "reset --hard" is not
+flagged, and env prefixes / `git -C <dir>` are seen through. An owner exempts an op
+per-op in `~/.config/git-guard.conf` (`GITGUARD_ALLOWLIST`, parsed never sourced);
+empty is the default (confirm everything). Same honest limit as A: string
+classification can be obfuscated — defense-in-depth, not a sandbox. `check-day0.sh`
+asserts it on a box.
+
 ### Keeping Org PII/IP out of Claude: the path guard
 
 The worry is Org PII or intellectual property leaking to the model — and the
