@@ -129,6 +129,28 @@ on-box hooks it is defense-in-depth, not a boundary (`--no-verify` bypasses it).
 The blocking pre-commit + CI gitleaks gates still apply when developing this repo
 in the devcontainer.
 
+### Destructive-action gate (on the box)
+
+The same user-scope PreToolUse hook that fronts the build-tooling bridge also
+**confirms destructive shell commands** before an agent runs them — `rm -rf`,
+`shred`, `mkfs`, `dd of=`, `dropdb`, `DROP`/`TRUNCATE` SQL, `terraform destroy`,
+`kubectl delete`, `docker system prune`. With no human to confirm it **fails
+closed** to a deny. It classifies segmented command words (not raw strings) via
+the shared `cmd-segment.sh`, is model-agnostic (the classifier is a lib any
+executor routes through), and deliberately does **not** cover git/commit (the
+commit guard's domain) or `ctp` (already gated). Defense-in-depth, not a sandbox.
+
+### Keeping Org data out of Claude (path guard, on the box)
+
+Hooks can deny a read but **cannot redact tool output**, so the way to keep Org
+PII/IP out of the transcript is to refuse the read. List Org-data path globs in
+`CTP_PII_PATHS` (in `~/.ctp-bridge.conf`) and the hook denies any tool Read/Write
+or Bash command that names them — a separate, owner-tuned list from the credential
+`CTP_SECRET_PATHS`. **Opt-in** (empty by default). Path-based only; intelligent
+content-level redaction is the job of the local-model orchestrator (planned),
+which can rephrase sensitive content — including tool output — before Claude sees
+it. Defense-in-depth, not OS containment.
+
 ## Developing this repo (devcontainer)
 
 Work *on this repo* happens inside a devcontainer carried over from

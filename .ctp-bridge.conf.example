@@ -44,3 +44,17 @@ CTP_PROJECT_DIR=
 # glob patterns. Tilde expands to the target user's home. Extend per box; never
 # remove the vault password or private-key entries.
 CTP_SECRET_PATHS=/var/tmp/vlt_pf ~/.ssh/id_* ~/.zsh_history ~/.bash_history **/.env
+
+# Org PII / intellectual-property paths the hook refuses to let any tool read OR
+# write (Read/Write/Edit, or a Bash command naming the path), so Org data never
+# reaches Claude's transcript. Same glob syntax as CTP_SECRET_PATHS (tilde
+# expands to the target home; a **/ prefix matches anywhere by basename).
+#
+# Separate from CTP_SECRET_PATHS on purpose: secrets are credentials (never
+# touch); these are a data-governance boundary you tune independently. Hooks
+# cannot redact tool OUTPUT, so the only reliable protection for a file's
+# contents is to deny the read here — list the directories where Org data lives.
+#
+# EMPTY IS THE DEFAULT (opt-in): nothing is denied until you add paths. Example:
+#   CTP_PII_PATHS=~/org-data/** ~/cases/**/*.csv /srv/customer/**
+CTP_PII_PATHS=

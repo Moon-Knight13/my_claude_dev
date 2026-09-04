@@ -386,6 +386,44 @@ Two properties matter if you change it:
   OS-level, which the shared-sudo box does not provide (accepted risk).
   `check-day0.sh` reports it honestly on a box.
 
+### Keeping Org PII/IP out of Claude: the path guard
+
+The worry is Org PII or intellectual property leaking to the model — and the
+primary channel is a tool *reading* a sensitive file into the transcript. A hook
+**cannot redact tool output**: `PreToolUse` runs before the tool and can only
+allow/ask/deny (it may rewrite tool *input*, but not the result), and
+`PostToolUse` runs after the tool has already produced its output. So for a
+file's *contents* the only reliable in-harness protection is to **deny the read**
+— which is what the secret-read hook already does, now extended to a second,
+separately-configured list.
+
+`CTP_PII_PATHS` (in the gitignored `~/.ctp-bridge.conf`) lists Org PII/IP path
+globs, same syntax as `CTP_SECRET_PATHS` (tilde expands to the target home; a
+`**/` prefix matches anywhere by basename). The hook denies any Read/Write/Edit
+or Bash command that names a listed path, with its own reason string so a denial
+says *which* policy fired. Both matchers share one hardened glob helper
+(`_ctp_path_in`), so they cannot drift.
+
+Two properties matter if you change it:
+
+- **It is a separate list from secrets, on purpose.** Secrets are credentials
+  (never touch, for anyone); PII paths are a data-governance boundary the owner
+  tunes independently — and one a future local-model front-door may be allowed to
+  read while Claude is not. Keeping them apart preserves that. **Empty is the
+  default (opt-in):** nothing is denied until the owner lists the directories
+  where Org data lives. The deny is **symmetric** (read *and* write) because a
+  PII/IP directory is a boundary the agent should not touch at all.
+- **It is path-based, and honest about that.** PII sitting inside a file *outside*
+  the listed globs is not caught, and the guard does not redact PII embedded in an
+  otherwise-readable file's output — hooks cannot rewrite output regardless. That
+  intelligent, content-level sanitisation is the job of the local-model
+  orchestrator (G3): the local model reads/handles sensitive content and rephrases
+  before Claude ever sees it, which *does* cover tool output because the local
+  model is the reader. Until then this is the same defense-in-depth, accepted-risk
+  framing as the secret-read hook — the real containment is OS-level, which the
+  shared-sudo box does not provide. `check-day0.sh` asserts the capability is
+  present on a box (a stale install predating it FAILs).
+
 ### Network changes are deliberate
 
 Adding an outbound host to the devcontainer firewall goes through

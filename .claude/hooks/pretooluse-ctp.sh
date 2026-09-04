@@ -87,8 +87,15 @@ TOOL="$(_json '.tool_name')"
 # --- Read/Write/Edit: block touching a guarded path --------------------------
 if [[ "$TOOL" == "Read" || "$TOOL" == "Write" || "$TOOL" == "Edit" ]]; then
     fp="$(_json '.tool_input.file_path')"
-    [[ -n "$fp" ]] && _is_guarded_path "$fp" && \
-        emit deny "a guarded path (secret or approval token) is off-limits to tools: $fp"
+    if [[ -n "$fp" ]]; then
+        _is_guarded_path "$fp" && \
+            emit deny "a guarded path (secret or approval token) is off-limits to tools: $fp"
+        # C1: keep Org PII/IP out of the transcript — deny reading/writing a
+        # configured sensitive path (hooks cannot redact tool OUTPUT, so a read
+        # must be denied, not sanitised).
+        ctp_is_pii_path "$fp" && \
+            emit deny "a guarded Org-sensitive (PII/IP) path is off-limits to tools: $fp"
+    fi
     pass
 fi
 
@@ -107,6 +114,8 @@ for _t in "${_toks[@]}"; do
     _c="${_c#>}"   # redirection like >token
     [[ -n "$_c" ]] || continue
     _is_guarded_path "$_c" && emit deny "command would touch a guarded path: $_c"
+    ctp_is_pii_path "$_c" && \
+        emit deny "command would touch a guarded Org-sensitive (PII/IP) path: $_c"
 done
 
 # _base <path> — basename without matching a mere substring: test-ctp-bridge.sh
