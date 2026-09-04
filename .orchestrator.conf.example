@@ -29,5 +29,31 @@ ORCH_MODE=AUTO
 #
 # Examples (edit for your fleet; the endpoints below are illustrative):
 ORCH_MODEL=claude|frontier|100|
-ORCH_MODEL=qwen3-14b|host-local|60|http://host.docker.internal:11434
-# ORCH_MODEL=qwen3-14b-pc1|network-local|55|http://10.0.0.21:11434
+ORCH_MODEL=richardyoung/qwen3-14b-abliterated:Q4_K_M|host-local|60|http://host.docker.internal:11434
+# ORCH_MODEL=richardyoung/qwen3-14b-abliterated:Q4_K_M|network-local|55|http://10.0.0.21:11434
+
+# --- Sensitivity classifier (AUTO mode) -------------------------------------
+# The classifier is a LOCAL-only local-LLM judge. It is OPT-IN: until you point
+# ORCH_CLASSIFIER at the script, AUTO stays fail-closed (everything treated
+# sensitive -> local). These are read from the environment / .env, not parsed
+# from this file — shown here for reference:
+#
+#   ORCH_CLASSIFIER=scripts/orchestrator/classify-sensitivity.sh   # enable it
+#   ORCH_CLASSIFIER_ENDPOINT=http://host.docker.internal:11434     # LOCAL only
+#   ORCH_CLASSIFIER_MODEL=richardyoung/qwen3-14b-abliterated:Q4_K_M
+#   ORCH_CLASSIFIER_TIMEOUT=20        # seconds; a timeout fails closed (sensitive)
+#   ORCH_CLASSIFIER_KEEP_ALIVE=30m    # keep the model warm between calls
+#   ORCH_CLASSIFIER_PROMPT_FILE=~/.config/orchestrator/classifier-prompt.md
+#
+# The classifier refuses a non-local endpoint (it reads your raw prompt), disables
+# qwen3 thinking, and asks for a one-word verdict at temperature 0. Tune what
+# "sensitive" means by editing the prompt file (seed it from
+# scripts/orchestrator/classifier-prompt.default.md); tuning stays on the local
+# model, so it never leaks to the cloud. Measure it with
+# scripts/orchestrator/eval-classifier.sh before you trust AUTO.
+#
+# PRIVACY: your tuned prompt file accumulates the sensitive patterns it is meant to
+# catch. Keep it on the box (never commit it) AND guard it from Claude's own tools
+# by adding its path to CTP_PII_PATHS in ~/.ctp-bridge.conf (the C1 path guard):
+#     CTP_PII_PATHS=~/.config/orchestrator/classifier-prompt.md ...
+# The classifier still reads it (it is not a Claude tool call); Claude cannot.
