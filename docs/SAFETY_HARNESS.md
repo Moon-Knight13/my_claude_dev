@@ -82,6 +82,7 @@ set an env var in the same call could otherwise rewrite its own limits.
 | **A · Destructive-action gate** | `rm -rf`, `shred`, `mkfs`, `dd of=`, `dropdb`, `DROP`/`TRUNCATE`, `terraform destroy`, `kubectl delete`, `docker prune`/`rm -f` | `ask` (→ `deny` with no human) | `~/.config/safety-guard.conf` (`SAFETY_ALLOWLIST`) |
 | **C1 · PII/IP path guard** | Read/Write/Edit/Bash touching an Org-data path | `deny` | `CTP_PII_PATHS` |
 | **B · Commit guard** | staged secrets/PII on every commit | **warn + log** (never blocks) | global `core.hooksPath` |
+| **2b · Destructive-git gate** | `git push --force`, `reset --hard`, `clean -f`, `branch -D`, `checkout --force` | `ask` (→ `deny` with no human) | `~/.config/git-guard.conf` (`GITGUARD_ALLOWLIST`) |
 | **Killswitch** | credentials left on the box after the last session | shred | PAM + systemd timer |
 
 Not built yet: **C2** (intelligent, content-level PII redaction — belongs in the
@@ -146,7 +147,11 @@ echo '{"tool_name":"Bash","tool_input":{"command":"ctp host deploy trainbox_t02"
 echo '{"tool_name":"Bash","tool_input":{"command":"ctp-bridge host deploy trainbox_t02"}}' | "$HOOK"
 #   → …"ask"… "confirm build-tooling run: ctp host deploy trainbox_t02"
 
-# 6. A benign read  →  no opinion (no output, exit 0): other permissions decide
+# 6. A destructive git op  →  ask  (force-push / reset --hard / clean -f / branch -D)
+echo '{"tool_name":"Bash","tool_input":{"command":"git push --force origin main"}}' | "$HOOK"
+#   → …"ask"… "git push --force — rewrites published history on the remote"
+
+# 7. A benign read  →  no opinion (no output, exit 0): other permissions decide
 echo '{"tool_name":"Read","tool_input":{"file_path":"README.md"}}' | "$HOOK"; echo "exit=$?"
 #   → (no line)  exit=0
 ```

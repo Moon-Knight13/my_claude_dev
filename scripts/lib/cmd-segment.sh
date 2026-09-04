@@ -21,7 +21,7 @@ _seg_cmdword() { # prints the effective first word of a segment (env prefixes st
     local seg="$1" w
     read -r -a _w <<<"$seg"
     for w in "${_w[@]}"; do
-        [[ "$w" == *=* && "$w" != */* ]] && continue   # skip FOO=bar prefix
+        [[ "$w" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] && continue   # skip FOO=bar prefix (value may contain /)
         printf '%s' "$w"; return 0
     done
     return 1

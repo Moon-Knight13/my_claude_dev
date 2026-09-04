@@ -55,6 +55,14 @@ if [[ -n "$_SAFETY_LIB" ]]; then
     source "$_SAFETY_LIB"
     safety_load_config "${SAFETY_GUARD_CONF:-$HOME/.config/safety-guard.conf}" || true
 fi
+# git-guard.sh adds the destructive-git classifier (control 2b). Optional: absent
+# ⇒ the git check is simply skipped, everything else still works.
+_GITGUARD_LIB="$(_find_lib git-guard.sh "${GIT_GUARD_LIB:-}")" || _GITGUARD_LIB=""
+if [[ -n "$_GITGUARD_LIB" ]]; then
+    # shellcheck source=scripts/lib/git-guard.sh disable=SC1091
+    source "$_GITGUARD_LIB"
+    gitguard_load_config "${GIT_GUARD_CONF:-$HOME/.config/git-guard.conf}" || true
+fi
 
 emit() { # emit <allow|deny|ask> <reason>
     printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"%s","permissionDecisionReason":"%s"}}\n' \
@@ -207,6 +215,16 @@ for _seg in "${_SEGMENTS[@]:-}"; do
         case "$_sv" in
             ask:*)  emit ask  "${_sv#ask:}" ;;
             deny:*) emit deny "${_sv#deny:}" ;;
+        esac
+    fi
+
+    # Destructive-git gate (git-guard.sh, control 2b): force-push, reset --hard,
+    # clean -f, branch -D, checkout --force. git is out of A's scope by decision.
+    if [[ -n "$_GITGUARD_LIB" ]]; then
+        _gv="$(gitguard_classify "$_seg")" || true
+        case "$_gv" in
+            ask:*)  emit ask  "${_gv#ask:}" ;;
+            deny:*) emit deny "${_gv#deny:}" ;;
         esac
     fi
 done

@@ -272,6 +272,14 @@ check "env cannot override config -> deny" "$(decide "$(bash_json "CTP_ALLOWED_T
 check "prose mentioning ctp -> none"      "$(decide "$(bash_json 'echo use ctp later to deploy')")"  none
 check "unrelated bash -> none"            "$(decide "$(bash_json 'ls -la /workspace')")"             none
 
+# destructive-git gate (git-guard, control 2b) via the hook
+check "git push --force -> ask"           "$(decide "$(bash_json 'git push --force origin main')")"  ask
+check "git reset --hard -> ask"           "$(decide "$(bash_json 'git reset --hard HEAD~1')")"       ask
+check "git clean -fdx -> ask"             "$(decide "$(bash_json 'git clean -fdx')")"                ask
+check "git branch -D -> ask"              "$(decide "$(bash_json 'git branch -D feature')")"         ask
+check "git status -> none"                "$(decide "$(bash_json 'git status')")"                    none
+check "commit msg says reset --hard -> none" "$(decide "$(bash_json "git commit -m 'reset --hard soon'")")" none
+
 # approving a wrapper call writes a token bound to the exact argv
 rm -f "$HSTATE/approval"
 decide "$(bash_json "ctp-bridge host deploy trainbox_t02")" >/dev/null
