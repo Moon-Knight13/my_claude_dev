@@ -61,3 +61,7 @@ commit-guard-findings.jsonl
 
 # destructive-action gate on-box config (an allow-list, not secrets)
 safety-guard.conf
+
+# orchestrator on-box config (mode + model registry, not secrets) and its log
+orchestrator.conf
+orchestrator-log.jsonl

@@ -1,0 +1,33 @@
+# orchestrator.conf — copy to ~/.config/orchestrator.conf on the box and edit.
+#
+# Config for the G3 local-model orchestrator front door (scripts/orchestrator/
+# orchestrate.sh). Parsed, never sourced. This file holds NO secrets — only a
+# mode and a model registry (names, tiers, capability ranks, local endpoints).
+#
+# Format: KEY=value, one per line; # starts a comment.
+
+# Default routing mode. The CLI --mode flag overrides this per call.
+#   AUTO        classify each prompt; sensitive -> local fleet, else best model
+#   LOCAL-ONLY  force everything to the local fleet (the human seatbelt for
+#               known-sensitive work — nothing can egress in this mode)
+#   CLAUDE-ONLY human asserts the work is fine for the cloud (frontier eligible)
+ORCH_MODE=AUTO
+
+# The model registry. One ORCH_MODEL line per model:
+#   ORCH_MODEL=<name>|<tier>|<rank>|<endpoint>
+#     name      the model identifier (for a local endpoint, the Ollama model tag;
+#               for the frontier tier, any label — Claude is invoked via its CLI)
+#     tier      frontier | host-local | network-local
+#                 frontier      = cloud, EGRESSES — eligible ONLY for non-sensitive
+#                 host-local    = a model on your own machine, never egresses
+#                 network-local = a model on another machine on the local net
+#     rank      capability, higher = preferred within an eligible tier (integer)
+#     endpoint  OpenAI/Ollama base URL for local tiers; omit for frontier
+#
+# THE INVARIANT: a sensitive task is never eligible for a frontier model, however
+# high its rank — the router removes the cloud tier from the eligible set first.
+#
+# Examples (edit for your fleet; the endpoints below are illustrative):
+ORCH_MODEL=claude|frontier|100|
+ORCH_MODEL=qwen3-14b|host-local|60|http://host.docker.internal:11434
+# ORCH_MODEL=qwen3-14b-pc1|network-local|55|http://10.0.0.21:11434

@@ -424,6 +424,44 @@ Two properties matter if you change it:
   shared-sudo box does not provide. `check-day0.sh` asserts the capability is
   present on a box (a stale install predating it FAILs).
 
+### The local-model orchestrator (G3, experimental spine)
+
+`scripts/orchestrator/orchestrate.sh` is the front door for routing a prompt to
+the right model: it decides whether a task stays on the **local fleet** or hands
+off to a more capable model (e.g. Claude via `claude -p`, where the A/B gates and
+caveman still apply). The decision logic is a pure, unit-tested lib
+(`scripts/lib/orchestrator-route.sh`); the config is a gitignored on-box file
+(`~/.config/orchestrator.conf`, parsed never sourced) holding a mode and a model
+registry (name · tier · capability rank · endpoint).
+
+The reason this control exists is one **non-negotiable, structural invariant**:
+
+> **Sensitivity gates tier eligibility before capability ranking.** A task the
+> router treats as sensitive is never eligible for the frontier (cloud) tier,
+> however capable — the cloud endpoint is removed from the eligible set, so the
+> picker cannot choose it. `orchestrate.sh` also re-asserts this immediately
+> before dispatch and refuses (exit 4) rather than egress a sensitive task.
+
+Three modes, owner-controlled: `AUTO` (classify, then route), `LOCAL-ONLY` (the
+human seatbelt — nothing egresses), `CLAUDE-ONLY` (the human asserts cloud is
+acceptable). What matters if you change it:
+
+- **Fail closed.** The sensitivity classifier is a local-LLM judge (deferred to
+  its own spec + eval); until it lands it is stubbed to return *sensitive*, and
+  any classifier error/timeout resolves to *sensitive*. AUTO therefore never
+  egresses on a guess. There is **no** deterministic hard-floor (owner decision):
+  an LLM that mislabels a sensitive query as safe can still egress — the accepted
+  residual risk, mitigated by `LOCAL-ONLY` + fail-closed. Do not "optimise" the
+  stub to a permissive default.
+- **The log records metadata only.** `mode/sensitive/tier/model` go to
+  `.ai/orchestrator-log.jsonl` — never the prompt text, which may be the sensitive
+  content the control exists to protect (same reasoning as the ctp and commit-
+  guard logs).
+- **Deferred slices** (see `_bmad-output/planning-artifacts/architecture-g3-local-orchestrator.md`):
+  the local LLM classifier, the sanitiser (rephrase before a cloud handoff — the
+  overlap with control C2), the LiteLLM multi-machine pool, and the local shell
+  executor (which will route through `safety-guard.sh` as enforcement point #2).
+
 ### Network changes are deliberate
 
 Adding an outbound host to the devcontainer firewall goes through
