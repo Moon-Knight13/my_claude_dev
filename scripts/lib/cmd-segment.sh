@@ -47,6 +47,12 @@ _seg_cmdword() { # prints the effective first word of a segment (env prefixes st
 _SEGMENTS=()
 _split_segments() {
     local cmd="$1"
+    # Reset per call. The array is appended to by _flush below, so without this a
+    # second call in the same process classifies the accumulated segments of every
+    # earlier call and returns the FIRST one's verdict. Invisible while the only
+    # caller was the one-shot PreToolUse hook; load-bearing now that guard-stack.sh
+    # is a reusable library (the executor calls it once per command, in a loop).
+    _SEGMENTS=()
     local -a _lines=()
     readarray -t _lines <<<"$cmd"
     local q="" esc=0 cur="" hd="" hd_dash=0 expect_delim=0 delim="" delim_q="" hd_ready=""

@@ -85,6 +85,28 @@ set an env var in the same call could otherwise rewrite its own limits.
 | **2b · Destructive-git gate** | `git push --force`, `reset --hard`, `clean -f`, `branch -D`, `checkout --force` | `ask` (→ `deny` with no human) | `~/.config/git-guard.conf` (`GITGUARD_ALLOWLIST`) |
 | **Killswitch** | credentials left on the box after the last session | shred | PAM + systemd timer |
 
+### One policy, two enforcement points
+
+The hook-side controls above are **composed in `scripts/lib/guard-stack.sh`**, not
+implemented in the hook. `.claude/hooks/pretooluse-ctp.sh` parses the tool call and
+renders a verdict in the hook's JSON protocol; the stack decides. The layers run in
+a fixed order per command segment: segmentation → build tooling → secret paths →
+C1 PII paths → destructive actions → destructive git. First verdict wins.
+
+This matters because the hook is **enforcement point #1** and fronts only Claude's
+tools. **Enforcement point #2** is the local-model executor (G3), which does not go
+through Claude and therefore does not inherit the hook. It calls the same library,
+so the two cannot drift: a layer added here defends both.
+
+The stack takes a **caller mode**, and exactly one layer varies by it — **C1**. In
+`hook` mode an Org PII/IP path is denied, keeping that material out of Claude's
+transcript. In `executor` mode it is permitted, because the local executor is the
+component whose purpose is to read that material without egress; the carve-out is
+paid for on the return path (interface-only disclosure), not waived. Secret paths
+are denied in **both** modes — reading Org data is the executor's job, reading
+credentials is not.
+
+
 Not built yet: **C2** (intelligent, content-level PII redaction — belongs in the
 local-model orchestrator **G3**, which can redact *tool output* that hooks
 cannot), **hook-level D** (egress visibility on top of the org network),
