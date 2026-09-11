@@ -1,40 +1,59 @@
-# term-list.example.txt — the deterministic floor's term list (#65).
+# Your private word list.
 #
-# COPY THIS FILE, DO NOT EDIT IT IN THE REPO.
+# COPY THIS FILE — don't edit it here in the repo:
 #
 #     mkdir -p ~/.config/orchestrator
 #     cp scripts/orchestrator/term-list.example.txt ~/.config/orchestrator/term-list.txt
 #     chmod 600 ~/.config/orchestrator/term-list.txt
 #
-# Then add the path to CTP_PII_PATHS in ~/.ctp-bridge.conf so the C1 guard stops
-# Claude's tools reading it. The orchestrator reads it directly, not through a
-# tool call, so the floor still works while Claude is blind to it.
 #
-# WHAT THIS FILE IS
-# One Org-sensitive term per line: codenames, internal hostnames, client names,
-# project names. If a prompt contains one, the orchestrator forces `sensitive`
-# and the cloud tier is removed from the eligible set — in EVERY mode, including
-# CLAUDE-ONLY. You can be overruled by your own list; edit the list to proceed.
+# WHAT THIS IS
 #
-# WHY IT IS CODE AND NOT A PROMPT
-# These terms are matched by code, with no model in the path. Putting them in the
-# classifier prompt instead would leave them subject to the exact failure mode
-# they exist to catch — a model that overlooks them or is argued past them.
+# One word per line. Codenames, client names, internal hostnames, project names —
+# things that must never reach a cloud model.
 #
-# THIS FILE IS THE MOST SENSITIVE ARTIFACT ON THE BOX
-# It is a distilled index of what you are protecting. Never commit it, never
-# paste it into a chat, never ask Claude to review or improve it. It is a one-way
-# door: once populated, iterate on it yourself or with the local model.
-# Nothing that matches is ever named in a verdict, on stderr, or in the log.
+# If any of them appear in a prompt, the orchestrator keeps that prompt local.
+# This happens even in CLAUDE-ONLY mode, where you've said the prompt is fine to
+# send out. You can be overruled by your own list; remove the word if you really
+# meant it.
+#
+#
+# WHY IT'S A LIST AND NOT AN AI INSTRUCTION
+#
+# These words are matched by code. No model is involved.
+#
+# If you put them in the classifier's instructions instead, the model would be
+# the one checking — and a model skimming past its own instructions is exactly
+# the mistake this list is here to catch.
+#
+#
+# LOOK AFTER THIS FILE
+#
+# Once it has real words in it, it's the most sensitive file on the box: a tidy
+# list of everything you're protecting.
+#
+#   - never commit it
+#   - never paste it into a chat
+#   - never ask Claude to read, review or improve it
+#
+# Add its path to CTP_PII_PATHS in ~/.ctp-bridge.conf so Claude's tools are
+# blocked from reading it. The orchestrator opens the file directly, so it still
+# works.
+#
+# Nothing that matches is ever shown to you, written to the log, or sent to
+# Claude — you're told "sensitive", never which word it was.
+#
 #
 # RULES
-#   - one term per line; lines starting with # are comments; blanks ignored
-#   - matching is case-insensitive and word-boundary (atlas does NOT match
-#     atlassian), so terms do not fire inside unrelated words
-#   - terms shorter than ORCH_TERM_MIN_LEN (default 3) are rejected at load with
-#     a line number on stderr, and are not used for matching
-#   - prefer distinctive terms. A short or common word over-matches, routes
-#     everything local, and the pressure that follows is to switch the floor off
 #
-# The shipped file is deliberately EMPTY of terms. Anything here would be a
-# generic guess, and a generic floor protects nothing.
+#   - one word per line
+#   - lines starting with # are ignored, so are blank lines
+#   - capitals don't matter: Bluefin, bluefin and BLUEFIN all match
+#   - whole words only: "atlas" will NOT match "atlassian"
+#   - words under 3 characters are skipped, with a warning naming the line number
+#   - pick distinctive words. A common word matches constantly, keeps everything
+#     local, and you'll end up turning this off — which protects nothing
+#
+#
+# There are deliberately NO words below. A list of guesses would protect nobody.
+# Add yours here:
