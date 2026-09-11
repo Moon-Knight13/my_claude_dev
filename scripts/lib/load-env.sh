@@ -11,10 +11,20 @@
 # Usage (from a script in scripts/):
 #   source "$(dirname "${BASH_SOURCE[0]}")/lib/load-env.sh"
 #
-# Precedence: the real environment always wins over the file. A variable that is
-# already set — including set to empty — is left untouched, so
-# `FORCE_CLAUDE=true scripts/route-model.sh ...` and CI environments keep
-# overriding .env rather than being silently overwritten by it.
+# Precedence, two separate rules:
+#
+#   Environment over file. A variable already set — including set to empty — is
+#   left untouched, so `FORCE_CLAUDE=true scripts/route-model.sh ...` and CI
+#   environments keep overriding .env rather than being silently overwritten.
+#
+#   Within the file, the LAST assignment wins. Appending a corrected value is how
+#   people actually edit a .env, and first-wins made that a no-op: .env.example
+#   ships LOCAL_MODEL_ENDPOINT pointing at a devcontainer, a host user appended
+#   the right value, and the appended line was silently ignored. The classifier
+#   then could not reach a model, failed closed, and called every prompt
+#   sensitive — safe, and quietly useless, with nothing anywhere saying why.
+#   Last-wins matches a shell and every other dotenv loader. It applies to the
+#   file only; it never lets the file overrule the caller.
 #
 # The file is parsed, not sourced. .env is developer-authored and gitignored, so
 # sourcing it would execute whatever it contains on every routing decision;
@@ -28,6 +38,11 @@ _load_env_file() {
     local file="$1"
     [[ -f "$file" ]] || return 0
 
+    # Keys THIS file has already assigned. The "already set, leave it alone"
+    # check below must apply to the caller's environment, not to a value this
+    # same file set a few lines earlier — otherwise the first assignment wins and
+    # every later one is discarded.
+    local -A _from_file=()
     local line key val
     while IFS= read -r line || [[ -n "$line" ]]; do
         line="${line%$'\r'}"                              # tolerate CRLF
@@ -39,8 +54,10 @@ _load_env_file() {
         key="${BASH_REMATCH[1]}"
         val="${BASH_REMATCH[2]}"
 
-        # Environment wins: never clobber a variable that is already set.
-        [[ -n "${!key+x}" ]] && continue
+        # Environment wins: never clobber a variable the caller already set.
+        # A key this file set earlier is not the caller's, so it may be replaced.
+        [[ -n "${!key+x}" && -z "${_from_file[$key]:-}" ]] && continue
+        _from_file["$key"]=1
 
         case "$val" in
             \"*\") val="${val%\"}"; val="${val#\"}" ;;    # "quoted value"
