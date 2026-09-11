@@ -105,9 +105,10 @@ ORCH_MODEL=richardyoung/qwen3-14b-abliterated:Q4_K_M|host-local|60|http://host.d
 # the same policy the PreToolUse hook enforces for Claude. An `ask` is confirmed
 # on the controlling TTY; with no TTY it denies.
 #
-# Until the interface contract (#63) exists, the executor serves HUMAN callers
-# only and refuses a cloud-bound one (ORCH_CALLER). These are env/.env knobs, not
-# parsed from this file:
+# ORCH_CALLER says who is on the other end and therefore what may be RETURNED:
+# `human` (the default) gets the raw answer; anything else is cloud-bound and gets
+# only a declared interface contract, after owner approval. These are env/.env
+# knobs, not parsed from this file:
 #   ORCH_EXEC_ENDPOINT=http://host.docker.internal:11434   # LOCAL only
 #   ORCH_EXEC_MODEL=richardyoung/qwen3-14b-abliterated:Q4_K_M
 #   ORCH_EXEC_MAX_STEPS=12        # bounds any single run, injected or not
@@ -120,3 +121,24 @@ ORCH_MODEL=richardyoung/qwen3-14b-abliterated:Q4_K_M|host-local|60|http://host.d
 # it from scripts/orchestrator/executor-prompt.default.md, keep the real one on the
 # box, and treat it as a one-way door — it does not go back to Claude to be
 # reviewed, debugged or improved.
+
+# --- disclosure boundary (#63) -----------------------------------------------
+# What crosses to a cloud model is a DECLARED INTERFACE — name, invocation,
+# inputs, outputs, exit codes — never the artifact the executor produced and never
+# a scrubbed copy of it. Only named fields are copied, so undeclared content was
+# never in the message; there is nothing for a filter to miss.
+#
+# A path is itself disclosure, so a contract refers to the artifact by an opaque
+# handle. The handle-to-path map is a list of real internal paths and lives under
+# ~/.config/orchestrator/, which Claude's tools cannot read:
+#   ORCH_HANDLE_MAP=~/.config/orchestrator/handles.tsv
+#
+# The gates, in order: shape check (no paths) -> keep declared fields only ->
+# term floor -> sanitiser -> term floor again -> owner approval. On THIS path a
+# sanitiser failure BLOCKS (unlike ORCH_SANITISE_ON_FAIL on the prompt path).
+# The owner may override that at the terminal, once, having seen the raw contract
+# — there is no setting that leaves the override on, and it never skips the term
+# floor.
+#
+# Approval needs a terminal, so Claude and the local model cannot co-operate
+# unattended. That is a property of the design; see docs/ORCHESTRATOR.md.

@@ -261,20 +261,48 @@ check "budget exhausted is not success" "$RC" 9
 check "budget capped the tool calls"    "$(jq -rs '[.[] | select(.event=="tool")] | length' "$LOG")" 3
 contains "budget reported"              "$(cat "$TMP/err")" "step budget"
 
-# --- a cloud-bound caller is refused BEFORE any model call ------------------
+# --- a cloud-bound caller gets the interface, or nothing (S3) ---------------
+# The raw answer is for the human at the terminal. A cloud-bound caller gets a
+# declared contract, which only crosses once the owner has approved it — so an
+# unattended cloud-bound run, with no terminal to approve at, gets nothing. That
+# is the human-in-the-loop limit working, not a failure.
 : > "$LOG"
-cat > "$SCRIPT" <<'EOF'
-{"done":true,"answer":"should never be reached"}
+cat > "$SCRIPT" <<EOF
+{"tool":"read_file","path":"$H/org-data/clients.csv"}
+{"done":true,"answer":"Jane Roe has one account","contract":{"name":"lookup_account","handle":"00000000deadbeef","summary":"looks up one account","invocation":"lookup_account <handle> --id ID"}}
 EOF
 start_mock "$SCRIPT" || bad "mock endpoint started (caller case)"
 OUT="$(HOME="$H" ORCH_EXEC_ENDPOINT="http://127.0.0.1:$PORT" ORCH_EXEC_MODEL=mock \
       ORCH_LOG="$LOG" ORCH_CALLER=cloud "$EXEC" 'do some work' 2>"$TMP/err")"; RC=$?
-check "cloud-bound caller refused"      "$RC" 8
-check "no model call was made"          "$(wc -l < "$RECORD" | tr -d ' ')" 0
+check "unapproved disclosure is not success" "$RC" 13
 check "nothing returned on stdout"      "$OUT" ""
-contains "refusal is explicit"          "$(cat "$TMP/err")" "human-only"
+lacks "no raw answer reached the caller" "$OUT" "Jane Roe"
 # R4: a non-human caller gets a status, never raw diagnostics.
-lacks "refusal carries no prompt"       "$(cat "$TMP/err")" "do some work"
+lacks "status carries no prompt"        "$(cat "$TMP/err")" "do some work"
+lacks "status carries no file content"  "$(cat "$TMP/err")" "Jane Roe"
+
+# A cloud-bound run that ends with no contract at all discloses nothing — the raw
+# answer is never the fallback.
+: > "$LOG"
+cat > "$SCRIPT" <<'EOF'
+{"done":true,"answer":"here is the whole sensitive script"}
+EOF
+start_mock "$SCRIPT" || bad "mock endpoint started (no-contract case)"
+OUT="$(HOME="$H" ORCH_EXEC_ENDPOINT="http://127.0.0.1:$PORT" ORCH_EXEC_MODEL=mock \
+      ORCH_LOG="$LOG" ORCH_CALLER=cloud "$EXEC" 'do some work' 2>"$TMP/err")"; RC=$?
+check "no contract is not success"      "$RC" 13
+lacks "raw answer never falls through"  "$OUT" "sensitive script"
+
+# --- E5: the executor may WRITE an Org PII path, not only read it -----------
+: > "$LOG"
+PIIFILE="$H/org-data/generated.txt"
+cat > "$SCRIPT" <<EOF
+{"tool":"write_file","path":"$PIIFILE","content":"produced locally"}
+{"done":true,"answer":"written"}
+EOF
+start_mock "$SCRIPT" || bad "mock endpoint started (pii write case)"
+OUT="$(run_exec 'write into the org data area' 2>"$TMP/err")"
+check "executor may write an Org PII path" "$(cat "$PIIFILE" 2>/dev/null)" "produced locally"
 
 # --- write_file is atomic and leaves nothing partial behind (R14) ----------
 : > "$LOG"

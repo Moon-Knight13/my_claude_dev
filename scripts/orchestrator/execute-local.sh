@@ -15,16 +15,19 @@
 # stay denied in both modes).
 #
 # WHAT IT WILL NOT DO
-#   - Answer a cloud-bound caller. Until the interface contract (#63) exists there
-#     is no format in which output could safely cross, so this story refuses
-#     rather than improvising one (R8). Human callers only.
+#   - Hand raw output to a cloud-bound caller. A human at the terminal gets the
+#     answer; a cloud-bound caller gets only a DECLARED INTERFACE, and only after
+#     the owner has approved that exact text (E6/E10, scripts/lib/contract.sh).
+#     No approval, no disclosure — an unattended cloud-bound run gets nothing,
+#     which is the human-in-the-loop limit working rather than failing.
 #   - Run an `ask` command with no human at the terminal (E2).
 #   - Write a real path into the log. Logged targets are opaque handles (R5/E9).
 #   - Treat anything a tool returns as instruction (E4).
 #
 # Usage:  execute-local.sh "<task>"        (or the task on stdin)
-# Exits:  0 done · 2 no task · 8 caller refused · 9 step budget exhausted
-#         10 guard stack unavailable · 11 endpoint not local · 12 model call failed
+# Exits:  0 done · 2 no task · 9 step budget exhausted · 10 guard stack
+#         unavailable · 11 endpoint not local · 12 model call failed ·
+#         13 nothing could be disclosed to a cloud-bound caller
 #
 # NOTE: no `set -e`. A failing tool is an event to log and hand back to the model,
 # not a reason to die half-way through a run holding a staged file.
@@ -35,6 +38,8 @@ _HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$_HERE/../lib/load-env.sh" 2>/dev/null || true
 # shellcheck source=scripts/lib/executor-tools.sh disable=SC1091
 source "${EXECUTOR_TOOLS_LIB:-$_HERE/../lib/executor-tools.sh}"
+# shellcheck source=scripts/lib/contract.sh disable=SC1091
+source "${CONTRACT_LIB:-$_HERE/../lib/contract.sh}"
 
 ORCH_LOG="${ORCH_LOG:-.ai/orchestrator-log.jsonl}"
 ENDPOINT="${ORCH_EXEC_ENDPOINT:-${LOCAL_MODEL_ENDPOINT:-http://host.docker.internal:11434}}"
@@ -46,31 +51,34 @@ MAX_BYTES="${ORCH_EXEC_MAX_BYTES:-20000}"
 CMD_TIMEOUT="${ORCH_EXEC_CMD_TIMEOUT:-120}"
 PROMPT_FILE="${ORCH_EXECUTOR_PROMPT_FILE:-$HOME/.config/orchestrator/executor-prompt.md}"
 
-# --- caller gate, before anything else ---------------------------------------
-# Checked first, deliberately: a refused caller must cost no model call, leave no
-# log line about the task, and reveal nothing about what was asked. A status, not
-# a diagnostic (R4).
-if ! exec_caller_is_human; then
-    echo "execute-local.sh: refusing — the executor is human-only until the interface contract (#63) lands" >&2
-    exit 8
-fi
+# --- who is on the other end -------------------------------------------------
+# This decides what may be RETURNED, not whether the work may happen. A human at
+# the terminal gets the raw answer. A cloud-bound caller gets a declared contract
+# and nothing else — no answer text, no tool output, no diagnostics (R4).
+CALLER_HUMAN=0
+exec_caller_is_human && CALLER_HUMAN=1
+
+# _say <detail for a human> <status word for anyone else> — one place where the
+# difference is enforced, so a later edit cannot leak a diagnostic by accident.
+_say() { if [[ "$CALLER_HUMAN" == 1 ]]; then echo "execute-local.sh: $1" >&2; else echo "execute-local.sh: $2" >&2; fi; }
 
 TASK="${1:-}"
 if [[ -z "$TASK" && ! -t 0 ]]; then TASK="$(cat)"; fi
-[[ -n "$TASK" ]] || { echo "execute-local.sh: no task given" >&2; exit 2; }
+[[ -n "$TASK" ]] || { _say "no task given" "no task"; exit 2; }
 
 # The executor never egresses, so a misconfigured endpoint is refused rather than
 # dialled. Same list as classify-sensitivity.sh.
 case "$ENDPOINT" in
     http://localhost*|http://127.*|http://host.docker.internal*|http://10.*|http://192.168.*|http://172.1[6-9].*|http://172.2[0-9].*|http://172.3[0-1].*|https://localhost*|https://127.*) : ;;
-    *) echo "execute-local.sh: endpoint is not local; refusing" >&2; exit 11 ;;
+    *) _say "endpoint is not local; refusing" "refused"; exit 11 ;;
 esac
 
 guard_stack_load executor || {
-    echo "execute-local.sh: guard stack unavailable; refusing to run tools ungated" >&2
+    _say "guard stack unavailable; refusing to run tools ungated" "refused"
     exit 10
 }
 exec_tools_init
+contract_init
 
 # Staged writes live next to their target so the final move is atomic on the same
 # filesystem; the trap removes anything still staged, so a killed run leaves no
@@ -111,7 +119,7 @@ if [[ -z "$SYS" ]]; then
     _def="$_HERE/executor-prompt.default.md"
     [[ -f "$_def" ]] && SYS="$(cat "$_def" 2>/dev/null)"
 fi
-[[ -n "$SYS" ]] || { echo "execute-local.sh: no executor prompt available; refusing" >&2; exit 10; }
+[[ -n "$SYS" ]] || { _say "no executor prompt available; refusing" "refused"; exit 10; }
 
 # --- conversation -------------------------------------------------------------
 # The system prompt is built ONCE and never appended to. Tool output goes in as a
@@ -142,7 +150,7 @@ while (( STEP < MAX_STEPS )); do
           options:{temperature:0, top_p:1}}')"
     RESP="$(curl -sfS --max-time "$TIMEOUT" "$ENDPOINT/api/chat" \
         -H 'Content-Type: application/json' -d "$REQ" 2>/dev/null)" || {
-        echo "execute-local.sh: local model call failed" >&2; exit 12; }
+        _say "local model call failed" "failed"; exit 12; }
     REPLY="$(printf '%s' "$RESP" | jq -r '.message.content // ""' 2>/dev/null)"
     add_msg assistant "$REPLY"
 
@@ -159,8 +167,27 @@ while (( STEP < MAX_STEPS )); do
 
     if [[ "$EXEC_DONE" == 1 ]]; then
         _log --argjson extra "$(jq -cn --argjson steps "$STEP" '{event:"run", result:"done", steps:$steps}')"
-        printf '%s\n' "$EXEC_ANSWER"
-        exit 0
+        if [[ "$CALLER_HUMAN" == 1 ]]; then
+            printf '%s\n' "$EXEC_ANSWER"
+            exit 0
+        fi
+        # Cloud-bound. The answer text is derived from material this whole path
+        # exists to keep local, so it is NOT the fallback — if there is no
+        # contract, or the owner does not approve it, nothing crosses at all.
+        if [[ -z "$EXEC_CONTRACT" ]]; then
+            _say "the run produced no declared interface; nothing disclosed" "no disclosure"
+            exit 13
+        fi
+        contract_disclose "$EXEC_CONTRACT"
+        if [[ "$CONTRACT_STATUS" == "disclosed" ]]; then
+            printf '%s\n' "$CONTRACT_OUT"
+            exit 0
+        fi
+        # Every other status discloses nothing. The reason is for the owner's log,
+        # not for the caller: "blocked" and "floor" are themselves information
+        # about the material.
+        _say "disclosure not made (status: $CONTRACT_STATUS)" "no disclosure"
+        exit 13
     fi
 
     STEP=$(( STEP + 1 ))
@@ -229,5 +256,5 @@ $OUT"
 done
 
 _log --argjson extra "$(jq -cn --argjson steps "$STEP" '{event:"run", result:"budget", steps:$steps}')"
-echo "execute-local.sh: step budget ($MAX_STEPS) exhausted; stopping" >&2
+_say "step budget ($MAX_STEPS) exhausted; stopping" "step budget exhausted"
 exit 9

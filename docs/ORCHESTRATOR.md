@@ -80,7 +80,9 @@ reasoning-only local call; see *Doing the work locally* below.
 | `scripts/orchestrator/execute-local.sh` | The executor (#62): drives a local model through a fixed set of tools on this machine, gating every one through the guard stack. Human callers only for now. |
 | `scripts/lib/executor-tools.sh` | The executor's building blocks — the fixed tool list, the gate, the opaque log handles, the terminal confirmation. |
 | `scripts/orchestrator/executor-prompt.default.md` | The shipped, **generic** executor prompt. Seed for the owner's private on-box copy. |
-| `scripts/tests/test-executor.sh` | Executor contract tests — closed vocabulary, gating, no-TTY denial, caller refusal, log hygiene, injection containment (74). |
+| `scripts/tests/test-executor.sh` | Executor contract tests — closed vocabulary, gating, no-TTY denial, caller-aware return, log hygiene, injection containment (81). |
+| `scripts/lib/contract.sh` | The disclosure boundary (#63) — opaque handles, contract validation, positive-disclosure projection, term floor, sanitiser backstop, owner approval. |
+| `scripts/tests/test-contract.sh` | Disclosure tests — nothing undeclared crosses, no paths, floor not bypassable, approval per contract (53). |
 | `scripts/orchestrator/eval-classifier.sh` | Measures the judge against labelled fixtures; headline metric = sensitive-recall. |
 | `scripts/tests/fixtures/sensitivity-eval.jsonl` | Labelled eval cases (synthetic PII/IP + adversarial near-misses). |
 | `scripts/tests/test-orchestrator.sh` | Routing/invariant unit tests (22). |
@@ -551,13 +553,98 @@ is either its old self or its new self and never half-written. Kill the run and
 the staged copy is removed. A half-finished artifact never exists for anything to
 pick up.
 
-### It will not answer the cloud
+### What Claude gets back
 
-For now the executor works for **you**, at a terminal, and refuses anything else.
-The reason is honest: the format for safely handing a *description* of local work
-back to Claude — the interface contract — is the next story (#63). Until it
-exists, there is nothing safe to hand over, so the executor refuses rather than
-improvising something. You get the full raw output; nobody else gets anything.
+You, at the terminal, get the raw answer.
+
+Claude gets a **contract** — a description of the thing that was built, not the
+thing itself. Name, how to call it, what goes in, what comes out, what the exit
+codes mean. Enough to write code that calls it. Nothing about what is inside it.
+
+```json
+{"name":"score_account",
+ "handle":"9f2c41ab77de0315",
+ "summary":"Scores one account and prints a number",
+ "invocation":"score_account <handle> --account-id ID",
+ "inputs":[{"name":"account_id","type":"string","required":true}],
+ "outputs":[{"name":"score","type":"number"}],
+ "exit_codes":[{"code":0,"meaning":"ok"},{"code":2,"meaning":"unknown account"}]}
+```
+
+That is the whole message. Claude can write the playbook, the pipeline, the
+caller — and never sees the script, its logic, or the prompt that produced it.
+
+#### Declaring, not scrubbing
+
+This is the part worth understanding, because it is the opposite of what most
+tools do.
+
+A **filter** reads your text and takes out what looks sensitive. It fails *open*:
+whatever the filter misses, goes. Our own measurements bear that out — the
+sanitiser let internal hostnames and codenames through on the smoke set.
+
+A **contract** fails *closed*. Only the fields in that list above are copied into
+the message. If the local model adds a note, a rationale, a debugging trail, it
+isn't scrubbed — it is simply never copied. There is nothing to miss, because
+undeclared content was never in the message in the first place.
+
+#### No paths, ever
+
+A path is disclosure on its own. `/srv/customer/<client>/scoring/...` gives away
+your structure, your client's identity and your project's codename, even when the
+file's contents never move. Protecting the contents while publishing the location
+is a half-closed door.
+
+So the contract refers to the artifact by a **handle** — a random identifier that
+means something only on your box. The check is blunt and done by code: a slash
+anywhere in any declared value and the contract is rejected. The list that maps
+handles back to real paths is itself a list of your internal paths, so it lives in
+`~/.config/orchestrator/` with everything else Claude cannot read, and it is never
+resolved on behalf of a cloud caller.
+
+#### Four gates, in this order
+
+1. **Shape check** — required fields present, handle is a handle, no paths.
+2. **Only declared fields survive** — the positive-disclosure step.
+3. **Your word list** — the same list from earlier, run against the outgoing text.
+4. **The sanitiser** — the AI backstop, in case a variable name carries something.
+5. **Your word list again** — on the exact text that is about to cross.
+6. **You approve it** — you read the final text and say yes.
+
+The word list brackets the sanitiser deliberately. It is the only check here with
+no judgement in it; the sanitiser and your own eye are both fallible.
+
+#### When the sanitiser breaks
+
+On this path, a broken sanitiser **blocks**. That is different from the cloud
+prompt path, where a failure passes the original through — defensible there,
+because the classifier had already cleared the text. Here the contract came
+straight out of sensitive material, so passing it through unchecked is not an
+option.
+
+Because a flaky local model shouldn't stop you working, you can override it: at
+the terminal, once, having been shown the raw contract first. It is logged. There
+is **no setting** that leaves the override on — it is a question, asked each time.
+
+The override skips the sanitiser only. It never skips your word list. You may
+overrule the fallible control; nobody overrules the deterministic one.
+
+#### You approve every one
+
+Not the first one — every one. The contract was written by an AI from sensitive
+material, and a single variable name can carry a codename. You see the full text
+exactly as it would cross, after sanitising, and nothing goes without a yes.
+
+This is deliberately strict, and deliberately revisable: relaxing it later once
+the local model has earned trust is easy, tightening it after workflows have grown
+around it is not.
+
+#### The honest limit
+
+Approval needs you at a terminal, and a command with no terminal is refused. So
+**Claude and the local model cannot work together unattended.** That is a property
+of the design, not a gap in it — and it is the first thing that would change if
+you later decide the local model's contracts can be trusted without a look.
 
 ### Your private executor prompt
 
@@ -589,9 +676,10 @@ term list.
 - **One policy, two enforcement points** — the PreToolUse hook and the executor
   both call `scripts/lib/guard-stack.sh`, so a rule cannot hold at one door and
   not the other.
-- **The executor answers humans only** (for now) — a cloud-bound caller is refused
-  before any model call, rather than being handed output in a format that does not
-  exist yet.
+- **Positive disclosure across the boundary** — a cloud-bound caller receives a
+  declared interface, never the artifact and never a scrubbed version of it. Only
+  named fields are copied; undeclared content was never in the message. No
+  filesystem path can appear in a contract, and the owner approves every one.
 - **Handoff keeps the gates** — a cloud handoff goes through `claude -p`, so the
   box's PreToolUse hook (destructive-action gate, secret/PII read-deny) and commit
   guard still front it.
@@ -639,15 +727,13 @@ The component is intentionally decoupled. To lift it upstream:
 
 - **Model-serving pool** — LiteLLM fronting the heterogeneous fleet with
   retry/fallback = bidirectional failover.
-- **Interface contract (#63)** — the declared, interface-only format in which the
-  executor may describe local work to a cloud model, so `--tools` can serve a
-  cloud-bound caller instead of refusing one.
 - **Split-task co-execution** — Claude and the local model working the two halves
-  of one task at the same time, rather than one after the other.
+  of one task at the same time, rather than one after the other. The disclosure
+  boundary it needs now exists; what is left is the co-ordination.
 
-Delivered since: the **local executor** (`--tools`, #62) — tool and shell work run
-locally for sensitive tasks, gated by the shared guard stack (enforcement point
-#2).
+Delivered since: the **local executor** (`--tools`, #62) and the **disclosure
+boundary** (#63) — tool and shell work run locally for sensitive tasks, gated by
+the shared guard stack, with only a declared interface crossing to the cloud.
 
 See `_bmad-output/planning-artifacts/architecture-g3-local-orchestrator.md` for
 the full architecture and owner decisions.
