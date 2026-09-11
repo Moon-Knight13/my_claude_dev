@@ -172,7 +172,9 @@ done
 echo ""
 echo "[4] YAML syntax:"
 if command -v python3 &>/dev/null; then
-    for yml in .github/workflows/*.yml .pre-commit-config.yaml .github/dependabot.yml; do
+    for yml in .github/workflows/*.yml .pre-commit-config.yaml .github/dependabot.yml .gitlab-ci.yml; do
+        # .gitlab-ci.yml is optional (GitLab backstop); skip if a repo omits it.
+        [[ -f "$yml" ]] || continue
         if python3 -c "import yaml, sys; yaml.safe_load(open('$yml'))" 2>/dev/null; then
             check "$yml" "pass"
         else

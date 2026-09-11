@@ -1,0 +1,108 @@
+# GitLab CI — security backstop (harness control G1b).
+#
+# The harness is intended to run with GitLab as the primary forge and GitHub
+# Actions as legacy/failover. This pipeline mirrors the GitHub security gates so
+# the same guarantees hold on GitLab:
+#
+#   .github/workflows/secret-scan.yml  -> gitleaks
+#   .github/workflows/semgrep.yml      -> semgrep
+#   .github/workflows/ci.yml           -> validate-template + conditional stack lint/test
+#
+# Kept faithful on purpose: same gitleaks/semgrep image digests, same config
+# files (.gitleaks.toml, .semgrep.yml), same registry packs (p/secrets,
+# p/security-audit), same stack-marker detection. Container scanning (Trivy) is
+# intentionally NOT mirrored here — it builds the devcontainer image and belongs
+# in a heavier scheduled pipeline, not this per-change backstop.
+#
+# The board / day-0 gh-CLI machinery is a separate portability question (issue
+# #37); this file only carries the host-agnostic security gates.
+
+stages: [validate, security, test]
+
+# Run for merge requests and for the default branch; avoid duplicate pipelines on
+# branches that also have an open MR.
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+# --- validate-template (mirrors ci.yml: validate-template) --------------------
+# validate-template.sh runs shellcheck (and fails if it is absent — by design)
+# and a python YAML check, so the image must provide both plus bash/git.
+validate-template:
+  stage: validate
+  image: debian:bookworm-slim
+  variables:
+    DEBIAN_FRONTEND: noninteractive
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends bash git python3 python3-yaml shellcheck > /dev/null
+  script:
+    - bash scripts/validate-template.sh
+
+# --- gitleaks (mirrors secret-scan.yml) --------------------------------------
+gitleaks:
+  stage: security
+  image:
+    name: zricethezav/gitleaks@sha256:b5918eb91b8d2473cec722f066abb4352e4ffdc4ec9f4283ec143aba9ec9ebc4
+    entrypoint: [""]
+  script:
+    - gitleaks git "$CI_PROJECT_DIR" --config="$CI_PROJECT_DIR/.gitleaks.toml" --redact --verbose --exit-code 1
+
+# --- semgrep (mirrors semgrep.yml) -------------------------------------------
+# HOME=/tmp gives the non-root image user a writable home (semgrep otherwise
+# tries to create /.semgrep and fails). --error makes a finding fail the job.
+semgrep:
+  stage: security
+  image:
+    name: semgrep/semgrep@sha256:c98edb09ae3abcc870171df7446fd2df8426a6a7f6ff14ca1ac47f4a25bf1666
+    entrypoint: [""]
+  variables:
+    HOME: /tmp
+  script:
+    - >-
+      semgrep scan
+      --config .semgrep.yml
+      --config p/secrets
+      --config p/security-audit
+      --error
+      --metrics=off
+
+# --- conditional stack lint/test (mirrors ci.yml: detect + run_or_skip) -------
+# The template ships scripts/ci/README.md but no hook scripts — each project adds
+# the ones matching its stack. A missing hook is "not wired up yet" (skip), not a
+# failure, so a freshly stamped repo doesn't go red before it has written any CI.
+conditional-lint-and-test:
+  stage: test
+  image: debian:bookworm-slim
+  variables:
+    DEBIAN_FRONTEND: noninteractive
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends bash git > /dev/null
+  script:
+    - |
+      set -euo pipefail
+      run_or_skip() {
+        local marker="$1" script="$2"
+        if [[ "$marker" == "true" ]]; then
+          if [[ ! -f "$script" ]]; then
+            echo "NOTICE: detected stack marker but $script is absent - skipping (see scripts/ci/README.md)."
+            return 0
+          fi
+          bash "$script"
+        fi
+      }
+      has_node=false; [[ -f package.json ]] && has_node=true
+      has_python=false; { [[ -f pyproject.toml ]] || [[ -f requirements.txt ]]; } && has_python=true
+      has_go=false; [[ -f go.mod ]] && has_go=true
+      has_rust=false; [[ -f Cargo.toml ]] && has_rust=true
+      has_java=false; { [[ -f pom.xml ]] || [[ -f build.gradle ]] || [[ -f build.gradle.kts ]]; } && has_java=true
+      run_or_skip "$has_node"   scripts/ci/lint-node.sh
+      run_or_skip "$has_node"   scripts/ci/test-node.sh
+      run_or_skip "$has_python" scripts/ci/lint-python.sh
+      run_or_skip "$has_python" scripts/ci/test-python.sh
+      run_or_skip "$has_go"     scripts/ci/lint-go.sh
+      run_or_skip "$has_go"     scripts/ci/test-go.sh
+      run_or_skip "$has_rust"   scripts/ci/lint-rust.sh
+      run_or_skip "$has_rust"   scripts/ci/test-rust.sh
+      run_or_skip "$has_java"   scripts/ci/lint-java.sh
+      run_or_skip "$has_java"   scripts/ci/test-java.sh
