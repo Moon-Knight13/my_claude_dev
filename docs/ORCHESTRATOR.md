@@ -38,6 +38,8 @@ router treats as sensitive ever reach an egressing endpoint?*
 ```
  prompt ─▶ orchestrate.sh
    1. mode?   LOCAL-ONLY / CLAUDE-ONLY / AUTO         (owner switch; overrides 2)
+   1b. DETERMINISTIC FLOOR: private term list, matched by code, ALL modes
+                            (a hit -> sensitive, no model called, overrides CLAUDE-ONLY)
    2. classify (AUTO only): local-LLM judge -> sensitive | nonsensitive
                             (fail-closed: error/timeout/garbled -> sensitive)
    3. eligible tiers:  sensitive -> {host-local, network-local}   (NO cloud)
@@ -67,6 +69,7 @@ demos and the invariant test.
 | `scripts/orchestrator/orchestrate.sh` | Front door: mode switch, tier resolver, dispatch, metadata log, `--dry-run`. |
 | `scripts/lib/orchestrator-route.sh` | Pure decision logic — config parse, mode resolution, `orch_classify`, eligible-tier resolver (the invariant), model pick. No I/O, so the invariant is unit-testable. |
 | `scripts/orchestrator/classify-sensitivity.sh` | The sensitivity judge — a thin wrapper that calls the **local** LLM and returns `sensitive`/`nonsensitive`. Never egresses; fails closed. |
+| `scripts/orchestrator/term-list.example.txt` | Seed for the owner's private term list — the deterministic floor (#65). Ships empty of terms. |
 | `scripts/orchestrator/classifier-prompt.default.md` | The shipped, **generic** judgement prompt. Seed for the owner's private on-box copy. |
 | `scripts/orchestrator/sanitise.sh` | Cloud-handoff sanitiser (C2) — LOCAL LLM rephrase that strips incidental identifiers before egress. Transform-or-fail; never egresses. |
 | `scripts/orchestrator/sanitiser-prompt.default.md` | The shipped, generic rewrite prompt. Seed for the owner's private copy. |
@@ -99,6 +102,58 @@ Classifier knobs (env / `.env`): `ORCH_CLASSIFIER` (points at the judge script �
 `ORCH_CLASSIFIER_ENDPOINT` (LOCAL only), `ORCH_CLASSIFIER_MODEL`,
 `ORCH_CLASSIFIER_TIMEOUT`, `ORCH_CLASSIFIER_KEEP_ALIVE`,
 `ORCH_CLASSIFIER_PROMPT_FILE`.
+
+## The deterministic floor
+
+A private, owner-authored list of Org-sensitive terms — codenames, internal
+hostnames, client names, project names — matched **by code**, before the
+classifier is called. A hit forces `sensitive`; the cloud tier is removed from the
+eligible set and no model is consulted.
+
+**This revises owner decision D3.** D3 (2026-09-04) chose LLM-only judgement with
+*no deterministic hard-floor*, accepting the residual risk that "a confident LLM
+misjudgement on an unknown sensitive query has no deterministic catch". The floor
+closes that risk for every term the owner has thought to list. It does **not**
+close it for material the list does not name — the LLM judge remains the catch-all
+for the unknown, and D3's honest limit still stands there.
+
+**It applies in every mode, including `CLAUDE-ONLY`.** That mode skips
+classification entirely on the human's assertion that a prompt is fine for the
+cloud — an assertion made from memory. The list exists because memory fails. So a
+term match overrides the assertion, and the owner edits the list to proceed rather
+than talking past it. The mode the human asked for is still what gets logged;
+`floor` records that it was overridden.
+
+**Why the check is code and not a prompt.** Putting the same terms into the
+classifier's system prompt would leave them subject to the exact failure mode they
+exist to catch — a model that overlooks a term, reasons around it, or is argued
+past it. A list checked by code cannot be ignored: there is no prompt to lose and
+no reasoning to go wrong. *If the goal is to catch what the LLM misses, the LLM
+cannot be what checks it.*
+
+**Matching** is case-insensitive and **word-boundary**, not substring: `atlas`
+does not match `atlassian`. Terms shorter than `ORCH_TERM_MIN_LEN` (default 3) are
+rejected at load with a line number on stderr. Unbounded over-matching is
+self-defeating — a short term fires inside unrelated words, everything routes
+local, and the pressure that follows is to switch the floor off. A control that
+gets disabled protects nothing.
+
+**It never names what it matched.** The verdict is `sensitive` and nothing more;
+stderr and the metadata log carry a boolean. The list is a distilled index of Org
+codenames, so naming a hit would make the control that prevents disclosure into
+the thing that discloses.
+
+**The list is the most sensitive artifact on the box.** Never committed; lives at
+`~/.config/orchestrator/term-list.txt`; added to `CTP_PII_PATHS` so the C1 guard
+stops Claude's tools reading it — while the orchestrator reads it directly (not a
+tool call) and so still works. Same one-way door as the classifier and sanitiser
+prompts: once populated, iterate on it yourself or with the local model, never by
+showing it to Claude. Seed from
+`scripts/orchestrator/term-list.example.txt`, which ships deliberately empty of
+terms — a generic floor protects nothing.
+
+A missing or empty list is **not an error**: the floor is inactive and the
+classifier alone decides, which is the pre-#65 behaviour.
 
 ## The classifier
 
@@ -166,10 +221,16 @@ reaches it.
 - **Handoff keeps the gates** — a cloud handoff goes through `claude -p`, so the
   box's PreToolUse hook (destructive-action gate, secret/PII read-deny) and commit
   guard still front it.
-- **Residual risk (accepted):** no deterministic hard-floor (owner decision), so a
-  confident LLM misclassification of a sensitive prompt as safe can still egress.
+- **Deterministic floor** (above) — a listed term forces `sensitive` with no model
+  in the decision path, in every mode. This is the one control here that an LLM
+  cannot be argued past.
+- **Residual risk (accepted, narrowed):** the floor catches only what the owner has
+  thought to list. For material it does not name, judgement is still LLM-only, so a
+  confident misclassification of a sensitive prompt as safe can still egress.
   Mitigated by `LOCAL-ONLY` mode + fail-closed, and bounded by the eval. This is
   defense-in-depth, not a guarantee — same framing as the box's other controls.
+  (Before #65 this risk was unmitigated by anything deterministic; D3 accepted it
+  outright. The floor narrows it, it does not remove it.)
 
 ## Dependencies
 

@@ -91,6 +91,55 @@ orch_classify() { # orch_classify <prompt> ; prints "sensitive"|"nonsensitive"
     printf 'sensitive'                                       # no classifier yet -> fail closed
 }
 
+# orch_floor_match <prompt> — THE DETERMINISTIC FLOOR (#65). Returns 0 (true) if
+# the prompt contains a term from the owner's private list.
+#
+# It exists to catch what the LLM judge misses, which only holds if the LLM is not
+# what checks it: this is a code-level match with no model in the path, so there is
+# no prompt to lose and no reasoning to go wrong. A hit is not a suggestion — the
+# front door forces `sensitive` on it, in every mode.
+#
+# It NEVER reports which term matched. The list is a distilled index of Org
+# codenames, so naming a hit in a verdict, on stderr, or in the log would make the
+# control that prevents disclosure into the thing that discloses.
+#
+# Matching is case-insensitive and WORD-BOUNDARY, not substring: an unbounded match
+# on a short term fires inside unrelated words, routes everything local, and the
+# pressure that follows is to switch the floor off. A control that gets disabled
+# protects nothing.
+#
+# A missing or empty list is NOT an error — it means the floor is inactive and the
+# classifier alone decides, which is the pre-#65 behaviour.
+ORCH_TERM_LIST="${ORCH_TERM_LIST:-$HOME/.config/orchestrator/term-list.txt}"
+ORCH_TERM_MIN_LEN="${ORCH_TERM_MIN_LEN:-3}"
+
+orch_floor_match() { # orch_floor_match <prompt> ; rc 0 = a listed term matched
+    local prompt="$1"
+    local file="${ORCH_TERM_LIST:-}"
+    [[ -n "$file" && -f "$file" ]] || return 1
+    local minlen="${ORCH_TERM_MIN_LEN:-3}"
+    local line term lineno=0
+    local -a terms=()
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        lineno=$((lineno + 1))
+        term="${line#"${line%%[![:space:]]*}"}"      # ltrim
+        term="${term%"${term##*[![:space:]]}"}"      # rtrim
+        [[ -n "$term" ]] || continue
+        [[ "$term" == \#* ]] && continue             # comment line
+        if (( ${#term} < minlen )); then
+            # Loud, but never quotes the entry — it is itself a private term.
+            printf 'orchestrate.sh: term-list line %s rejected (under %s characters); not used for matching\n' \
+                "$lineno" "$minlen" >&2
+            continue
+        fi
+        terms+=("$term")
+    done < "$file"
+    [[ "${#terms[@]}" -gt 0 ]] || return 1
+    # One fixed-string, word-boundary, case-insensitive pass. -F so a term
+    # containing regex metacharacters is matched literally, not compiled.
+    printf '%s' "$prompt" | grep -qiwF -f <(printf '%s\n' "${terms[@]}") 2>/dev/null
+}
+
 # orch_eligible_tiers <sensitive> <mode> — THE INVARIANT. Prints the space-
 # separated tier set the picker may choose from.
 #   LOCAL-ONLY  : human forces local (treated as sensitive)      -> locals only

@@ -62,5 +62,5 @@ CTP_SECRET_PATHS=/var/tmp/vlt_pf ~/.ssh/id_* ~/.zsh_history ~/.bash_history **/.
 # sanitiser prompts here — they accumulate the sensitive patterns they are built
 # to catch, so Claude's tools must not read them (the orchestrator reads them
 # directly and still works):
-#   CTP_PII_PATHS=~/.config/orchestrator/classifier-prompt.md ~/.config/orchestrator/sanitiser-prompt.md ~/org-data/**
+#   CTP_PII_PATHS=~/.config/orchestrator/classifier-prompt.md ~/.config/orchestrator/sanitiser-prompt.md ~/.config/orchestrator/term-list.txt ~/org-data/**
 CTP_PII_PATHS=

@@ -46,14 +46,40 @@ if [[ -z "$PROMPT" && ! -t 0 ]]; then PROMPT="$(cat)"; fi
 orch_load_config "$ORCH_CONF"
 MODE="$(orch_resolve_mode "$MODE_OVERRIDE")"
 
-# Classify only when AUTO needs it; the manual modes ARE the human's verdict.
-case "$MODE" in
-    LOCAL-ONLY)  SENSITIVE="sensitive" ;;
-    CLAUDE-ONLY) SENSITIVE="nonsensitive" ;;   # human asserts cloud is acceptable
-    *)           SENSITIVE="$(orch_classify "$PROMPT")" ;;
-esac
+# THE DETERMINISTIC FLOOR (#65) — ahead of mode resolution's effect, and ahead of
+# the classifier. A term from the owner's private list forces `sensitive` in EVERY
+# mode, including CLAUDE-ONLY.
+#
+# CLAUDE-ONLY is precisely where this matters: it skips classification entirely on
+# the human's assertion that the prompt is fine for the cloud — an assertion made
+# from memory. The list exists because memory fails. So the floor overrides it, and
+# the owner must edit the list to proceed rather than talk past it.
+#
+# It never reports WHICH term matched (see orch_floor_match); `floor` below is a
+# boolean for exactly that reason.
+FLOOR=false
+if orch_floor_match "$PROMPT"; then FLOOR=true; fi
 
-TIERS="$(orch_eligible_tiers "$SENSITIVE" "$MODE")"
+# Classify only when AUTO needs it; the manual modes ARE the human's verdict.
+# A floor hit short-circuits: no classifier call, no model in the decision path.
+if [[ "$FLOOR" == true ]]; then
+    SENSITIVE="sensitive"
+else
+    case "$MODE" in
+        LOCAL-ONLY)  SENSITIVE="sensitive" ;;
+        CLAUDE-ONLY) SENSITIVE="nonsensitive" ;;   # human asserts cloud is acceptable
+        *)           SENSITIVE="$(orch_classify "$PROMPT")" ;;
+    esac
+fi
+
+# CLAUDE-ONLY hands the resolver every tier by design (the human acting as
+# classifier). A floor hit removes that authority, so tiers resolve as if the human
+# had chosen LOCAL-ONLY. The real mode is still what gets logged — the log records
+# what the human asked for and that the floor overrode it, not a rewritten history.
+TIER_MODE="$MODE"
+[[ "$FLOOR" == true ]] && TIER_MODE="LOCAL-ONLY"
+
+TIERS="$(orch_eligible_tiers "$SENSITIVE" "$TIER_MODE")"
 PICK="$(orch_pick_model "$TIERS")" || { echo "orchestrate.sh: no eligible model in tiers: $TIERS (check $ORCH_CONF)" >&2; exit 3; }
 P_NAME="${PICK%%|*}"; _r="${PICK#*|}"; P_TIER="${_r%%|*}"; _r="${_r#*|}"; P_RANK="${_r%%|*}"; P_ENDPOINT="${_r#*|}"
 
@@ -68,8 +94,8 @@ fi
 # sensitive content this whole control exists to protect).
 mkdir -p "$(dirname "$ORCH_LOG")" 2>/dev/null || true
 _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
-printf '{"ts":"%s","mode":"%s","sensitive":"%s","tier":"%s","model":"%s","dry_run":%s}\n' \
-    "$_ts" "$MODE" "$SENSITIVE" "$P_TIER" "$P_NAME" "$([[ "$DRY_RUN" == 1 ]] && echo true || echo false)" \
+printf '{"ts":"%s","mode":"%s","sensitive":"%s","floor":%s,"tier":"%s","model":"%s","dry_run":%s}\n' \
+    "$_ts" "$MODE" "$SENSITIVE" "$FLOOR" "$P_TIER" "$P_NAME" "$([[ "$DRY_RUN" == 1 ]] && echo true || echo false)" \
     >> "$ORCH_LOG" 2>/dev/null || true
 
 if [[ "$DRY_RUN" == 1 ]]; then

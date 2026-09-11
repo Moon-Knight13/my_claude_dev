@@ -1,0 +1,40 @@
+# term-list.example.txt — the deterministic floor's term list (#65).
+#
+# COPY THIS FILE, DO NOT EDIT IT IN THE REPO.
+#
+#     mkdir -p ~/.config/orchestrator
+#     cp scripts/orchestrator/term-list.example.txt ~/.config/orchestrator/term-list.txt
+#     chmod 600 ~/.config/orchestrator/term-list.txt
+#
+# Then add the path to CTP_PII_PATHS in ~/.ctp-bridge.conf so the C1 guard stops
+# Claude's tools reading it. The orchestrator reads it directly, not through a
+# tool call, so the floor still works while Claude is blind to it.
+#
+# WHAT THIS FILE IS
+# One Org-sensitive term per line: codenames, internal hostnames, client names,
+# project names. If a prompt contains one, the orchestrator forces `sensitive`
+# and the cloud tier is removed from the eligible set — in EVERY mode, including
+# CLAUDE-ONLY. You can be overruled by your own list; edit the list to proceed.
+#
+# WHY IT IS CODE AND NOT A PROMPT
+# These terms are matched by code, with no model in the path. Putting them in the
+# classifier prompt instead would leave them subject to the exact failure mode
+# they exist to catch — a model that overlooks them or is argued past them.
+#
+# THIS FILE IS THE MOST SENSITIVE ARTIFACT ON THE BOX
+# It is a distilled index of what you are protecting. Never commit it, never
+# paste it into a chat, never ask Claude to review or improve it. It is a one-way
+# door: once populated, iterate on it yourself or with the local model.
+# Nothing that matches is ever named in a verdict, on stderr, or in the log.
+#
+# RULES
+#   - one term per line; lines starting with # are comments; blanks ignored
+#   - matching is case-insensitive and word-boundary (atlas does NOT match
+#     atlassian), so terms do not fire inside unrelated words
+#   - terms shorter than ORCH_TERM_MIN_LEN (default 3) are rejected at load with
+#     a line number on stderr, and are not used for matching
+#   - prefer distinctive terms. A short or common word over-matches, routes
+#     everything local, and the pressure that follows is to switch the floor off
+#
+# The shipped file is deliberately EMPTY of terms. Anything here would be a
+# generic guess, and a generic floor protects nothing.
