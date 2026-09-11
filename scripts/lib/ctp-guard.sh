@@ -169,7 +169,18 @@ _ctp_path_in() {
     local candidate="$1" list="$2" pat epat base
     candidate="$(ctp_expand_tilde "$candidate")"   # a literal ~ in the arg must match too
     base="${candidate##*/}"
-    for pat in $list; do
+    # Split the list on whitespace WITHOUT pathname expansion. Unquoted `$list`
+    # globs its own patterns against the real filesystem first: `~/.ssh/**` would
+    # collapse to the files that happen to exist right now, so a NEW file in a
+    # guarded directory matched nothing and the guard failed open on exactly the
+    # case that matters (a write, or a secret created after the shell started).
+    local -a _pats=() _restore_glob=1
+    [[ -o noglob ]] && _restore_glob=0
+    set -f
+    # shellcheck disable=SC2206  # deliberate word-splitting; globbing is off
+    _pats=($list)
+    [[ "$_restore_glob" == 1 ]] && set +f
+    for pat in "${_pats[@]}"; do
         epat="$(ctp_expand_tilde "$pat")"
         # shellcheck disable=SC2053  # glob match is intentional (path patterns)
         [[ "$candidate" == $epat ]] && return 0

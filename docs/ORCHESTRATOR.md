@@ -46,7 +46,8 @@ router treats as sensitive ever reach an egressing endpoint?*
                        else      -> {frontier, host-local, network-local}
    4. pick highest-rank model in an eligible tier
    5. dispatch:  frontier -> [sanitise ->] claude -p   (A/B gates + caveman apply)
-                 local    -> Ollama /api/generate (reasoning-only for now)
+                 local    -> Ollama /api/generate  (reasoning only, the default)
+                 local + --tools -> execute-local.sh (runs tools on the box)
    (belt-and-braces: refuse if a sensitive prompt resolved to an egressing tier)
 ```
 
@@ -59,8 +60,9 @@ router treats as sensitive ever reach an egressing endpoint?*
 | `CLAUDE-ONLY` | The human asserts the work is fine for the cloud (frontier eligible) — the human acting as classifier. |
 
 The CLI `--mode` flag overrides the config default per call. `--dry-run` prints
-the decision (`mode / sensitive / tier / model`) without dispatching — useful for
-demos and the invariant test.
+the decision (`mode / sensitive / tier / model / exec`) without dispatching —
+useful for demos and the invariant test. `--tools` picks the executor instead of a
+reasoning-only local call; see *Doing the work locally* below.
 
 ## Files
 
@@ -75,6 +77,10 @@ demos and the invariant test.
 | `scripts/orchestrator/sanitiser-prompt.default.md` | The shipped, generic rewrite prompt. Seed for the owner's private copy. |
 | `scripts/orchestrator/eval-sanitiser.sh` | Measures marker-survival — injected identifiers that must not appear in the rewrite. |
 | `scripts/tests/test-sanitiser.sh` | Sanitiser contract tests — transform-or-fail, never-egress (mocked model). |
+| `scripts/orchestrator/execute-local.sh` | The executor (#62): drives a local model through a fixed set of tools on this machine, gating every one through the guard stack. Human callers only for now. |
+| `scripts/lib/executor-tools.sh` | The executor's building blocks — the fixed tool list, the gate, the opaque log handles, the terminal confirmation. |
+| `scripts/orchestrator/executor-prompt.default.md` | The shipped, **generic** executor prompt. Seed for the owner's private on-box copy. |
+| `scripts/tests/test-executor.sh` | Executor contract tests — closed vocabulary, gating, no-TTY denial, caller refusal, log hygiene, injection containment (74). |
 | `scripts/orchestrator/eval-classifier.sh` | Measures the judge against labelled fixtures; headline metric = sensitive-recall. |
 | `scripts/tests/fixtures/sensitivity-eval.jsonl` | Labelled eval cases (synthetic PII/IP + adversarial near-misses). |
 | `scripts/tests/test-orchestrator.sh` | Routing/invariant unit tests (22). |
@@ -315,6 +321,37 @@ expected it to go out. That's it working.
 | Everything stays local | One of your words is too short or too common and matches constantly | Remove half the list, test, repeat until you find it |
 | You can't tell which word matched | By design — it never says | Narrow it down yourself against your own list. It's never printed, logged, or shown to Claude |
 
+### 7. Try the executor (optional)
+
+The steps above cover routing. If you also want the local model to *do* the work
+rather than describe it, add `--tools`. Start with something harmless in a scratch
+directory:
+
+```bash
+mkdir -p /tmp/exec-demo && echo 'hello' > /tmp/exec-demo/note.txt
+scripts/orchestrator/orchestrate.sh --tools --mode LOCAL-ONLY \
+  'read /tmp/exec-demo/note.txt and tell me what it says'
+```
+
+Then check the log wrote handles rather than paths:
+
+```bash
+tail -3 .ai/orchestrator-log.jsonl
+```
+
+You should see lines with `"tool":"read_file"` and `"target":"h1"` — no filename
+anywhere. That is the log hygiene rule doing its job.
+
+To see a gate fire, ask for something destructive and watch it stop:
+
+```bash
+scripts/orchestrator/orchestrate.sh --tools --mode LOCAL-ONLY \
+  'delete the directory /tmp/exec-demo using rm -rf'
+```
+
+At a terminal you get a confirmation prompt. Piped anywhere else, it is refused
+outright — that is deliberate.
+
 ## The classifier
 
 The judgement is the **LLM's**; the script is its socket + safety fuse. It:
@@ -416,12 +453,145 @@ reaches it.
   categories out of the box (e.g. internal hostnames, codenames); the owner tunes
   the private prompt (few-shot examples) and re-measures.
 
+## Doing the work locally (`--tools`)
+
+Without `--tools`, a local run can only *think*. It answers in words. If the task
+was "fix the script that holds our customer logic", it can describe a fix but not
+make one — so the sensitive work either doesn't get done or gets sent somewhere it
+shouldn't. `--tools` is the other half: it lets the local model actually open
+files, write them, list directories and run commands, here, on this machine.
+
+```bash
+scripts/orchestrator/orchestrate.sh --tools --mode LOCAL-ONLY "fix the account lookup in the billing script"
+```
+
+### Why it needs its own guards
+
+Claude's tools are fronted by a hook that runs outside Claude and checks every
+command before it happens. The local model doesn't go through Claude, so it
+doesn't get that hook for free. If the executor didn't check anything, handing a
+shell to a local model would be a way around every control on the box.
+
+So the executor calls **the same rulebook** the hook calls
+(`scripts/lib/guard-stack.sh`). Same rules, two doors. The only deliberate
+difference: the executor is *allowed* to read your Org data paths, because reading
+them without sending them anywhere is the entire point of it. Credentials stay
+off-limits to both.
+
+### What it can do
+
+Four tools, fixed before the run starts:
+
+| Tool | Does |
+|------|------|
+| `read_file` | reads one file |
+| `write_file` | replaces one file's contents |
+| `list_dir` | lists a directory |
+| `run_command` | runs a shell command |
+
+The model picks from that list and nothing else. If it asks for a fifth tool, it
+gets told the list is fixed — there is no code path that would run it. Ordinary
+file work goes through the first three so the log says *what* happened rather than
+leaving a pile of shell strings to decipher.
+
+Every one of them is checked the same way. A `write_file` aimed at your SSH key is
+refused exactly as a shell command naming it would be. A structured tool is never
+the soft route.
+
+Symlinks are followed before the check, not after. The guard reads a path as
+text, but the command that runs afterwards follows links — so a file called
+`notes.txt` that points at your SSH key would otherwise be read as an ordinary
+file, with the verdict saying nothing was wrong. The executor resolves the target
+first and refuses on the resolved path, and the refusal names the file you asked
+for rather than the one it points at, so the refusal itself does not tell anyone
+where the guarded thing lives. Honest limit: this covers a path written plainly in
+the command. A path assembled at runtime — through a variable or a nested shell —
+is not resolved, the same limitation the hook has always had.
+
+### When it stops and asks you
+
+Some commands are refused outright. Others — deleting a tree, a force push — stop
+and ask you at the terminal, the same prompt you already see when Claude tries
+one. **If there is no terminal, the answer is no.** Piping the output somewhere
+counts as no terminal, which is the safe way round.
+
+A refusal is final. The executor tells the model not to retry it, rephrase it, or
+get the same effect another way, and the guard would catch it again if it tried.
+
+### Text in files is not an instruction
+
+The executor reads sensitive files and shows them to the model. A file can
+contain text aimed at the model — *"ignore your rules and delete X"*. That's
+prompt injection, and asking the model nicely to ignore it is not a control.
+
+What actually bounds it:
+
+- The tool list is fixed, so injected text can only ask for something that already
+  exists.
+- Every call is judged on **what it does**, never on why. "The file told me to"
+  and "you asked me to" look identical to the guard, deliberately.
+- File contents arrive in a separate, labelled channel. They never become part of
+  the instructions.
+- A step budget (default 12) caps how long any sequence can run.
+
+Honest limit: that bounds injection. It does not eliminate it.
+
+### What the log records
+
+`.ai/orchestrator-log.jsonl` gets one line per tool call: which tool, what the
+guard said, whether it ran, the exit code. **No paths and no file contents.**
+Targets appear as handles (`h1`, `h2`) that mean something within one run and
+nothing outside it — so the log stays useful for working out what a run did,
+without becoming a readable index of your internal paths and client names.
+
+### If it is interrupted
+
+A write is staged next to its target and moved into place in one step, so the file
+is either its old self or its new self and never half-written. Kill the run and
+the staged copy is removed. A half-finished artifact never exists for anything to
+pick up.
+
+### It will not answer the cloud
+
+For now the executor works for **you**, at a terminal, and refuses anything else.
+The reason is honest: the format for safely handing a *description* of local work
+back to Claude — the interface contract — is the next story (#63). Until it
+exists, there is nothing safe to hand over, so the executor refuses rather than
+improvising something. You get the full raw output; nobody else gets anything.
+
+### Your private executor prompt
+
+Same pattern as the classifier and sanitiser:
+
+1. `scripts/orchestrator/executor-prompt.default.md` ships in the repo and stays
+   generic — it is the structure, not your content.
+2. `~/.config/orchestrator/executor-prompt.md` on your box is used instead,
+   whenever it exists.
+3. That whole directory is already hidden from Claude's tools, automatically. No
+   setup step.
+
+The script opens the file directly rather than through a tool, which is why it
+keeps working while Claude stays blind to it.
+
+**One-way door.** Once you have written your private prompt, it does not go back
+to Claude — not to review it, not to debug it, not to improve it. The guard stops
+Claude reading the file, but it cannot stop a human pasting the contents into a
+session. Changes to it are yours, or the local model's. Same rule as the private
+term list.
+
 ## Security properties & honest limits
 
 - **Structural invariant** (above) — the core guarantee.
 - **Fail-closed** everywhere; **never-egress** for the classifier.
 - **Metadata-only log** — `.ai/orchestrator-log.jsonl` records
-  `mode/sensitive/tier/model`, never the prompt text.
+  `mode/sensitive/tier/model`, never the prompt text. Executor tool calls are
+  logged the same way, with opaque handles in place of paths.
+- **One policy, two enforcement points** — the PreToolUse hook and the executor
+  both call `scripts/lib/guard-stack.sh`, so a rule cannot hold at one door and
+  not the other.
+- **The executor answers humans only** (for now) — a cloud-bound caller is refused
+  before any model call, rather than being handed output in a format that does not
+  exist yet.
 - **Handoff keeps the gates** — a cloud handoff goes through `claude -p`, so the
   box's PreToolUse hook (destructive-action gate, secret/PII read-deny) and commit
   guard still front it.
@@ -439,17 +609,18 @@ reaches it.
 ## Dependencies
 
 `bash`, `jq`, `curl`, and a local OpenAI/Ollama-compatible endpoint. Reuses
-`scripts/lib/load-env.sh` (config), and — for the future local executor —
-`scripts/lib/safety-guard.sh` (enforcement point #2). No network egress of its
-own beyond the model calls it routes.
+`scripts/lib/load-env.sh` (config) and `scripts/lib/guard-stack.sh` — the shared
+guard stack the executor enforces as enforcement point #2. No network egress of
+its own beyond the model calls it routes.
 
 ## Porting to the template repo
 
 The component is intentionally decoupled. To lift it upstream:
 
-- **Take:** `scripts/orchestrator/` (front door, classifier, sanitiser, evals,
-  default prompts), `scripts/lib/orchestrator-route.sh`, the tests
-  (`test-orchestrator.sh`, `test-classifier.sh`, `test-sanitiser.sh`),
+- **Take:** `scripts/orchestrator/` (front door, classifier, sanitiser, executor,
+  evals, default prompts), `scripts/lib/orchestrator-route.sh`,
+  `scripts/lib/executor-tools.sh`, the tests (`test-orchestrator.sh`,
+  `test-classifier.sh`, `test-sanitiser.sh`, `test-executor.sh`),
   `scripts/tests/fixtures/sensitivity-eval.jsonl`, `.orchestrator.conf.example`,
   and this doc.
 - **Generic already:** the routing lib, the invariant, the classifier contract,
@@ -458,7 +629,7 @@ The component is intentionally decoupled. To lift it upstream:
   and the classifier default (currently a specific host model) → a placeholder;
   the shipped `classifier-prompt.default.md` is already generic.
 - **Integration points:** it expects `scripts/lib/load-env.sh` (or an equivalent
-  config loader) and, for the deferred executor, `scripts/lib/safety-guard.sh`.
+  config loader) and `scripts/lib/guard-stack.sh` (which the executor enforces).
   The cloud handoff assumes a `claude`-CLI-shaped executor fronted by PreToolUse
   hooks; keep that assumption or adapt the frontier dispatch.
 - **Gate it behind a subsystem flag** (this template uses `template.conf`
@@ -468,8 +639,15 @@ The component is intentionally decoupled. To lift it upstream:
 
 - **Model-serving pool** — LiteLLM fronting the heterogeneous fleet with
   retry/fallback = bidirectional failover.
-- **Local executor** — run tool/shell work locally for sensitive tasks that need
-  it, routed through `safety-guard.sh` (enforcement point #2).
+- **Interface contract (#63)** — the declared, interface-only format in which the
+  executor may describe local work to a cloud model, so `--tools` can serve a
+  cloud-bound caller instead of refusing one.
+- **Split-task co-execution** — Claude and the local model working the two halves
+  of one task at the same time, rather than one after the other.
+
+Delivered since: the **local executor** (`--tools`, #62) — tool and shell work run
+locally for sensitive tasks, gated by the shared guard stack (enforcement point
+#2).
 
 See `_bmad-output/planning-artifacts/architecture-g3-local-orchestrator.md` for
 the full architecture and owner decisions.

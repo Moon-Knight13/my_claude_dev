@@ -78,8 +78,9 @@ ORCH_MODEL=richardyoung/qwen3-14b-abliterated:Q4_K_M|host-local|60|http://host.d
 # classifier already cleared it as non-sensitive. block: refuse the handoff.
 #
 # Same PRIVACY rule as the classifier: tune ~/.config/orchestrator/sanitiser-prompt.md
-# (seed from scripts/orchestrator/sanitiser-prompt.default.md) and add its path to
-# CTP_PII_PATHS. Measure marker-stripping with scripts/orchestrator/eval-sanitiser.sh.
+# (seed from scripts/orchestrator/sanitiser-prompt.default.md) — that directory is
+# hidden from Claude's tools by default. Measure marker-stripping with
+# scripts/orchestrator/eval-sanitiser.sh.
 
 # --- deterministic term floor (#65) -----------------------------------------
 # A private, owner-authored list of Org-sensitive terms, matched BY CODE before
@@ -87,8 +88,35 @@ ORCH_MODEL=richardyoung/qwen3-14b-abliterated:Q4_K_M|host-local|60|http://host.d
 # CLAUDE-ONLY. Missing or empty list = floor inactive (the classifier alone
 # decides). Seed it from scripts/orchestrator/term-list.example.txt.
 #
-# The path below must ALSO be listed in CTP_PII_PATHS in ~/.ctp-bridge.conf —
-# the list is a distilled index of Org codenames and must stay out of Claude's
-# reach. These are env/.env knobs, not parsed from this file:
+# The list is a distilled index of Org codenames, so it must stay out of Claude's
+# reach — everything under ~/.config/orchestrator/ already is, automatically, and
+# that cannot be switched off from a config file. These are env/.env knobs, not
+# parsed from this file:
 #   ORCH_TERM_LIST=~/.config/orchestrator/term-list.txt
 #   ORCH_TERM_MIN_LEN=3
+
+# --- local executor (#62) ----------------------------------------------------
+# `orchestrate.sh --tools` dispatches a LOCAL-tier task to the executor
+# (scripts/orchestrator/execute-local.sh) instead of a reasoning-only model call,
+# so a sensitive task that needs file or shell work can actually be done here.
+# Opt-in per run: without --tools the local path is unchanged.
+#
+# Every tool call is classified by scripts/lib/guard-stack.sh in executor mode —
+# the same policy the PreToolUse hook enforces for Claude. An `ask` is confirmed
+# on the controlling TTY; with no TTY it denies.
+#
+# Until the interface contract (#63) exists, the executor serves HUMAN callers
+# only and refuses a cloud-bound one (ORCH_CALLER). These are env/.env knobs, not
+# parsed from this file:
+#   ORCH_EXEC_ENDPOINT=http://host.docker.internal:11434   # LOCAL only
+#   ORCH_EXEC_MODEL=richardyoung/qwen3-14b-abliterated:Q4_K_M
+#   ORCH_EXEC_MAX_STEPS=12        # bounds any single run, injected or not
+#   ORCH_EXEC_MAX_BYTES=20000     # cap on tool output handed back to the model
+#   ORCH_EXEC_CMD_TIMEOUT=120     # per-command wall clock
+#   ORCH_EXEC_TIMEOUT=180         # per model call
+#   ORCH_EXECUTOR_PROMPT_FILE=~/.config/orchestrator/executor-prompt.md
+#
+# Same PRIVACY rule again: the executor prompt is policy, not configuration. Seed
+# it from scripts/orchestrator/executor-prompt.default.md, keep the real one on the
+# box, and treat it as a one-way door — it does not go back to Claude to be
+# reviewed, debugged or improved.
