@@ -131,6 +131,26 @@ check "env prefix does not hide"  "$(cmd 'GIT_DIR=/x git clean -f')"          as
 check "second segment gated (ask)"  "$(cmd 'ls; dropdb prod')"                ask
 check "second segment gated (deny)" "$(cmd 'ls; ctp host deploy box')"        deny
 
+echo "== guarded globs are patterns, not a snapshot of what exists =="
+# A guarded glob must protect a path that does not exist yet. It did not: the
+# pattern list was expanded against the real filesystem before being matched, so
+# `~/.ssh/**` collapsed to whatever happened to be in ~/.ssh at that moment and a
+# NEW file in a guarded directory matched nothing. Fails open on precisely the
+# case that matters — a write, or a secret created after the shell started.
+_GTMP="$(mktemp -d)"
+mkdir -p "$_GTMP/keys"
+echo existing > "$_GTMP/keys/present"
+_GCONF="$_GTMP/ctp.conf"
+cat > "$_GCONF" <<EOF
+CTP_SECRET_PATHS=$_GTMP/keys/**
+EOF
+CTP_BRIDGE_CONF="$_GCONF" guard_stack_load hook
+check "existing file under a guarded glob" "$(pth "$_GTMP/keys/present")"  deny
+check "NEW file under a guarded glob"      "$(pth "$_GTMP/keys/brand-new")" deny
+check "new file named in a command"        "$(cmd "cat $_GTMP/keys/brand-new")" deny
+rm -rf "$_GTMP"
+CTP_BRIDGE_CONF="$CONF" guard_stack_load hook
+
 echo
 echo "guard-stack: $PASS passed, $FAIL failed"
 [[ "$FAIL" -eq 0 ]]

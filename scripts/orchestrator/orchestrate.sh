@@ -13,8 +13,14 @@
 # _bmad-output/planning-artifacts/architecture-g3-local-orchestrator.md.
 #
 # Usage:
-#   orchestrate.sh [--mode LOCAL-ONLY|CLAUDE-ONLY|AUTO] [--dry-run] <prompt...>
-#   echo "<prompt>" | orchestrate.sh [--mode ...] [--dry-run]
+#   orchestrate.sh [--mode LOCAL-ONLY|CLAUDE-ONLY|AUTO] [--tools] [--dry-run] <prompt...>
+#   echo "<prompt>" | orchestrate.sh [--mode ...] [--tools] [--dry-run]
+#
+# --tools selects the LOCAL path's second dispatch mode: the executor
+# (execute-local.sh), which can run shell and file work on the box instead of
+# only reasoning about it. It changes nothing about WHERE a task is allowed to
+# run — the tier is already decided by the time dispatch happens — so it cannot
+# put a sensitive prompt on the frontier.
 set -euo pipefail
 
 _HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -28,12 +34,13 @@ ORCH_CONF="${ORCH_CONF:-$HOME/.config/orchestrator.conf}"
 ORCH_LOG="${ORCH_LOG:-.ai/orchestrator-log.jsonl}"
 LOCAL_MODEL_ENDPOINT="${LOCAL_MODEL_ENDPOINT:-http://host.docker.internal:11434}"
 
-MODE_OVERRIDE=""; DRY_RUN=0; ARGS=()
+MODE_OVERRIDE=""; DRY_RUN=0; TOOLS=0; ARGS=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --mode) MODE_OVERRIDE="${2:-}"; shift 2 ;;
         --mode=*) MODE_OVERRIDE="${1#*=}"; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
+        --tools) TOOLS=1; shift ;;
         --) shift; ARGS+=("$@"); break ;;
         *) ARGS+=("$1"); shift ;;
     esac
@@ -94,12 +101,16 @@ fi
 # sensitive content this whole control exists to protect).
 mkdir -p "$(dirname "$ORCH_LOG")" 2>/dev/null || true
 _ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
-printf '{"ts":"%s","mode":"%s","sensitive":"%s","floor":%s,"tier":"%s","model":"%s","dry_run":%s}\n' \
-    "$_ts" "$MODE" "$SENSITIVE" "$FLOOR" "$P_TIER" "$P_NAME" "$([[ "$DRY_RUN" == 1 ]] && echo true || echo false)" \
+printf '{"ts":"%s","mode":"%s","sensitive":"%s","floor":%s,"tier":"%s","model":"%s","tools":%s,"dry_run":%s}\n' \
+    "$_ts" "$MODE" "$SENSITIVE" "$FLOOR" "$P_TIER" "$P_NAME" \
+    "$([[ "$TOOLS" == 1 ]] && echo true || echo false)" \
+    "$([[ "$DRY_RUN" == 1 ]] && echo true || echo false)" \
     >> "$ORCH_LOG" 2>/dev/null || true
 
 if [[ "$DRY_RUN" == 1 ]]; then
-    printf 'mode=%s sensitive=%s -> tier=%s model=%s (rank %s)\n' "$MODE" "$SENSITIVE" "$P_TIER" "$P_NAME" "$P_RANK"
+    printf 'mode=%s sensitive=%s -> tier=%s model=%s (rank %s) exec=%s\n' \
+        "$MODE" "$SENSITIVE" "$P_TIER" "$P_NAME" "$P_RANK" \
+        "$([[ "$TOOLS" == 1 ]] && echo tools || echo reasoning)"
     exit 0
 fi
 
@@ -127,9 +138,26 @@ case "$P_TIER" in
         fi
         exec claude -p "$SEND" ;;
     host-local|network-local)
-        # Reasoning-only local call (Ollama generate). The local shell-executor
-        # path (D1 fallback) is a later slice.
         local_ep="${P_ENDPOINT:-$LOCAL_MODEL_ENDPOINT}"
+        # --tools: hand the task to the executor (enforcement point #2) so a
+        # sensitive task that NEEDS tools can actually be done here, instead of
+        # degrading to reasoning about work it cannot perform. Opt-in, because a
+        # shell is a bigger thing to hand a model than a question is.
+        #
+        # The executor gates every command through guard-stack.sh itself; this
+        # script does not pre-approve anything on its way there. ORCH_CALLER says
+        # who is on the other end, which is what decides whether the executor is
+        # willing to answer at all (R8).
+        if [[ "$TOOLS" == 1 ]]; then
+            _exec_bin="${ORCH_EXECUTOR_BIN:-$_HERE/execute-local.sh}"
+            [[ -x "$_exec_bin" ]] || { echo "orchestrate.sh: executor not found or not executable: $_exec_bin" >&2; exit 8; }
+            exec env ORCH_CALLER="${ORCH_CALLER:-human}" \
+                     ORCH_EXEC_ENDPOINT="$local_ep" \
+                     ORCH_EXEC_MODEL="$P_NAME" \
+                     ORCH_LOG="$ORCH_LOG" \
+                     "$_exec_bin" "$PROMPT"
+        fi
+        # Reasoning-only local call (Ollama generate) — the default local path.
         curl -sfS "${local_ep}/api/generate" \
             -H "Content-Type: application/json" \
             -d "$(jq -n --arg model "$P_NAME" --arg prompt "$PROMPT" '{model:$model, prompt:$prompt, stream:false}')" \

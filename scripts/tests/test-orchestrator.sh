@@ -114,6 +114,55 @@ check "no sanitiser -> original to claude" "$out" "CLAUDE_GOT:hello"
 out="$(env "${E[@]}" PATH="$MB:$PATH" ORCH_SANITISER="$UPSAN" bash "$ORCH" --mode LOCAL-ONLY 'hello' 2>/dev/null)"
 case "$out" in *CLAUDE_GOT*) bad "INVARIANT: sensitive prompt reached claude via sanitiser path";; *) ok "sensitive never reaches claude (sanitiser irrelevant)";; esac
 
+echo "== --tools: dispatch to the local executor (S2) =="
+# --tools is the second dispatch mode for the LOCAL tiers. It must not become a
+# second way onto the frontier: the tier decision is made before dispatch and is
+# not revisited here.
+FAKE_EXEC="$TMP/fake-exec.sh"
+EXEC_SEEN="$TMP/exec-seen.txt"
+cat > "$FAKE_EXEC" <<EOF
+#!/usr/bin/env bash
+printf '%s|%s\n' "\${ORCH_CALLER:-unset}" "\$1" >> "$EXEC_SEEN"
+echo "EXEC_RAN"
+EOF
+chmod +x "$FAKE_EXEC"
+
+: > "$EXEC_SEEN"
+out="$(env "${E[@]}" ORCH_EXECUTOR_BIN="$FAKE_EXEC" bash "$ORCH" --tools --mode LOCAL-ONLY 'fix the sensitive script' 2>/dev/null)"
+check "--tools dispatches to the executor" "$out" "EXEC_RAN"
+check "executor received the prompt"       "$(cut -d'|' -f2 < "$EXEC_SEEN")" "fix the sensitive script"
+check "executor told the caller is human"  "$(cut -d'|' -f1 < "$EXEC_SEEN")" human
+
+# Without --tools the local path stays reasoning-only: the executor is opt-in, so
+# an existing local run does not silently gain a shell.
+: > "$EXEC_SEEN"
+env "${E[@]}" ORCH_EXECUTOR_BIN="$FAKE_EXEC" bash "$ORCH" --mode LOCAL-ONLY 'fix the sensitive script' >/dev/null 2>&1
+check "no --tools means no executor" "$(wc -l < "$EXEC_SEEN" | tr -d ' ')" 0
+
+# THE INVARIANT under --tools: a frontier-bound run still goes to claude, and the
+# executor is not involved at all.
+: > "$EXEC_SEEN"
+out="$(env "${E[@]}" PATH="$MB:$PATH" ORCH_EXECUTOR_BIN="$FAKE_EXEC" bash "$ORCH" --tools --mode CLAUDE-ONLY 'summarise the public README' 2>/dev/null)"
+check "--tools + frontier still reaches claude" "$out" "CLAUDE_GOT:summarise the public README"
+check "--tools + frontier never runs the executor" "$(wc -l < "$EXEC_SEEN" | tr -d ' ')" 0
+
+# A floor hit forces local; --tools must follow the floor, not the requested mode.
+FTMP="$TMP/floorlist.txt"; echo "projectnimbus" > "$FTMP"
+: > "$EXEC_SEEN"
+out="$(env "${E[@]}" PATH="$MB:$PATH" ORCH_TERM_LIST="$FTMP" ORCH_EXECUTOR_BIN="$FAKE_EXEC" \
+      bash "$ORCH" --tools --mode CLAUDE-ONLY 'rework projectnimbus deploy' 2>/dev/null)"
+check "floor + --tools runs locally" "$out" "EXEC_RAN"
+case "$out" in *CLAUDE_GOT*) bad "INVARIANT: floor hit still reached claude under --tools";; *) ok "floor hit never reaches claude under --tools";; esac
+
+# The dry run says which local path would be taken, so the choice is visible
+# before anything executes.
+out="$(run --tools --mode LOCAL-ONLY --dry-run 'fix the sensitive script')"
+contains_tools=no; case "$out" in *"exec=tools"*) contains_tools=yes ;; esac
+check "dry-run reports the executor path" "$contains_tools" yes
+out="$(run --mode LOCAL-ONLY --dry-run 'fix the sensitive script')"
+contains_tools=no; case "$out" in *"exec=reasoning"*) contains_tools=yes ;; esac
+check "dry-run reports reasoning-only by default" "$contains_tools" yes
+
 echo
 echo "orchestrator: $PASS passed, $FAIL failed"
 [[ "$FAIL" -eq 0 ]]

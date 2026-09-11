@@ -94,9 +94,20 @@ a fixed order per command segment: segmentation → build tooling → secret pat
 C1 PII paths → destructive actions → destructive git. First verdict wins.
 
 This matters because the hook is **enforcement point #1** and fronts only Claude's
-tools. **Enforcement point #2** is the local-model executor (G3), which does not go
-through Claude and therefore does not inherit the hook. It calls the same library,
-so the two cannot drift: a layer added here defends both.
+tools. **Enforcement point #2** is the local-model executor (G3,
+`scripts/orchestrator/execute-local.sh`), which does not go through Claude and
+therefore does not inherit the hook. It calls the same library, so the two cannot
+drift: a layer added here defends both.
+
+The executor is now built. It drives a local model through a **fixed** tool set —
+`read_file`, `write_file`, `list_dir`, `run_command` — and every one of them is
+classified by the stack: a structured tool is never a route round a layer. An
+`ask` is confirmed on the controlling TTY (both stdin and stdout), and with no TTY
+it denies, mirroring the hook's behaviour where no human can answer. Tool output
+reaches the model in a labelled data channel and never becomes part of its
+instructions, and a bounded step budget caps any sequence an injected instruction
+could start. Its metadata log carries opaque handles rather than filesystem paths,
+so a log Claude can read indexes nothing.
 
 The stack takes a **caller mode**, and exactly one layer varies by it — **C1**. In
 `hook` mode an Org PII/IP path is denied, keeping that material out of Claude's
