@@ -89,17 +89,70 @@ reasoning-only local call; see *Doing the work locally* below.
 | `scripts/tests/test-classifier.sh` | Classifier contract tests — strict parse, fail-closed, never-egress (mocked model, 19). |
 | `.orchestrator.conf.example` | Config template: mode + model registry + classifier notes. |
 
+## Which machine does this run on?
+
+Answer this before anything else, because two of the settings below change with
+it and one of them silently loses your files.
+
+**Run the orchestrator where both of these are true:** the local models answer,
+and the sensitive files live. On a normal setup that is your **host machine**,
+not a devcontainer.
+
+| | Host machine | Inside a devcontainer |
+|---|---|---|
+| Local model endpoint | `http://localhost:11434` | `http://host.docker.internal:11434` |
+| `~/.config/orchestrator/` | persists | **container-local — lost on rebuild** unless you mount it |
+| Sensitive files the executor opens | already here | across a boundary |
+
+The middle row is the one that bites. In a devcontainer your home directory is
+usually rebuilt with the container, so a term list written there disappears —
+taking the file the whole control depends on with it. Check before you trust it:
+
+```bash
+mount | grep "$HOME/.config"        # nothing printed = not persistent
+```
+
+If you do want to drive it from a devcontainer, mount the directory first in
+`.devcontainer/devcontainer.json`:
+
+```json
+"mounts": ["source=${localEnv:HOME}/.config/orchestrator,target=/home/<user>/.config/orchestrator,type=bind"]
+```
+
+Everything below says which machine it applies to where it matters. Where it
+doesn't say, it's the machine you chose here.
+
+### Two similar paths, doing different jobs
+
+Easy to mix up, so:
+
+| Path | What it is |
+|---|---|
+| `~/.config/orchestrator.conf` | a **file** — the model registry and default mode |
+| `~/.config/orchestrator/` | a **directory** — your private term list, prompts, handle map |
+
+The file is ordinary configuration. The directory is the sensitive half, and is
+hidden from Claude's tools automatically.
+
 ## Configuration
 
-On-box config `~/.config/orchestrator.conf` (gitignored; parsed, never sourced):
+The model registry lives in `~/.config/orchestrator.conf` on the machine you run
+this from (gitignored; parsed, never sourced). Without it you get
+`no eligible model in tiers: ...` — the routing decision was made correctly, there
+was just nothing registered to send the work to.
 
 ```
 ORCH_MODE=AUTO
 # ORCH_MODEL=<name>|<tier>|<rank>|<endpoint>
 ORCH_MODEL=claude|frontier|100|
-ORCH_MODEL=<model>|host-local|60|http://host.docker.internal:11434
+ORCH_MODEL=<model>|host-local|60|http://localhost:11434
 # ORCH_MODEL=<model>|network-local|55|http://<other-machine>:11434
 ```
+
+**The endpoint is the line that changes by machine.** `localhost` on the host;
+`host.docker.internal` from inside a devcontainer; the other machine's address for
+`network-local`. Get the model name from `ollama list` on whichever machine serves
+it.
 
 Tiers: `frontier` (cloud, egresses — eligible only for non-sensitive),
 `host-local` (this machine), `network-local` (another machine on the local net).
@@ -207,15 +260,50 @@ run and the AI classifier decides on its own, exactly as things worked before.
 
 ## Setting it up and checking it works
 
+**Do all of this on the machine you picked in *Which machine does this run on?*
+above** — normally your host, not a devcontainer. Run it in your checkout of this
+repo, because steps 1 and 2 copy files out of it.
+
+### 0. Register your models
+
+```bash
+cp .orchestrator.conf.example ~/.config/orchestrator.conf
+ollama list                                    # get your model's exact tag
+```
+
+Then edit the `ORCH_MODEL` lines. On the host the endpoint is `localhost`:
+
+```
+ORCH_MODEL=claude|frontier|100|
+ORCH_MODEL=<tag-from-ollama-list>|host-local|60|http://localhost:11434
+```
+
+Skip this and every route resolves correctly and then fails with
+`no eligible model in tiers: ...`.
+
+The classifier, sanitiser and executor find the model through
+`LOCAL_MODEL_ENDPOINT`, which defaults to `http://host.docker.internal:11434` —
+right in a devcontainer, wrong on a host. On a host, set it once in the repo's
+`.env`:
+
+```bash
+echo 'LOCAL_MODEL_ENDPOINT=http://localhost:11434' >> .env
+```
+
+Leave it wrong and nothing breaks loudly: the classifier cannot reach a model, so
+it fails closed and calls **everything** sensitive. Safe, and quietly useless.
+
 ### 1. Make your list
 
 ```bash
-mkdir -p ~/.config/orchestrator
+mkdir -p ~/.config/orchestrator && chmod 700 ~/.config/orchestrator
 cp scripts/orchestrator/term-list.example.txt ~/.config/orchestrator/term-list.txt
 chmod 600 ~/.config/orchestrator/term-list.txt
 ```
 
-Open it and add one word per line at the bottom.
+Open it **in an editor** and add one word per line at the bottom. Not `echo >>` —
+a redirect puts your real word in your shell history, which is the one place it
+should not be.
 
 Start with the few you'd most regret sending to a cloud model. A short accurate
 list beats a long guessed one, and you can add more any time.
@@ -326,8 +414,17 @@ expected it to go out. That's it working.
 ### 7. Try the executor (optional)
 
 The steps above cover routing. If you also want the local model to *do* the work
-rather than describe it, add `--tools`. Start with something harmless in a scratch
-directory:
+rather than describe it, add `--tools`.
+
+First give it its prompt — the generic default works as shipped, so this is a
+copy now and an edit whenever you have house rules worth writing down:
+
+```bash
+cp scripts/orchestrator/executor-prompt.default.md ~/.config/orchestrator/executor-prompt.md
+chmod 600 ~/.config/orchestrator/executor-prompt.md
+```
+
+Then start with something harmless in a scratch directory:
 
 ```bash
 mkdir -p /tmp/exec-demo && echo 'hello' > /tmp/exec-demo/note.txt

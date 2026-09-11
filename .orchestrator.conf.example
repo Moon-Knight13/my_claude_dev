@@ -27,9 +27,19 @@ ORCH_MODE=AUTO
 # THE INVARIANT: a sensitive task is never eligible for a frontier model, however
 # high its rank — the router removes the cloud tier from the eligible set first.
 #
+# THE ENDPOINT DEPENDS ON WHERE YOU RUN THIS:
+#   on the host machine        -> http://localhost:11434
+#   inside a devcontainer      -> http://host.docker.internal:11434
+#   a model on another machine -> http://<that-machine>:11434  (network-local)
+# Get the exact model tag from `ollama list` on whichever machine serves it.
+#
+# Note also that ~/.config/orchestrator.conf (this file) and the directory
+# ~/.config/orchestrator/ are different things: this is the model registry, that
+# holds your private term list and prompts. Only the directory is sensitive.
+#
 # Examples (edit for your fleet; the endpoints below are illustrative):
 ORCH_MODEL=claude|frontier|100|
-ORCH_MODEL=richardyoung/qwen3-14b-abliterated:Q4_K_M|host-local|60|http://host.docker.internal:11434
+ORCH_MODEL=richardyoung/qwen3-14b-abliterated:Q4_K_M|host-local|60|http://localhost:11434
 # ORCH_MODEL=richardyoung/qwen3-14b-abliterated:Q4_K_M|network-local|55|http://10.0.0.21:11434
 
 # --- Sensitivity classifier (AUTO mode) -------------------------------------

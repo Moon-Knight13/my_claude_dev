@@ -2,9 +2,15 @@
 #
 # COPY THIS FILE — don't edit it here in the repo:
 #
-#     mkdir -p ~/.config/orchestrator
+#     mkdir -p ~/.config/orchestrator && chmod 700 ~/.config/orchestrator
 #     cp scripts/orchestrator/term-list.example.txt ~/.config/orchestrator/term-list.txt
 #     chmod 600 ~/.config/orchestrator/term-list.txt
+#
+# DO THIS ON THE MACHINE THAT RUNS THE ORCHESTRATOR — normally your host, not a
+# devcontainer. A devcontainer's home directory is usually rebuilt with the
+# container, so a list written there disappears. Check with:
+#
+#     mount | grep "$HOME/.config"      # nothing printed = not persistent
 #
 #
 # WHAT THIS IS
