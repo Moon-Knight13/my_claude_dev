@@ -341,15 +341,59 @@ committed — the shipped default stays generic — and (b) is added to `CTP_PII
 so the C1 path guard stops Claude's own tools from reading it. The classifier
 reads it directly (not a tool call), so it still works; Claude cannot.
 
-## The eval
+## Checking how good the classifier is
 
-`eval-classifier.sh` runs the classifier over the labelled fixtures against a live
-local model and prints a confusion matrix. The headline is **sensitive-recall** —
-of the truly-sensitive cases, how many were caught; a miss is a potential leak.
-It lists every miss so the prompt can be tuned. It needs a live model, so it is an
-**on-box manual tool, not a CI gate** (the deterministic contract is covered by
-`test-classifier.sh`). Treat a 100% score on the synthetic set as a floor, not
-proof; grow the fixtures from real (sanitised) misses.
+`eval-classifier.sh` runs the classifier over a set of labelled example prompts and
+scores it. The number that matters is **sensitive-recall**: of the prompts that
+really were sensitive, how many it caught. A miss is a prompt that would have gone
+to the cloud.
+
+It needs a live local model, so run it on the box by hand. It is not a CI check —
+the fixed behaviour is covered by `test-classifier.sh`.
+
+### Adding your own examples
+
+The examples that ship with the repo are made up. Real ones are better, and the
+useful ones come from real misses — but a real miss **is** real sensitive material,
+so it must not go into the repo.
+
+Put your own examples here instead:
+
+```
+~/.config/orchestrator/fixtures/sensitivity-eval.jsonl
+```
+
+The eval picks that file up automatically and runs it **alongside** the shipped
+examples, so you keep the built-in coverage and add yours on top. Same format, one
+JSON object per line:
+
+```json
+{"prompt":"...", "label":"sensitive", "note":"short reminder of why"}
+```
+
+That folder is already hidden from Claude's tools — nothing to configure.
+
+### Where the results go
+
+Stdout gives you the score and nothing else. **Which** cases were missed is written
+to a private report:
+
+```
+~/.config/orchestrator/eval-classifier-report.txt
+```
+
+The report is owner-only (`600`) and hidden from Claude. Detail stays out of the
+terminal on purpose: once your own examples are in the mix, anything printed lands
+in your scrollback and in session transcripts, which is exactly where this material
+shouldn't be.
+
+The sanitiser eval works the same way — score on screen, before/after text and
+surviving markers in `~/.config/orchestrator/eval-sanitiser-report.txt`.
+
+### Reading the score honestly
+
+100% on the shipped made-up examples is a starting point, not proof of anything.
+The score only means as much as the examples behind it.
 
 ## The sanitiser (control C2)
 
