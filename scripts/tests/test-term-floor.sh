@@ -115,6 +115,34 @@ _e="$(ORCH_CONF="$CONF" ORCH_LOG="$LOG" ORCH_TERM_LIST="$TERMS" ORCH_CLASSIFIER=
       bash "$ORCH" --mode CLAUDE-ONLY --dry-run 'deploy the Bluefin service' 2>&1 >/dev/null)" || true
 if [[ "$_e" != *[Bb]luefin* ]]; then ok "stderr does not name the term"; else bad "stderr leaked the term"; fi
 
+# ============================================================================
+# The orchestrator's own private files are protected WITHOUT the owner having to
+# configure anything. A setup step you can forget is a control that fails open —
+# and the term list is the single most sensitive file on the box.
+echo "== private orchestrator files are guarded by default =="
+# shellcheck source=/dev/null
+source "$ROOT/scripts/lib/ctp-guard.sh"
+
+# Deliberately load a config that sets CTP_PII_PATHS to something ELSE. A default
+# VALUE would be replaced by this and silently vanish; a built-in list must not be.
+OWNCONF="$TMP/own.conf"; printf 'CTP_PII_PATHS=~/org-data/**\n' > "$OWNCONF"
+ctp_load_config "$OWNCONF"
+
+guarded() { if ctp_is_pii_path "$1"; then echo yes; else echo no; fi; }
+check "term list guarded by default"        "$(guarded "$HOME/.config/orchestrator/term-list.txt")"       yes
+check "classifier prompt guarded by default" "$(guarded "$HOME/.config/orchestrator/classifier-prompt.md")" yes
+check "sanitiser prompt guarded by default"  "$(guarded "$HOME/.config/orchestrator/sanitiser-prompt.md")"  yes
+check "owner's own PII path still guarded"   "$(guarded "$HOME/org-data/clients.csv")"                      yes
+check "unrelated file not guarded"           "$(guarded "$HOME/notes.txt")"                                 no
+check "repo's generic default NOT guarded"   "$(guarded "$ROOT/scripts/orchestrator/term-list.example.txt")" no
+
+# And with NO config loaded at all — the opt-in list empty, as it ships.
+ctp_load_config /nonexistent-conf-file 2>/dev/null || true
+# Read by ctp_is_pii_path in the sourced guard lib, not in this file.
+# shellcheck disable=SC2034
+CTP_PII_PATHS=""
+check "guarded even with empty CTP_PII_PATHS" "$(guarded "$HOME/.config/orchestrator/term-list.txt")" yes
+
 echo
 echo "term-floor: $PASS passed, $FAIL failed"
 [[ "$FAIL" -eq 0 ]]

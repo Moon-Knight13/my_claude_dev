@@ -186,8 +186,42 @@ _ctp_path_in() {
 # its contents (credentials) must never be read into a transcript.
 ctp_is_secret_path() { _ctp_path_in "$1" "$CTP_SECRET_PATHS"; }
 
-# ctp_is_pii_path <path> — 0 if the path matches a configured Org PII/IP glob.
+# The orchestrator's private config directory, guarded ALWAYS — not opt-in, and
+# not overridable from config or the caller's environment (assigned outright, not
+# defaulted, so an inherited value cannot weaken it).
+#
+# It holds the classifier prompt, the sanitiser prompt and the term list: files
+# that accumulate the very Org codenames and patterns they exist to catch. The
+# term list in particular is a distilled index of everything being protected.
+#
+# These paths are fixed and known, unlike the owner's own data paths, so there is
+# no reason to make protecting them a step someone has to remember. A setup step
+# you can forget is a control that fails open — and it would fail open silently,
+# on the most sensitive file on the box.
+#
+# Deliberately the whole directory, so a private file added later (eval fixtures,
+# a future prompt) is covered without another change here.
+#
+# This blocks Claude's TOOLS. The orchestrator reads these files directly rather
+# than through a tool call, so every component keeps working.
+# The ~ is expanded by ctp_expand_tilde inside _ctp_path_in, exactly as it is for
+# owner-supplied globs from the config file — not by the shell here.
+# shellcheck disable=SC2088
+CTP_PII_BUILTIN='~/.config/orchestrator/*'
+
+# ctp_is_pii_path <path> — 0 if the path matches the always-on built-in list OR a
+# configured Org PII/IP glob.
+#
+# Two lists, checked in order, and the built-in one is NOT a default value for the
+# configured one: CTP_PII_PATHS is assigned by the config parser, so a default
+# would be REPLACED the moment an owner set their own paths — silently removing
+# protection at the exact moment they started using the feature.
+#
 # Separate list, separate reason from secrets: a data-governance boundary the
 # owner tunes independently (and that a future local-model front-door may treat
-# differently). Empty CTP_PII_PATHS (the default) matches nothing — opt-in.
-ctp_is_pii_path() { _ctp_path_in "$1" "$CTP_PII_PATHS"; }
+# differently). Empty CTP_PII_PATHS still matches nothing — the owner's half stays
+# opt-in; the built-in half is not.
+ctp_is_pii_path() {
+    _ctp_path_in "$1" "$CTP_PII_BUILTIN" && return 0
+    _ctp_path_in "$1" "$CTP_PII_PATHS"
+}

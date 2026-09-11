@@ -180,9 +180,11 @@ sensitive file on the box — a tidy index of everything you're protecting.
 - Never paste it into a chat.
 - Never ask Claude to read, review or improve it.
 
-Add its path to `CTP_PII_PATHS` so Claude's tools are blocked from reading it. The
-orchestrator opens the file directly rather than through a tool, so it keeps
-working while Claude stays blind to it.
+**Claude is already blocked from reading it** — you don't have to configure
+anything. Everything in `~/.config/orchestrator/` is off-limits to Claude's tools
+by default, and that cannot be switched off from a config file. The orchestrator
+opens these files directly rather than through a tool, so it keeps working while
+Claude stays blind to them.
 
 Once it has real words in it, that's a one-way door: from then on you edit it
 yourself, or with the local model. Not with Claude.
@@ -220,14 +222,20 @@ If you keep the file somewhere else, set this in your environment or `.env`:
 ORCH_TERM_LIST=/path/to/your/list.txt
 ```
 
-### 3. Block Claude from reading it
+### 3. (Nothing to do) Claude is already blocked from reading it
 
-In `~/.ctp-bridge.conf`, add the path to `CTP_PII_PATHS`, next to the other private
-files:
+Everything in `~/.config/orchestrator/` is hidden from Claude's tools by default.
+You don't have to add anything to `CTP_PII_PATHS`, and it can't be turned off by
+editing a config file.
+
+`CTP_PII_PATHS` is still where you list **your own** data folders — that part stays
+opt-in, because only you know where your data lives:
 
 ```
-CTP_PII_PATHS=~/.config/orchestrator/classifier-prompt.md ~/.config/orchestrator/sanitiser-prompt.md ~/.config/orchestrator/term-list.txt ~/org-data/**
+CTP_PII_PATHS=~/org-data/** /srv/customer/**
 ```
+
+Step 5 below checks the built-in protection is really working.
 
 ### 4. Test it — with a made-up word, not a real one
 
@@ -274,8 +282,8 @@ sed -i '/^zzhippopotamus$/d' ~/.config/orchestrator/term-list.txt
 
 In a Claude session, ask it to read `~/.config/orchestrator/term-list.txt`.
 
-It should be refused. If Claude can read it, step 3 didn't take — check for a typo,
-and make sure the path is written the same way as the other entries (`~/...`).
+It should be refused. This works with no configuration on your part, so a refusal
+is the expected result straight away — you're confirming it, not enabling it.
 
 ### 6. Check nothing leaked into the log
 

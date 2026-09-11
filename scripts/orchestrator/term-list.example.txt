@@ -36,9 +36,10 @@
 #   - never paste it into a chat
 #   - never ask Claude to read, review or improve it
 #
-# Add its path to CTP_PII_PATHS in ~/.ctp-bridge.conf so Claude's tools are
-# blocked from reading it. The orchestrator opens the file directly, so it still
-# works.
+# Claude's tools are ALREADY blocked from reading anything in
+# ~/.config/orchestrator/ — you don't have to configure that, and it can't be
+# turned off from a config file. The orchestrator opens the file directly, so it
+# still works.
 #
 # Nothing that matches is ever shown to you, written to the log, or sent to
 # Claude — you're told "sensitive", never which word it was.
