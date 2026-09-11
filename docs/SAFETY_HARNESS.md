@@ -109,6 +109,19 @@ instructions, and a bounded step budget caps any sequence an injected instructio
 could start. Its metadata log carries opaque handles rather than filesystem paths,
 so a log Claude can read indexes nothing.
 
+What comes back out of it is governed separately, by the **disclosure boundary**
+(`scripts/lib/contract.sh`). A human at the terminal gets the raw answer; a
+cloud-bound caller gets a **declared interface** — name, invocation, inputs,
+outputs, exit codes — and never the artifact or a scrubbed copy of it. Only named
+fields are copied, so undeclared content was never in the message; a filesystem
+path is rejected outright, because a path discloses org structure and client
+identity even when file contents never move. The owner's term list runs on the
+outbound text before and after the sanitiser, a sanitiser failure blocks on this
+path rather than passing through, and the owner approves every contract seeing the
+exact text that would cross. Approval needs a terminal, so unattended
+cloud/local co-operation is impossible by construction — a stated property, not a
+gap.
+
 The stack takes a **caller mode**, and exactly one layer varies by it — **C1**. In
 `hook` mode an Org PII/IP path is denied, keeping that material out of Claude's
 transcript. In `executor` mode it is permitted, because the local executor is the

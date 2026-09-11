@@ -59,7 +59,7 @@ exec_tools_init() {
     [[ -n "$EXEC_RUN_ID" ]] || EXEC_RUN_ID="$$"
     _EXEC_HMAP="$(mktemp "${TMPDIR:-/tmp}/orch-handles.XXXXXX")"
     EXEC_TOOL=""; EXEC_PATH=""; EXEC_CONTENT=""; EXEC_COMMAND=""
-    EXEC_ANSWER=""; EXEC_DONE=0; EXEC_PARSE_ERR=""; EXEC_VERDICT=""
+    EXEC_ANSWER=""; EXEC_DONE=0; EXEC_PARSE_ERR=""; EXEC_VERDICT=""; EXEC_CONTRACT=""
 }
 
 # exec_handle <string> — the opaque handle for a string, allocated on first sight
@@ -122,11 +122,11 @@ exec_confirm() { # exec_confirm <reason>
 
 # --- parsing the model's reply ---------------------------------------------
 EXEC_TOOL=""; EXEC_PATH=""; EXEC_CONTENT=""; EXEC_COMMAND=""
-EXEC_ANSWER=""; EXEC_DONE=0; EXEC_PARSE_ERR=""
+EXEC_ANSWER=""; EXEC_DONE=0; EXEC_PARSE_ERR=""; EXEC_CONTRACT=""
 
 exec_parse_call() { # exec_parse_call <model reply text>
     EXEC_TOOL=""; EXEC_PATH=""; EXEC_CONTENT=""; EXEC_COMMAND=""
-    EXEC_ANSWER=""; EXEC_DONE=0; EXEC_PARSE_ERR=""
+    EXEC_ANSWER=""; EXEC_DONE=0; EXEC_PARSE_ERR=""; EXEC_CONTRACT=""
     local raw="${1:-}" obj
 
     # Local models wrap the object in prose or a ```json fence more often than
@@ -144,6 +144,10 @@ exec_parse_call() { # exec_parse_call <model reply text>
     if [[ "$(printf '%s' "$obj" | jq -r 'if .done == true then 1 else 0 end')" == 1 ]]; then
         EXEC_DONE=1
         EXEC_ANSWER="$(printf '%s' "$obj" | jq -r '.answer // ""')"
+        # The proposed interface contract, for a cloud-bound caller (S3). Absent
+        # for an ordinary local run — the human at the terminal gets the answer
+        # itself, and needs no contract to read it.
+        EXEC_CONTRACT="$(printf '%s' "$obj" | jq -c '.contract // empty' 2>/dev/null)"
         return 0
     fi
 
