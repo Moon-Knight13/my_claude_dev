@@ -450,6 +450,17 @@ caveman still apply). The decision logic is a pure, unit-tested lib
 (`~/.config/orchestrator.conf`, parsed never sourced) holding a mode and a model
 registry (name · tier · capability rank · endpoint).
 
+**Run it on the machine where the local models answer and the sensitive files
+live — normally the host, not a devcontainer.** Two settings change with that
+choice: the registry's endpoint (`localhost` on a host,
+`host.docker.internal` from a container) and whether `~/.config/orchestrator/` —
+the private term list, prompts and handle map — survives. A devcontainer home is
+usually rebuilt with the container, so a term list written there is lost. Note
+also that `~/.config/orchestrator.conf` (the registry file) and
+`~/.config/orchestrator/` (the private directory) are different things; only the
+directory is sensitive, and only it is guarded from Claude's tools. Setup steps
+are in `docs/ORCHESTRATOR.md`.
+
 The reason this control exists is one **non-negotiable, structural invariant**:
 
 > **Sensitivity gates tier eligibility before capability ranking.** A task the
