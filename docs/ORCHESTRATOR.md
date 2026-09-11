@@ -37,7 +37,9 @@ router treats as sensitive ever reach an egressing endpoint?*
 
 ```
  prompt ─▶ orchestrate.sh
-   1. mode?   LOCAL-ONLY / CLAUDE-ONLY / AUTO         (owner switch; overrides 2)
+   1. mode?   LOCAL-ONLY / CLAUDE-ONLY / AUTO         (your switch; overrides 2)
+   1b. word list: your private terms, matched by code, in EVERY mode
+                            (a match -> sensitive; no AI involved; beats 1 and 2)
    2. classify (AUTO only): local-LLM judge -> sensitive | nonsensitive
                             (fail-closed: error/timeout/garbled -> sensitive)
    3. eligible tiers:  sensitive -> {host-local, network-local}   (NO cloud)
@@ -67,6 +69,7 @@ demos and the invariant test.
 | `scripts/orchestrator/orchestrate.sh` | Front door: mode switch, tier resolver, dispatch, metadata log, `--dry-run`. |
 | `scripts/lib/orchestrator-route.sh` | Pure decision logic — config parse, mode resolution, `orch_classify`, eligible-tier resolver (the invariant), model pick. No I/O, so the invariant is unit-testable. |
 | `scripts/orchestrator/classify-sensitivity.sh` | The sensitivity judge — a thin wrapper that calls the **local** LLM and returns `sensitive`/`nonsensitive`. Never egresses; fails closed. |
+| `scripts/orchestrator/term-list.example.txt` | Starting point for your private word list (#65) — the check that runs before the AI. Ships with no words in it. |
 | `scripts/orchestrator/classifier-prompt.default.md` | The shipped, **generic** judgement prompt. Seed for the owner's private on-box copy. |
 | `scripts/orchestrator/sanitise.sh` | Cloud-handoff sanitiser (C2) — LOCAL LLM rephrase that strips incidental identifiers before egress. Transform-or-fail; never egresses. |
 | `scripts/orchestrator/sanitiser-prompt.default.md` | The shipped, generic rewrite prompt. Seed for the owner's private copy. |
@@ -99,6 +102,218 @@ Classifier knobs (env / `.env`): `ORCH_CLASSIFIER` (points at the judge script �
 `ORCH_CLASSIFIER_ENDPOINT` (LOCAL only), `ORCH_CLASSIFIER_MODEL`,
 `ORCH_CLASSIFIER_TIMEOUT`, `ORCH_CLASSIFIER_KEEP_ALIVE`,
 `ORCH_CLASSIFIER_PROMPT_FILE`.
+
+## The word list that can't be argued with
+
+You keep a private list of words that must never leave the box — codenames, client
+names, internal hostnames, project names.
+
+Before anything else happens, the orchestrator checks your prompt against that
+list. If one of your words is in it, the prompt is treated as sensitive and the
+cloud is taken off the table. No AI model is involved in that decision — it is a
+plain text match done by code.
+
+### It works even when you say "send this to the cloud"
+
+`CLAUDE-ONLY` mode means *"I've checked, this one is fine for the cloud"*, and it
+normally skips all sensitivity checking.
+
+The list still runs. If one of your words is in the prompt, it stays local anyway.
+
+That sounds heavy-handed, and it is on purpose. `CLAUDE-ONLY` is the mode you use
+when you're confident — which is exactly when a forgotten codename slips through.
+You're checking from memory, and the list exists because memory fails. If you
+really do want that prompt to go out, take the word off your list first. You can
+override it, but you have to mean it.
+
+The log still records the mode you asked for, plus `"floor":true` to show it was
+overruled. It doesn't quietly pretend you asked for something else.
+
+### Why the list is checked by code, not by the AI
+
+You could instead put these words in the classifier's instructions and ask the
+model to watch for them. That doesn't work, for one reason:
+
+The model is the thing you're trying to back up. A model can skim past its own
+instructions, talk itself round, or be talked round. That's the exact failure this
+list exists to catch — so the model can't be the one doing the catching.
+
+Code has no instructions to forget and no reasoning to go wrong. It either finds
+your word or it doesn't.
+
+### What it does and doesn't cover
+
+It catches every word you thought to write down. It cannot catch anything you
+didn't. For everything else, the AI classifier is still the judge, with all the
+uncertainty that carries.
+
+So it narrows the gap. It doesn't close it. (Before this existed there was no
+non-AI check at all — a deliberate earlier decision, now reversed.)
+
+### How matching works
+
+Capitals are ignored, so `Bluefin`, `bluefin` and `BLUEFIN` all match.
+
+It matches whole words only. `atlas` will **not** match `atlassian`, `catalyst` or
+`atlases`. That matters more than it sounds: if short words matched inside longer
+ones, everything would look sensitive, everything would stay local, and you'd end
+up switching the list off. A safeguard you've turned off protects nothing.
+
+Words shorter than 3 characters are ignored, and you get a warning telling you
+which **line number** to fix. Change that limit with `ORCH_TERM_MIN_LEN`.
+
+### It never tells you which word matched
+
+When the list fires, all you're told is "sensitive". Not which word. The log gets
+`"floor":true` and nothing more. Even the "this word is too short" warning gives a
+line number, never the word.
+
+That's deliberate. The list is a concentrated collection of your secrets. A
+safeguard built to stop them leaking must not become the thing that prints them.
+
+### Look after this file
+
+It lives at `~/.config/orchestrator/term-list.txt`, and it is the single most
+sensitive file on the box — a tidy index of everything you're protecting.
+
+- Never commit it.
+- Never paste it into a chat.
+- Never ask Claude to read, review or improve it.
+
+**Claude is already blocked from reading it** — you don't have to configure
+anything. Everything in `~/.config/orchestrator/` is off-limits to Claude's tools
+by default, and that cannot be switched off from a config file. The orchestrator
+opens these files directly rather than through a tool, so it keeps working while
+Claude stays blind to them.
+
+Once it has real words in it, that's a one-way door: from then on you edit it
+yourself, or with the local model. Not with Claude.
+
+Start from `scripts/orchestrator/term-list.example.txt`. It ships with
+instructions and **no words** — a generic list would protect nobody.
+
+### If you haven't set it up
+
+No list, or an empty one, is fine and is not an error. The check simply doesn't
+run and the AI classifier decides on its own, exactly as things worked before.
+
+## Setting it up and checking it works
+
+### 1. Make your list
+
+```bash
+mkdir -p ~/.config/orchestrator
+cp scripts/orchestrator/term-list.example.txt ~/.config/orchestrator/term-list.txt
+chmod 600 ~/.config/orchestrator/term-list.txt
+```
+
+Open it and add one word per line at the bottom.
+
+Start with the few you'd most regret sending to a cloud model. A short accurate
+list beats a long guessed one, and you can add more any time.
+
+### 2. Tell the orchestrator where it is
+
+The path above is the default, so if you used it you can skip this step.
+
+If you keep the file somewhere else, set this in your environment or `.env`:
+
+```bash
+ORCH_TERM_LIST=/path/to/your/list.txt
+```
+
+### 3. (Nothing to do) Claude is already blocked from reading it
+
+Everything in `~/.config/orchestrator/` is hidden from Claude's tools by default.
+You don't have to add anything to `CTP_PII_PATHS`, and it can't be turned off by
+editing a config file.
+
+`CTP_PII_PATHS` is still where you list **your own** data folders — that part stays
+opt-in, because only you know where your data lives:
+
+```
+CTP_PII_PATHS=~/org-data/** /srv/customer/**
+```
+
+Step 5 below checks the built-in protection is really working.
+
+### 4. Test it — with a made-up word, not a real one
+
+**Don't test with a real term.** Commands you type end up in your shell history and
+on screen, which is the one place your real words shouldn't be.
+
+Add a nonsense word instead:
+
+```bash
+echo 'zzhippopotamus' >> ~/.config/orchestrator/term-list.txt
+```
+
+Now run both of these. `--dry-run` shows you the decision without sending anything
+anywhere:
+
+```bash
+# has your test word — should stay local
+scripts/orchestrator/orchestrate.sh --mode CLAUDE-ONLY --dry-run \
+  'deploy zzhippopotamus to prod'
+
+# no test word — should go to the cloud
+scripts/orchestrator/orchestrate.sh --mode CLAUDE-ONLY --dry-run \
+  'refactor the parser module'
+```
+
+You should see:
+
+```
+mode=CLAUDE-ONLY sensitive=sensitive    -> tier=host-local ...
+mode=CLAUDE-ONLY sensitive=nonsensitive -> tier=frontier ...
+```
+
+**Check both lines.** The first proves the list works — you said cloud, it stayed
+local. The second proves it isn't simply blocking everything, which would look
+identical if you only ran the first.
+
+Then take the test word out:
+
+```bash
+sed -i '/^zzhippopotamus$/d' ~/.config/orchestrator/term-list.txt
+```
+
+### 5. Check Claude really can't read the list
+
+In a Claude session, ask it to read `~/.config/orchestrator/term-list.txt`.
+
+It should be refused. This works with no configuration on your part, so a refusal
+is the expected result straight away — you're confirming it, not enabling it.
+
+### 6. Check nothing leaked into the log
+
+```bash
+grep floor .ai/orchestrator-log.jsonl | tail -3
+```
+
+Lines that matched show `"floor":true`. There should be no word from your list and
+no prompt text anywhere in the file. A normal line looks like this:
+
+```json
+{"ts":"...","mode":"CLAUDE-ONLY","sensitive":"sensitive","floor":true,"tier":"host-local","model":"qwen-host","dry_run":true}
+```
+
+### Using it day to day
+
+Nothing to do. The check runs on every prompt automatically.
+
+The only thing you'll notice is a prompt occasionally staying local when you
+expected it to go out. That's it working.
+
+### If something seems wrong
+
+| What you see | Why | What to do |
+|---|---|---|
+| Nothing ever matches | The file isn't where the orchestrator is looking. A missing file is intentionally not an error, so it fails quietly | `ls -l ~/.config/orchestrator/term-list.txt`, and check `ORCH_TERM_LIST` if you moved it |
+| One word never matches | It's under 3 characters and is being skipped | Look for `term-list line N rejected` on screen; make the word longer |
+| A word doesn't match inside a longer word | Working as intended — whole words only | Add the longer form as its own line |
+| Everything stays local | One of your words is too short or too common and matches constantly | Remove half the list, test, repeat until you find it |
+| You can't tell which word matched | By design — it never says | Narrow it down yourself against your own list. It's never printed, logged, or shown to Claude |
 
 ## The classifier
 
@@ -166,10 +381,16 @@ reaches it.
 - **Handoff keeps the gates** — a cloud handoff goes through `claude -p`, so the
   box's PreToolUse hook (destructive-action gate, secret/PII read-deny) and commit
   guard still front it.
-- **Residual risk (accepted):** no deterministic hard-floor (owner decision), so a
-  confident LLM misclassification of a sensitive prompt as safe can still egress.
-  Mitigated by `LOCAL-ONLY` mode + fail-closed, and bounded by the eval. This is
-  defense-in-depth, not a guarantee — same framing as the box's other controls.
+- **Your word list** (above) — a listed word forces `sensitive` in every mode, with
+  no AI in the decision. It is the one check here that a model cannot be argued
+  past.
+- **Remaining risk (accepted, reduced):** the list only catches words you thought to
+  write down. For anything else the AI classifier is still the only judge, so a
+  confident wrong call on a sensitive prompt can still send it out. Reduced by
+  `LOCAL-ONLY` mode and by failing closed on errors, and measured by the eval. This
+  is layered defence, not a guarantee — the same honest framing as the box's other
+  controls. (Before the word list there was no non-AI check at all; it narrows this
+  risk, it does not remove it.)
 
 ## Dependencies
 

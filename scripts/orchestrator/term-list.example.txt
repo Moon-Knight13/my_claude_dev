@@ -1,0 +1,60 @@
+# Your private word list.
+#
+# COPY THIS FILE — don't edit it here in the repo:
+#
+#     mkdir -p ~/.config/orchestrator
+#     cp scripts/orchestrator/term-list.example.txt ~/.config/orchestrator/term-list.txt
+#     chmod 600 ~/.config/orchestrator/term-list.txt
+#
+#
+# WHAT THIS IS
+#
+# One word per line. Codenames, client names, internal hostnames, project names —
+# things that must never reach a cloud model.
+#
+# If any of them appear in a prompt, the orchestrator keeps that prompt local.
+# This happens even in CLAUDE-ONLY mode, where you've said the prompt is fine to
+# send out. You can be overruled by your own list; remove the word if you really
+# meant it.
+#
+#
+# WHY IT'S A LIST AND NOT AN AI INSTRUCTION
+#
+# These words are matched by code. No model is involved.
+#
+# If you put them in the classifier's instructions instead, the model would be
+# the one checking — and a model skimming past its own instructions is exactly
+# the mistake this list is here to catch.
+#
+#
+# LOOK AFTER THIS FILE
+#
+# Once it has real words in it, it's the most sensitive file on the box: a tidy
+# list of everything you're protecting.
+#
+#   - never commit it
+#   - never paste it into a chat
+#   - never ask Claude to read, review or improve it
+#
+# Claude's tools are ALREADY blocked from reading anything in
+# ~/.config/orchestrator/ — you don't have to configure that, and it can't be
+# turned off from a config file. The orchestrator opens the file directly, so it
+# still works.
+#
+# Nothing that matches is ever shown to you, written to the log, or sent to
+# Claude — you're told "sensitive", never which word it was.
+#
+#
+# RULES
+#
+#   - one word per line
+#   - lines starting with # are ignored, so are blank lines
+#   - capitals don't matter: Bluefin, bluefin and BLUEFIN all match
+#   - whole words only: "atlas" will NOT match "atlassian"
+#   - words under 3 characters are skipped, with a warning naming the line number
+#   - pick distinctive words. A common word matches constantly, keeps everything
+#     local, and you'll end up turning this off — which protects nothing
+#
+#
+# There are deliberately NO words below. A list of guesses would protect nobody.
+# Add yours here:

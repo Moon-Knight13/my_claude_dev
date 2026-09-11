@@ -80,7 +80,7 @@ set an env var in the same call could otherwise rewrite its own limits.
 | **Build-tooling bridge** | any attempt to drive `ctp`/`docker exec` into the container directly | `deny` bare access; `ask` for a permitted wrapper verb; `deny` a refused verb | `CTP_ALLOWED_TARGET`, `CTP_ALLOWED_TEAM`, `CTP_ALLOWED_VERBS` |
 | **Secret-read deny** | Read/Write/Edit/Bash touching a credential path | `deny` | `CTP_SECRET_PATHS` |
 | **A · Destructive-action gate** | `rm -rf`, `shred`, `mkfs`, `dd of=`, `dropdb`, `DROP`/`TRUNCATE`, `terraform destroy`, `kubectl delete`, `docker prune`/`rm -f` | `ask` (→ `deny` with no human) | `~/.config/safety-guard.conf` (`SAFETY_ALLOWLIST`) |
-| **C1 · PII/IP path guard** | Read/Write/Edit/Bash touching an Org-data path | `deny` | `CTP_PII_PATHS` |
+| **C1 · PII/IP path guard** | Read/Write/Edit/Bash touching an Org-data path | `deny` | `CTP_PII_PATHS` (opt-in) **+ `~/.config/orchestrator/*` always, not configurable** |
 | **B · Commit guard** | staged secrets/PII on every commit | **warn + log** (never blocks) | global `core.hooksPath` |
 | **2b · Destructive-git gate** | `git push --force`, `reset --hard`, `clean -f`, `branch -D`, `checkout --force` | `ask` (→ `deny` with no human) | `~/.config/git-guard.conf` (`GITGUARD_ALLOWLIST`) |
 | **Killswitch** | credentials left on the box after the last session | shred | PAM + systemd timer |

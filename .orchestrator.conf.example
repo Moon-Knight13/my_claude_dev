@@ -80,3 +80,15 @@ ORCH_MODEL=richardyoung/qwen3-14b-abliterated:Q4_K_M|host-local|60|http://host.d
 # Same PRIVACY rule as the classifier: tune ~/.config/orchestrator/sanitiser-prompt.md
 # (seed from scripts/orchestrator/sanitiser-prompt.default.md) and add its path to
 # CTP_PII_PATHS. Measure marker-stripping with scripts/orchestrator/eval-sanitiser.sh.
+
+# --- deterministic term floor (#65) -----------------------------------------
+# A private, owner-authored list of Org-sensitive terms, matched BY CODE before
+# the classifier runs. A hit forces `sensitive` in every mode, including
+# CLAUDE-ONLY. Missing or empty list = floor inactive (the classifier alone
+# decides). Seed it from scripts/orchestrator/term-list.example.txt.
+#
+# The path below must ALSO be listed in CTP_PII_PATHS in ~/.ctp-bridge.conf —
+# the list is a distilled index of Org codenames and must stay out of Claude's
+# reach. These are env/.env knobs, not parsed from this file:
+#   ORCH_TERM_LIST=~/.config/orchestrator/term-list.txt
+#   ORCH_TERM_MIN_LEN=3
