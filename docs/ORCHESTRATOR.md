@@ -155,6 +155,112 @@ terms — a generic floor protects nothing.
 A missing or empty list is **not an error**: the floor is inactive and the
 classifier alone decides, which is the pre-#65 behaviour.
 
+## Using the floor — setup and verification
+
+### 1. Create your private list
+
+```bash
+mkdir -p ~/.config/orchestrator
+cp scripts/orchestrator/term-list.example.txt ~/.config/orchestrator/term-list.txt
+chmod 600 ~/.config/orchestrator/term-list.txt
+```
+
+Add one term per line at the bottom. Start with the handful you would most regret
+sending to a cloud model — codenames, client names, internal hostnames. You can
+grow it later; a short accurate list beats a long guessed one.
+
+### 2. Point the orchestrator at it
+
+Set in your environment or `.env`:
+
+```bash
+ORCH_TERM_LIST=~/.config/orchestrator/term-list.txt
+```
+
+(That is also the default path, so if you used the location above you can skip
+this. Set it explicitly if you keep the file elsewhere.)
+
+### 3. Hide it from Claude
+
+Add the path to `CTP_PII_PATHS` in `~/.ctp-bridge.conf`, alongside the classifier
+and sanitiser prompts:
+
+```
+CTP_PII_PATHS=~/.config/orchestrator/classifier-prompt.md ~/.config/orchestrator/sanitiser-prompt.md ~/.config/orchestrator/term-list.txt ~/org-data/**
+```
+
+### 4. Verify it works — WITHOUT using a real term
+
+Put a throwaway term in the list first. Never test with a real one: test commands
+end up in shell history, terminal scrollback and session transcripts, which is
+exactly where your real terms should not be.
+
+```bash
+echo 'zzhippopotamus' >> ~/.config/orchestrator/term-list.txt
+
+# should route LOCAL despite CLAUDE-ONLY asserting otherwise
+scripts/orchestrator/orchestrate.sh --mode CLAUDE-ONLY --dry-run \
+  'deploy zzhippopotamus to prod'
+
+# should route to the cloud, proving the floor is not just blocking everything
+scripts/orchestrator/orchestrate.sh --mode CLAUDE-ONLY --dry-run \
+  'refactor the parser module'
+```
+
+Expected:
+
+```
+mode=CLAUDE-ONLY sensitive=sensitive    -> tier=host-local ...
+mode=CLAUDE-ONLY sensitive=nonsensitive -> tier=frontier ...
+```
+
+The first line is the whole point: you said CLAUDE-ONLY, and it went local anyway.
+
+`--dry-run` prints the decision without dispatching, so neither command sends
+anything anywhere. Use it whenever you want to check routing safely.
+
+Then remove the throwaway term:
+
+```bash
+sed -i '/^zzhippopotamus$/d' ~/.config/orchestrator/term-list.txt
+```
+
+### 5. Verify the list is actually hidden from Claude
+
+In a Claude session, ask it to read `~/.config/orchestrator/term-list.txt`. It must
+be **denied** by the C1 path guard. If Claude can read it, `CTP_PII_PATHS` is not
+picking the path up — check for a typo and that the file uses the same form
+(`~/...`) as the other entries.
+
+### 6. Verify the log does not leak
+
+```bash
+grep floor .ai/orchestrator-log.jsonl | tail -3
+```
+
+You should see `"floor":true` on the runs that matched, and **no term and no
+prompt text anywhere** in the file. That is the intended shape:
+
+```json
+{"ts":"...","mode":"CLAUDE-ONLY","sensitive":"sensitive","floor":true,"tier":"host-local","model":"qwen-host","dry_run":true}
+```
+
+### Day-to-day
+
+You do not invoke the floor; it runs on every prompt through `orchestrate.sh`. The
+only thing you will notice is a prompt occasionally routing local when you expected
+cloud. That is the control working.
+
+### Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Floor never fires | List not found — the default path is used when `ORCH_TERM_LIST` is unset, and a missing file is deliberately **not** an error | `ls -l ~/.config/orchestrator/term-list.txt`; confirm `ORCH_TERM_LIST` if you moved it |
+| Floor never fires on one term | The term is shorter than `ORCH_TERM_MIN_LEN` (default 3) and was rejected at load | Check stderr for `term-list line N rejected`; lengthen the term or raise nothing — short terms over-match by nature |
+| A term does not match inside a word | Working as designed — matching is word-boundary, so `atlas` does not match `atlassian` | If you need the broader form, list it as its own term |
+| Everything routes local | A term is too common or too short and is firing widely | Find it by bisecting the list; prefer distinctive terms |
+| Cannot tell which term fired | By design — the floor never names a match | Bisect locally against your own list; the answer is never printed, logged, or shown to Claude |
+
 ## The classifier
 
 The judgement is the **LLM's**; the script is its socket + safety fuse. It:
