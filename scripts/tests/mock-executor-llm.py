@@ -13,11 +13,15 @@ Knobs:
   MOCK_RECORD  path to append each received request body to, one JSON per line, so
                a test can assert on what the executor actually sent (system prompt
                stability, where tool results were placed).
+  {{HANDLE}}   in a scripted reply is replaced with the 16-hex handle the caller
+               put in the request ("handle for this artifact is <hex>"), so a
+               split test can script a contract for a handle allocated at runtime.
   MOCK_PORT    listen port (default 18435; different from mock-ollama.py's 18434 so
                both can run at once).
 """
 import json
 import os
+import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 SCRIPT = os.environ.get("MOCK_SCRIPT", "")
@@ -58,7 +62,11 @@ class Handler(BaseHTTPRequestHandler):
                 fh.write(raw.decode("utf-8", "replace").replace("\n", " ") + "\n")
         i = min(STATE["turn"], len(REPLIES) - 1)
         STATE["turn"] += 1
-        self._send({"message": {"role": "assistant", "content": REPLIES[i]}, "done": True})
+        reply = REPLIES[i]
+        if "{{HANDLE}}" in reply:
+            m = re.search(r"handle for this artifact is ([0-9a-f]{16})", raw.decode("utf-8", "replace"))
+            reply = reply.replace("{{HANDLE}}", m.group(1) if m else "0000000000000000")
+        self._send({"message": {"role": "assistant", "content": reply}, "done": True})
 
 
 if __name__ == "__main__":

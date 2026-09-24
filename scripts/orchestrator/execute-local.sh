@@ -62,6 +62,13 @@ exec_caller_is_human && CALLER_HUMAN=1
 # difference is enforced, so a later edit cannot leak a diagnostic by accident.
 _say() { if [[ "$CALLER_HUMAN" == 1 ]]; then echo "execute-local.sh: $1" >&2; else echo "execute-local.sh: $2" >&2; fi; }
 
+# ORCH_EXEC_OUT: write the final answer or contract to this file instead of
+# stdout. A caller that captured stdout with $(…) would take away the terminal
+# the owner approves the contract at (exec_tty_ok needs stdin AND stdout), and
+# every disclosure would be refused. The split runner (#77) uses this; it owns
+# the file and creates it private.
+_emit() { if [[ -n "${ORCH_EXEC_OUT:-}" ]]; then printf '%s\n' "$1" > "$ORCH_EXEC_OUT"; else printf '%s\n' "$1"; fi; }
+
 TASK="${1:-}"
 if [[ -z "$TASK" && ! -t 0 ]]; then TASK="$(cat)"; fi
 [[ -n "$TASK" ]] || { _say "no task given" "no task"; exit 2; }
@@ -168,7 +175,7 @@ while (( STEP < MAX_STEPS )); do
     if [[ "$EXEC_DONE" == 1 ]]; then
         _log --argjson extra "$(jq -cn --argjson steps "$STEP" '{event:"run", result:"done", steps:$steps}')"
         if [[ "$CALLER_HUMAN" == 1 ]]; then
-            printf '%s\n' "$EXEC_ANSWER"
+            _emit "$EXEC_ANSWER"
             exit 0
         fi
         # Cloud-bound. The answer text is derived from material this whole path
@@ -180,7 +187,7 @@ while (( STEP < MAX_STEPS )); do
         fi
         contract_disclose "$EXEC_CONTRACT"
         if [[ "$CONTRACT_STATUS" == "disclosed" ]]; then
-            printf '%s\n' "$CONTRACT_OUT"
+            _emit "$CONTRACT_OUT"
             exit 0
         fi
         # Every other status discloses nothing. The reason is for the owner's log,

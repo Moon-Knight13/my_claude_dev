@@ -81,6 +81,10 @@ reasoning-only local call; see *Doing the work locally* below.
 | `scripts/lib/executor-tools.sh` | The executor's building blocks — the fixed tool list, the gate, the opaque log handles, the terminal confirmation. |
 | `scripts/orchestrator/executor-prompt.default.md` | The shipped, **generic** executor prompt. Seed for the owner's private on-box copy. |
 | `scripts/tests/test-executor.sh` | Executor contract tests — closed vocabulary, gating, no-TTY denial, caller-aware return, log hygiene, injection containment (81). |
+| `scripts/orchestrator/split.sh` | Split-task co-execution (#77): the local model plans the split, code forces parts local, the owner approves the plan, local parts run through the executor, cloud parts go to `claude -p` with no tools, and any failure rolls every artifact back. |
+| `scripts/lib/split-plan.sh` | The split plan's checks — shape, artifact paths, dependencies, and the word list and classifier applied to every cloud-bound part. |
+| `scripts/orchestrator/planner-prompt.default.md` | The shipped, **generic** planner prompt. Seed for the owner's private on-box copy. |
+| `scripts/tests/test-split.sh` | Split tests — only the contract reaches Claude, split decided without egress, parts only move toward local, failures roll back (90). |
 | `scripts/lib/contract.sh` | The disclosure boundary (#63) — opaque handles, contract validation, positive-disclosure projection, term floor, sanitiser backstop, owner approval. |
 | `scripts/tests/test-contract.sh` | Disclosure tests — nothing undeclared crosses, no paths, floor not bypassable, approval per contract (53). |
 | `scripts/orchestrator/eval-classifier.sh` | Measures the judge against labelled fixtures; headline metric = sensitive-recall. |
@@ -763,6 +767,74 @@ Claude reading the file, but it cannot stop a human pasting the contents into a
 session. Changes to it are yours, or the local model's. Same rule as the private
 term list.
 
+## Splitting one task in two (`--split`)
+
+Some tasks have a sensitive half and a harmless half. "Make `script.py` from our
+customer export, and an Ansible playbook that deploys it and runs it nightly": the
+script needs the real data, the playbook needs nothing but the script's name and
+arguments. `--split` does both halves, each in the right place.
+
+```bash
+scripts/orchestrator/orchestrate.sh --split "make script.py from customers.csv that prints accounts over 10k, and an ansible playbook that deploys it and runs it nightly"
+scripts/orchestrator/orchestrate.sh --split --dry-run "..."   # show the plan, run nothing
+```
+
+### What happens
+
+1. **The local model plans the split.** It proposes parts, each with a route
+   (`local` or `cloud`), the one file it produces, and its instructions. Claude is
+   not asked to help: deciding what Claude may see by describing it to Claude
+   would defeat the point.
+2. **Code checks the plan.** Shape, ids, and file paths (relative, inside the
+   current directory, never in `.git`). Then every part headed for the cloud is run
+   past your word list and, in `AUTO`, the classifier. A hit moves the part to
+   `local`. The planner can make a part more local; nothing it writes can make a
+   part less local than those checks allow.
+3. **You approve the plan.** Every part is shown, and every cloud task in full —
+   it is sent word for word.
+4. **Local parts run first**, through the executor and its guard stack. A part
+   Claude will call finishes with a contract, which you approve on its own, as
+   always.
+5. **Cloud parts go to Claude with no tools.** `claude -p --tools "" --strict-mcp-config`,
+   from an empty directory. Claude gets the cloud task and the approved contracts,
+   and answers from those alone — it cannot open `script.py`, because it has
+   nothing to open it with.
+6. **Join.** Claude's answer is held back until every part has succeeded, then
+   written. If anything fails, every file named in the plan is put back as it was.
+
+The halves run one after the other. The contract has to exist before Claude can
+write anything that calls it, so there is nothing to overlap.
+
+### Approvals: decided, and recorded
+
+A split asks you twice as often as you might expect: once for the plan, then once
+per contract. That is deliberate (owner decision, #77): the plan approval is **in
+addition to** the per-contract approval, not a replacement for it. The rule that
+you approve every contract (E10) is unchanged. To keep the prompts few, plans are
+capped at four parts.
+
+`--mode` works as it does everywhere else. `CLAUDE-ONLY` means you are the
+classifier for the cloud parts — the word list still applies. `LOCAL-ONLY` turns
+every part local.
+
+### Your private planner prompt
+
+Same pattern as the other prompts: `planner-prompt.default.md` ships generic;
+`~/.config/orchestrator/planner-prompt.md` on your box is used instead when it
+exists, and Claude's tools cannot read it.
+
+### Limits
+
+- **A terminal is required.** No terminal, no plan approval, no run — only
+  `--dry-run` works without one.
+- **The cloud task is the planner's writing.** Code checks it against your word
+  list and the classifier, and you read it before it goes. It is not a contract:
+  nothing but your eye checks that it doesn't describe the local half too well.
+  Read it.
+- **Rollback covers the files named in the plan.** If a local part writes some
+  other file as well, that file is not put back.
+- **One file per part**, and Claude's part is the text of that file, nothing else.
+
 ## Security properties & honest limits
 
 - **Structural invariant** (above) — the core guarantee.
@@ -777,6 +849,9 @@ term list.
   declared interface, never the artifact and never a scrubbed version of it. Only
   named fields are copied; undeclared content was never in the message. No
   filesystem path can appear in a contract, and the owner approves every one.
+- **Split tasks cross only by contract** — in `--split`, Claude runs with every
+  tool disabled and no MCP servers, from an empty directory, so the only thing it
+  knows about the local half is the approved contract in its prompt.
 - **Handoff keeps the gates** — a cloud handoff goes through `claude -p`, so the
   box's PreToolUse hook (destructive-action gate, secret/PII read-deny) and commit
   guard still front it.
@@ -824,13 +899,14 @@ The component is intentionally decoupled. To lift it upstream:
 
 - **Model-serving pool** — LiteLLM fronting the heterogeneous fleet with
   retry/fallback = bidirectional failover.
-- **Split-task co-execution** — Claude and the local model working the two halves
-  of one task at the same time, rather than one after the other. The disclosure
-  boundary it needs now exists; what is left is the co-ordination.
+- **Split-task approvals without a terminal** — `--split` needs you at a terminal.
+  An approval surface that is provably a human without one is #75.
 
-Delivered since: the **local executor** (`--tools`, #62) and the **disclosure
+Delivered since: the **local executor** (`--tools`, #62), the **disclosure
 boundary** (#63) — tool and shell work run locally for sensitive tasks, gated by
-the shared guard stack, with only a declared interface crossing to the cloud.
+the shared guard stack, with only a declared interface crossing to the cloud —
+and **split-task co-execution** (`--split`, #77), built terminal-first ahead of the
+rest of #73.
 
 See `_bmad-output/planning-artifacts/architecture-g3-local-orchestrator.md` for
 the full architecture and owner decisions.
