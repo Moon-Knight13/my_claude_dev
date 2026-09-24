@@ -475,6 +475,18 @@
       </div>
       <p class="d-note">This is the mechanism that lets a cloud model <b>coordinate work it is never allowed to see</b>: Claude writes the playbook, the pipeline, the caller &mdash; knowing the name, the arguments and the exit codes of a script whose contents, logic and originating prompt stay on the box. The handle-to-path map is itself a list of internal paths, so it lives in <span class="path">~/.config/orchestrator/</span> with everything else Claude's tools cannot read, and is never resolved for a cloud-bound caller. Full walkthrough: <span class="path">docs/ORCHESTRATOR.md</span>.</p>
     </div>
+
+    <div class="dgram">
+      <div class="dgram-h"><h3>Splitting one task in two</h3><span class="path">orchestrate.sh --split &rarr; scripts/orchestrator/split.sh</span></div>
+      <div class="pipe">
+        <div class="check"><div class="cn">planned locally</div><div class="cw"><b>The local model proposes the split.</b> Which parts need the real data, which Claude can write. Claude is never asked to help: deciding what it may see by describing it to it would defeat the point.</div><div class="cs">local</div></div>
+        <div class="check"><div class="cn">code checks the plan</div><div class="cw"><b>Parts only move toward local.</b> Every cloud-bound part goes past the word list and the classifier; a hit moves it local. Paths must stay in the working directory and out of <span class="path">.git</span>. At most four parts.</div><div class="cs">deny</div></div>
+        <div class="check"><div class="cn">owner approves</div><div class="cw"><b>The plan, then each contract.</b> The owner reads every cloud task word for word before anything runs, then approves each contract as always. The plan approval is added, not a replacement.</div><div class="cs">ask</div></div>
+        <div class="check"><div class="cn">Claude has no tools</div><div class="cw"><b>Nothing to open the file with.</b> <span class="path">claude -p --tools "" --strict-mcp-config</span>, from an empty directory: Claude writes the playbook from the task and the approved contract alone; the handle it wrote against becomes the real file only on the box, at the join.</div><div class="cs">contract</div></div>
+        <div class="check"><div class="cn">all or nothing</div><div class="cw"><b>A failure rolls back every file the plan names.</b> Claude&rsquo;s output is held until every part succeeds. A file a local part writes outside the plan is the stated limit.</div><div class="cs">rollback</div></div>
+      </div>
+      <p class="d-note">The owner's original ask, delivered: the local model writes the script that reads the customer data, Claude writes the playbook that deploys and runs it, and Claude only ever learns the script's name, arguments and exit codes. Terminal only for now; <span class="path">--dry-run</span> shows the plan without one. Full walkthrough: <span class="path">docs/ORCHESTRATOR.md</span>.</p>
+    </div>
   </section>
 
   <section>

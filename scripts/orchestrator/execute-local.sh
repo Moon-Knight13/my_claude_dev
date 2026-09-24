@@ -62,6 +62,13 @@ exec_caller_is_human && CALLER_HUMAN=1
 # difference is enforced, so a later edit cannot leak a diagnostic by accident.
 _say() { if [[ "$CALLER_HUMAN" == 1 ]]; then echo "execute-local.sh: $1" >&2; else echo "execute-local.sh: $2" >&2; fi; }
 
+# ORCH_EXEC_OUT: write the final answer or contract to this file instead of
+# stdout. A caller that captured stdout with $(…) would take away the terminal
+# the owner approves the contract at (exec_tty_ok needs stdin AND stdout), and
+# every disclosure would be refused. The split runner (#77) uses this; it owns
+# the file and creates it private.
+_emit() { if [[ -n "${ORCH_EXEC_OUT:-}" ]]; then printf '%s\n' "$1" > "$ORCH_EXEC_OUT"; else printf '%s\n' "$1"; fi; }
+
 TASK="${1:-}"
 if [[ -z "$TASK" && ! -t 0 ]]; then TASK="$(cat)"; fi
 [[ -n "$TASK" ]] || { _say "no task given" "no task"; exit 2; }
@@ -168,7 +175,7 @@ while (( STEP < MAX_STEPS )); do
     if [[ "$EXEC_DONE" == 1 ]]; then
         _log --argjson extra "$(jq -cn --argjson steps "$STEP" '{event:"run", result:"done", steps:$steps}')"
         if [[ "$CALLER_HUMAN" == 1 ]]; then
-            printf '%s\n' "$EXEC_ANSWER"
+            _emit "$EXEC_ANSWER"
             exit 0
         fi
         # Cloud-bound. The answer text is derived from material this whole path
@@ -178,9 +185,22 @@ while (( STEP < MAX_STEPS )); do
             _say "the run produced no declared interface; nothing disclosed" "no disclosure"
             exit 13
         fi
+        # A contract that fails the shape check (a path in the invocation is the
+        # usual one) goes back to the model with the reason, and costs a step.
+        # Nothing crosses on the way: the reason is a fixed message about the
+        # contract's form, the model is local, and the step budget bounds retries.
+        contract_validate "$EXEC_CONTRACT"
+        if [[ -n "$CONTRACT_ERR" ]]; then
+            STEP=$(( STEP + 1 ))
+            _log --argjson extra "$(jq -cn --argjson step "$STEP" '{event:"contract-rejected", step:$step}')"
+            feed_result "Your contract was rejected: $CONTRACT_ERR.
+Refer to the artifact only by its handle; never write a filesystem path in any field.
+Reply again with {\"done\": true, ...} and a corrected contract."
+            continue
+        fi
         contract_disclose "$EXEC_CONTRACT"
         if [[ "$CONTRACT_STATUS" == "disclosed" ]]; then
-            printf '%s\n' "$CONTRACT_OUT"
+            _emit "$CONTRACT_OUT"
             exit 0
         fi
         # Every other status discloses nothing. The reason is for the owner's log,
