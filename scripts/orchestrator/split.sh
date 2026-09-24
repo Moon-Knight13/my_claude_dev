@@ -243,7 +243,7 @@ while IFS= read -r art; do
 done < <(jq -r '.parts[]|select(.route=="cloud")|.artifact' <<<"$PLAN")
 
 # --- 4. local parts -----------------------------------------------------------
-declare -A CONTRACT=()
+declare -A CONTRACT=() HANDLE=()
 mapfile -t LOCAL_IDS < <(jq -r '.parts[]|select(.route=="local")|.id' <<<"$PLAN")
 for id in "${LOCAL_IDS[@]}"; do
     art="$(jq -r --arg id "$id" '.parts[]|select(.id==$id)|.artifact' <<<"$PLAN")"
@@ -261,7 +261,7 @@ Write the result to this file: $abs"
         handle="$(contract_handle "$abs")" || fail 16 local-failed "could not allocate a handle for part $id"
         ltask="$ltask
 
-A cloud model will write code that calls this file without ever seeing it. Your handle for this artifact is $handle. When you are done, finish with a declared interface contract that uses this handle, exactly as your instructions describe."
+A cloud model will write code that calls this file without ever seeing it. Your handle for this artifact is $handle. When you are done, finish with a declared interface contract that uses this handle, exactly as your instructions describe. In the contract, refer to the file ONLY by the handle: the path above must not appear in any field, and neither may any other path. Write the invocation with the handle in place of the file, for example: python3 $handle, followed by the arguments the script really takes, if any."
     fi
     say "part $id: running locally ..."
     ORCH_CALLER="$caller" ORCH_EXEC_OUT="$out" ORCH_EXEC_ENDPOINT="$ENDPOINT" \
@@ -274,7 +274,7 @@ A cloud model will write code that calls this file without ever seeing it. Your 
         # The contract must name the handle this part was given. One that names
         # another handle describes some other artifact — or none.
         [[ -n "$c" && "$c" == *"$handle"* ]] || fail 16 local-failed "part $id's contract does not carry its handle"
-        CONTRACT[$id]="$c"
+        CONTRACT[$id]="$c"; HANDLE[$id]="$handle"
     elif [[ -s "$out" ]]; then
         printf '\n[%s] %s\n' "$id" "$(cat "$out")" >&2
     fi
@@ -322,8 +322,17 @@ ${CONTRACT[$u]}"; done
 done
 
 # --- 6. join ------------------------------------------------------------------
+# Assembled HERE, where both halves may be seen: Claude wrote against the opaque
+# handle, and only now, on this machine, does each handle become the local
+# artifact's path relative to the working directory. Claude never learns it.
 for id in "${CLOUD_IDS[@]}"; do
     art="$(jq -r --arg id "$id" '.parts[]|select(.id==$id)|.artifact' <<<"$PLAN")"
+    body="$(cat "$TMPD/stage/$id"; printf x)"; body="${body%x}"
+    for u in "${!HANDLE[@]}"; do
+        u_art="$(jq -r --arg id "$u" '.parts[]|select(.id==$id)|.artifact' <<<"$PLAN")"
+        body="${body//"${HANDLE[$u]}"/"$u_art"}"
+    done
+    printf '%s' "$body" > "$TMPD/stage/$id"
     mkdir -p -- "$(dirname -- "$art")" 2>/dev/null
     cp -- "$TMPD/stage/$id" "$art" || fail 17 cloud-failed "could not write $art"
 done

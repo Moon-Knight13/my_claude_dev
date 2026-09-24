@@ -185,6 +185,19 @@ while (( STEP < MAX_STEPS )); do
             _say "the run produced no declared interface; nothing disclosed" "no disclosure"
             exit 13
         fi
+        # A contract that fails the shape check (a path in the invocation is the
+        # usual one) goes back to the model with the reason, and costs a step.
+        # Nothing crosses on the way: the reason is a fixed message about the
+        # contract's form, the model is local, and the step budget bounds retries.
+        contract_validate "$EXEC_CONTRACT"
+        if [[ -n "$CONTRACT_ERR" ]]; then
+            STEP=$(( STEP + 1 ))
+            _log --argjson extra "$(jq -cn --argjson step "$STEP" '{event:"contract-rejected", step:$step}')"
+            feed_result "Your contract was rejected: $CONTRACT_ERR.
+Refer to the artifact only by its handle; never write a filesystem path in any field.
+Reply again with {\"done\": true, ...} and a corrected contract."
+            continue
+        fi
         contract_disclose "$EXEC_CONTRACT"
         if [[ "$CONTRACT_STATUS" == "disclosed" ]]; then
             _emit "$CONTRACT_OUT"

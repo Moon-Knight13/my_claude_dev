@@ -84,7 +84,7 @@ reasoning-only local call; see *Doing the work locally* below.
 | `scripts/orchestrator/split.sh` | Split-task co-execution (#77): the local model plans the split, code forces parts local, the owner approves the plan, local parts run through the executor, cloud parts go to `claude -p` with no tools, and any failure rolls every artifact back. |
 | `scripts/lib/split-plan.sh` | The split plan's checks — shape, artifact paths, dependencies, and the word list and classifier applied to every cloud-bound part. |
 | `scripts/orchestrator/planner-prompt.default.md` | The shipped, **generic** planner prompt. Seed for the owner's private on-box copy. |
-| `scripts/tests/test-split.sh` | Split tests — only the contract reaches Claude, split decided without egress, parts only move toward local, failures roll back (90). |
+| `scripts/tests/test-split.sh` | Split tests — only the contract reaches Claude, split decided without egress, parts only move toward local, failures roll back (99). |
 | `scripts/lib/contract.sh` | The disclosure boundary (#63) — opaque handles, contract validation, positive-disclosure projection, term floor, sanitiser backstop, owner approval. |
 | `scripts/tests/test-contract.sh` | Disclosure tests — nothing undeclared crosses, no paths, floor not bypassable, approval per contract (53). |
 | `scripts/orchestrator/eval-classifier.sh` | Measures the judge against labelled fixtures; headline metric = sensitive-recall. |
@@ -799,8 +799,15 @@ scripts/orchestrator/orchestrate.sh --split --dry-run "..."   # show the plan, r
    from an empty directory. Claude gets the cloud task and the approved contracts,
    and answers from those alone — it cannot open `script.py`, because it has
    nothing to open it with.
-6. **Join.** Claude's answer is held back until every part has succeeded, then
-   written. If anything fails, every file named in the plan is put back as it was.
+6. **Join.** Claude's answer is held back until every part has succeeded. Claude
+   wrote against the opaque handle; here, on your machine, each handle is replaced
+   with the local file's path relative to where you ran the split, and the result
+   is written. Claude never learns the path. If anything fails, every file named
+   in the plan is put back as it was.
+
+If the local model's contract fails the shape check — most often by writing the
+file's path into the invocation — the executor hands it the reason and lets it
+try again, one step of its budget per try. The rejected contract goes nowhere.
 
 The halves run one after the other. The contract has to exist before Claude can
 write anything that calls it, so there is nothing to overlap.

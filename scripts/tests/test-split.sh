@@ -117,6 +117,10 @@ printf '%s\n' "\$@" > "$REC/args"
 pwd > "$REC/cwd"; ls -A > "$REC/ls"
 cat > "$REC/stdin"
 [[ -n "\${STUB_FAIL:-}" ]] && exit 1
+if [[ -n "\${STUB_ECHO_HANDLE:-}" ]]; then
+    h="\$(grep -o '"handle":"[0-9a-f]\{16\}"' "$REC/stdin" | head -1 | cut -d'"' -f4)"
+    printf -- '- hosts: all\n  tasks:\n    - command: python3 %s --id 7\n' "\$h"; exit 0
+fi
 printf '\`\`\`yaml\n- hosts: all\n  tasks: []\n\`\`\`\n'
 EOF
 chmod +x "$TMP/claude"
@@ -175,6 +179,31 @@ check    "log records the split"              "$(jq -rs '[.[]|select(.event=="sp
 lacks    "log has no task text"               "$LOGTXT" SECRETMARK
 lacks    "log has no path"                    "$LOGTXT" "$W"
 lacks    "log has no artifact name"           "$LOGTXT" playbook.yml
+
+# --- a contract with a path in it goes back to the model, not to Claude ------
+# Seen on the real model: it copied the artifact's absolute path into the
+# invocation. The shape check rejects that; the model gets the reason and fixes
+# it, and the rejected text never crosses.
+reset_run
+BADPATH_LINE="$(jq -cn --arg p "$W/script.py" '{done:true,answer:"built",contract:{name:"customer_report",handle:"{{HANDLE}}",summary:"prints a report",invocation:("python3 " + $p)}}')"
+printf '%s\n%s\n%s\n%s\n' "$PLAN_LINE" "$WRITE_LINE" "$BADPATH_LINE" "$DONE_LINE" > "$SCRIPT"
+start_mock
+run_split "y,y,y" "make script.py and a playbook"
+check "path-bearing contract corrected, split completes" "$RC" 0
+contains "rejection fed back to the local model" "$(sed -n 4p "$RECORD" | jq -r '.messages[-1].content')" "contract was rejected"
+lacks "the rejected contract never reached Claude" "$(cat "$REC/stdin" 2>/dev/null)" "$W"
+contains "the local task says to use the handle, not the path" "$(sed -n 2p "$RECORD" | jq -r '.messages[1].content')" "ONLY by the handle"
+check "rejection logged as metadata" "$(jq -rs '[.[]|select(.event=="contract-rejected")]|length' "$ORCH_LOG")" 1
+
+# --- join: the handle Claude wrote against becomes the real file, locally ----
+reset_run
+printf '%s\n%s\n%s\n' "$PLAN_LINE" "$WRITE_LINE" "$DONE_LINE" > "$SCRIPT"
+start_mock
+STUB_ECHO_HANDLE=1 run_split "y,y,y" "make script.py and a playbook"
+check "split with a handle-calling playbook completes" "$RC" 0
+contains "Claude wrote against the handle"          "$(cat "$REC/stdin")" '"handle":"'
+contains "the joined playbook calls the real file"  "$(cat "$W/playbook.yml")" "python3 script.py --id 7"
+lacks    "no handle left in the joined playbook"    "$(cat "$W/playbook.yml")" "$(grep -o '"handle":"[0-9a-f]*"' "$REC/stdin" | head -1 | cut -d'"' -f4)"
 
 # --- the plan is refused: nothing runs, nothing crosses ---------------------
 reset_run; start_mock
