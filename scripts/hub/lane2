@@ -42,6 +42,8 @@ set -euo pipefail
 LANE2_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/lib/lane2.sh
 source "$LANE2_HERE/../lib/lane2.sh"
+# shellcheck source=scripts/lib/gate.sh
+source "$LANE2_HERE/../lib/gate.sh"
 
 # file:// is refused for git; tests that source this script may relax it to
 # fetch from a local bare fixture. A root run cannot change it.
@@ -60,19 +62,13 @@ lane2_git() {
 
 # --- settings ----------------------------------------------------------------
 
-install_settings() {
-    ORIGIN="$(lane2_conf LANE2_ORIGIN)"
-    BRANCH="$(lane2_conf LANE2_DEFAULT_BRANCH main)"
+# Settings every command needs: who the operator is and where code and state live.
+common_settings() {
     OPERATOR="$(lane2_conf LANE2_OPERATOR)"
     PREFIX="$(lane2_conf LANE2_PREFIX /opt/lane2)"
     STATE="$(lane2_conf LANE2_STATE_ROOT /var/lib/lane2)"
     UNIT_DIR="$(lane2_conf LANE2_UNIT_DIR /etc/systemd/system)"
-    KEEP="$(lane2_conf LANE2_KEEP_INSTALLS 3)"
-
-    [[ -n "$ORIGIN" ]] || die 4 "LANE2_ORIGIN not set in hub config"
     [[ -n "$OPERATOR" ]] || die 4 "LANE2_OPERATOR not set in hub config"
-    [[ "$BRANCH" =~ ^[A-Za-z0-9._/-]+$ && "$BRANCH" != *..* ]] || die 4 "LANE2_DEFAULT_BRANCH is not a branch name"
-    [[ "$KEEP" =~ ^[1-9][0-9]*$ ]] || die 4 "LANE2_KEEP_INSTALLS must be a positive integer"
     local p home
     for p in "$PREFIX" "$STATE" "$UNIT_DIR"; do
         [[ "$p" == /* && "$p" != *..* ]] || die 4 "not an absolute path: $p"
@@ -85,6 +81,15 @@ install_settings() {
     [[ "$PREFIX" == "$STATE" || "$PREFIX" == "$STATE"/* || "$STATE" == "$PREFIX"/* ]] \
         && die 4 "LANE2_PREFIX and LANE2_STATE_ROOT must not overlap"
     return 0
+}
+
+install_settings() {
+    ORIGIN="$(lane2_conf LANE2_ORIGIN)"
+    BRANCH="$(lane2_conf LANE2_DEFAULT_BRANCH main)"
+    KEEP="$(lane2_conf LANE2_KEEP_INSTALLS 3)"
+    [[ -n "$ORIGIN" ]] || die 4 "LANE2_ORIGIN not set in hub config"
+    [[ "$BRANCH" =~ ^[A-Za-z0-9._/-]+$ && "$BRANCH" != *..* ]] || die 4 "LANE2_DEFAULT_BRANCH is not a branch name"
+    [[ "$KEEP" =~ ^[1-9][0-9]*$ ]] || die 4 "LANE2_KEEP_INSTALLS must be a positive integer"
 }
 
 install_tools() {
@@ -229,18 +234,187 @@ install_units() {
 # --- record, swap, prune -----------------------------------------------------
 
 install_record() { # install_record <commit>
-    local commit="$1" dir="$PREFIX/$1" pins="null" tmp
+    local commit="$1" dir="$PREFIX/$1" pins="null" tmp gate pv
     [[ -f "$dir/scripts/hub/pin-manifest.json" ]] && pins="$(jq -c . "$dir/scripts/hub/pin-manifest.json")"
+    gate="$(lane2_tree_digest "$dir" "${LANE2_GATE_CODE[@]}")"
+    pv="$(policy_version_now "$gate" 2>/dev/null)" || pv=""
     tmp="$STATE/install/manifest.json.tmp"
     jq -n --arg commit "$commit" --arg time "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-          --arg code "$(lane2_tree_digest "$dir")" \
-          --arg gate "$(lane2_tree_digest "$dir" "${LANE2_GATE_CODE[@]}")" \
+          --arg code "$(lane2_tree_digest "$dir")" --arg gate "$gate" --arg pv "$pv" \
           --argjson pins "$pins" \
           '{commit: $commit, installed_at: $time, installed_code_digest: $code,
-            gate_code_digest: $gate, pins: $pins}' > "$tmp"
+            gate_code_digest: $gate, policy_version: (if $pv == "" then null else $pv end),
+            pins: $pins}' > "$tmp"
     chmod 600 "$tmp"
     mv -f "$tmp" "$STATE/install/manifest.json"
     ok "recorded installed-code and gate-code digests in the pin manifest record"
+    if [[ -n "$pv" ]]; then
+        ok "policy_version computed (kept on the hub only)"
+    else
+        printf '  !!  policy_version not computed: %s\n' "${POLICY_MISSING:-an input is missing}"
+    fi
+}
+
+# --- policy (story 2.2) ------------------------------------------------------
+
+# policy_version_now <gate-code digest> — policy_version from the current
+# policy checkout and fleet config. On a missing input, sets POLICY_MISSING to
+# the input's name (never its value) and returns 4.
+policy_version_now() {
+    local gate="$1" pol="$STATE/gate-policy/current" fleet="$CONFDIR/fleet.conf" model sha build
+    model="$(lane2_conf_file_get "$fleet" FLEET_CLASSIFIER_MODEL)"
+    sha="$(lane2_conf_file_get "$fleet" FLEET_CLASSIFIER_SHA256 | tr 'A-F' 'a-f')"
+    build="$(lane2_conf_file_get "$fleet" FLEET_RUNTIME_BUILD)"
+    POLICY_MISSING=""
+    [[ -r "$pol/term-list.txt" ]]      || POLICY_MISSING="term list (run lane2 policy update)"
+    [[ -r "$pol/classifier-prompt.md" ]] || POLICY_MISSING="${POLICY_MISSING:-classifier prompt (run lane2 policy update)}"
+    [[ -n "$model" ]] || POLICY_MISSING="${POLICY_MISSING:-FLEET_CLASSIFIER_MODEL in fleet.conf}"
+    [[ -n "$sha" ]]   || POLICY_MISSING="${POLICY_MISSING:-FLEET_CLASSIFIER_SHA256 in fleet.conf}"
+    [[ -n "$build" ]] || POLICY_MISSING="${POLICY_MISSING:-FLEET_RUNTIME_BUILD in fleet.conf}"
+    [[ -n "$gate" ]]  || POLICY_MISSING="${POLICY_MISSING:-installed gate code (run lane2 install)}"
+    [[ -z "$POLICY_MISSING" ]] || return 4
+    gate_policy_version "$pol/term-list.txt" "$pol/classifier-prompt.md" "$model" "$sha" "$build" "$gate" \
+        || { POLICY_MISSING="a malformed input (checksum, build tag, or digest)"; return 4; }
+}
+
+# Valid terms of a list, trimmed and lowercased, one per line, sorted unique.
+policy_terms() {
+    local line term
+    [[ -r "$1" ]] || return 0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        term="${line#"${line%%[![:space:]]*}"}"; term="${term%"${term##*[![:space:]]}"}"
+        [[ -n "$term" && "$term" != \#* && ${#term} -ge $GATE_TERM_MIN_LEN ]] || continue
+        printf '%s\n' "${term,,}"
+    done < "$1" | LC_ALL=C sort -u
+}
+
+# Callers pass a jq expression in single quotes; its $names are jq variables.
+policy_event() { # policy_event <jq-object-expression> [jq args...]
+    local expr="$1"; shift
+    ( umask 077
+      jq -nc --arg time "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$@" "{time: \$time} + ($expr)" \
+          >> "$STATE/events/policy.jsonl" )
+}
+
+# policy_validate <tree> — the staged policy tree. Prints one line per check;
+# rc 4 on the first failing step. Never prints a term or a prompt line.
+policy_validate() {
+    local tree="$1" n f rel
+    gate_terms_check "$tree/term-list.txt" \
+        || { fail "validate: term-list.txt missing or unreadable"; return 4; }
+    for n in "${GATE_REJECTED_LINES[@]}"; do
+        printf '  !!  term-list line %s rejected (under %s characters); not used\n' "$n" "$GATE_TERM_MIN_LEN"
+    done
+    (( GATE_TERMS_VALID > 0 )) \
+        || { fail "validate: term list has no usable entry ($GATE_TERMS_REJECTED rejected)"; return 4; }
+    if ! [[ -s "$tree/classifier-prompt.md" ]] || ! grep -q '[^[:space:]]' "$tree/classifier-prompt.md"; then
+        fail "validate: classifier-prompt.md missing or empty"; return 4
+    fi
+    local plain=0 unknown=0
+    while IFS= read -r -d '' f; do
+        rel="${f#"$tree"/}"
+        case "$rel" in
+            term-list.txt|classifier-prompt.md|README|README.md|.gitignore|.gitattributes) ;;
+            fixtures/*.gpg|fixtures/*.age) ;;
+            fixtures/*|*.jsonl|*.json|*.csv) plain=$((plain + 1)) ;;
+            *) unknown=$((unknown + 1)) ;;
+        esac
+    done < <(find "$tree" \( -type f -o -type l \) -print0)
+    (( plain == 0 )) || { fail "validate: $plain plaintext fixture file(s); fixtures must be encrypted (.gpg or .age)"; return 4; }
+    (( unknown == 0 )) || { fail "validate: $unknown unexpected file(s) in the policy tree"; return 4; }
+    ok "validated: $GATE_TERMS_VALID term(s), $GATE_TERMS_REJECTED rejected, prompt present"
+}
+
+cmd_policy() {
+    [[ "${1:-}" == update && $# == 1 ]] || die 2 "usage: lane2 policy update"
+    local repo branch store bare commit stage prev pv old_pv removed=0 rc=0
+    repo="$(lane2_conf LANE2_POLICY_REPO)"
+    branch="$(lane2_conf LANE2_POLICY_BRANCH main)"
+    [[ -n "$repo" ]] || die 4 "LANE2_POLICY_REPO not set in hub config"
+    lane2_check_policy_repo "$repo" \
+        || die 4 "LANE2_POLICY_REPO must be an https://, ssh://, or user@host:path URL; local paths are refused"
+    [[ "$branch" =~ ^[A-Za-z0-9._/-]+$ && "$branch" != *..* ]] || die 4 "LANE2_POLICY_BRANCH is not a branch name"
+    store="$STATE/gate-policy"
+    lane2_check_store "$STATE" gate-policy \
+        || die 4 "gate policy store missing or with the wrong owner, group, or mode; run lane2 install first"
+
+    echo "== lane2 policy update =="
+    umask 027                  # files 0640 / dirs 0750, group = the store's (gate)
+    exec 9>>"$store/.lock"
+    flock -w 30 9 || die 4 "another policy update is running"
+
+    # fetch: the operator's own git and SSH config, with hooks, fsmonitor and
+    # submodules off. The bare clone is the only place the repo lands.
+    bare="$store/repo.git"
+    [[ -d "$bare" ]] || git init -q --bare "$bare" || die 4 "fetch: cannot create the policy clone"
+    git -c core.hooksPath=/dev/null -c core.fsmonitor=false -c submodule.recurse=false \
+        -c protocol.file.allow="$LANE2_GIT_FILE_PROTOCOL" -C "$bare" \
+        fetch -q --no-tags --no-recurse-submodules "$repo" "+refs/heads/$branch:refs/heads/$branch" 2>/dev/null \
+        || die 4 "fetch: the policy repository could not be fetched; previous policy kept"
+    commit="$(git -C "$bare" rev-parse --verify -q "refs/heads/$branch^{commit}")" \
+        || die 4 "fetch: branch $branch not found; previous policy kept"
+    ok "fetched"
+
+    # stage and validate
+    mkdir -p "$store/trees"
+    stage="$(mktemp -d "$store/trees/.staging.XXXXXX")" || die 4 "stage: cannot create a staging directory"
+    trap 'rm -rf -- "$stage"' EXIT
+    git -c core.hooksPath=/dev/null -C "$bare" archive --format=tar "$commit" | tar -x -C "$stage" \
+        || die 4 "stage: cannot export the policy tree; previous policy kept"
+    policy_validate "$stage" || { echo "previous policy kept"; exit 4; }
+
+    # removed entries since the previous policy: a count, never the entries
+    prev="$store/current/term-list.txt"
+    if [[ -r "$prev" ]]; then
+        removed="$(comm -23 <(policy_terms "$prev") <(policy_terms "$stage/term-list.txt") | wc -l | tr -d ' ')"
+    fi
+    old_pv="$(jq -r '.policy_version // ""' "$store/state.json" 2>/dev/null || true)"
+
+    # swap
+    if [[ -d "$store/trees/$commit" ]]; then
+        rm -rf -- "$stage"
+    else
+        mv -T "$stage" "$store/trees/$commit" || die 4 "swap: cannot move the policy tree into place"
+    fi
+    trap - EXIT
+    ln -sfn "trees/$commit" "$store/.current.new"
+    mv -T "$store/.current.new" "$store/current" || die 4 "swap: cannot switch to the new policy"
+    ok "new policy in force"
+
+    # keep the current tree and the previous one (the removal-count snapshot)
+    local keep_prev; keep_prev="$(jq -r '.commit // ""' "$store/state.json" 2>/dev/null || true)"
+    local d
+    for d in "$store"/trees/*; do
+        [[ -d "$d" ]] || continue
+        [[ "${d##*/}" == "$commit" || "${d##*/}" == "$keep_prev" ]] && continue
+        rm -rf -- "$d"
+    done
+
+    # policy_version: computed now if every input is there
+    pv="$(policy_version_now "$(lane2_tree_digest "$PREFIX/current" "${LANE2_GATE_CODE[@]}" 2>/dev/null)" 2>/dev/null)" || pv=""
+    [[ -d "$PREFIX/current" ]] || pv=""
+    jq -n --arg commit "$commit" --arg pv "$pv" --arg time "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+          --argjson terms "$GATE_TERMS_VALID" --argjson rejected "$GATE_TERMS_REJECTED" --argjson removed "$removed" \
+          '{commit: $commit, updated_at: $time, policy_version: (if $pv == "" then null else $pv end),
+            terms: $terms, rejected_short: $rejected, removed_since_previous: $removed}' > "$store/state.json.tmp"
+    mv -f "$store/state.json.tmp" "$store/state.json"
+
+    if (( GATE_TERMS_REJECTED > 0 )); then
+        # shellcheck disable=SC2016  # $n is a jq variable
+        policy_event '{event: "policy_terms_rejected", count: $n}' --argjson n "$GATE_TERMS_REJECTED"
+    fi
+    if [[ -n "$pv" && "$pv" != "$old_pv" ]]; then
+        # shellcheck disable=SC2016  # $t $r $d are jq variables
+        policy_event '{event: "policy", terms: $t, rejected: $r, removed: $d}' \
+            --argjson t "$GATE_TERMS_VALID" --argjson r "$GATE_TERMS_REJECTED" --argjson d "$removed"
+        ok "policy_version changed; event logged (counts only)"
+    elif [[ -n "$pv" ]]; then
+        ok "policy_version unchanged"
+    else
+        printf '  !!  policy_version not computed: %s\n' "${POLICY_MISSING:-the install or fleet config is missing}"
+    fi
+    ok "removed since previous policy: $removed"
+    return "$rc"
 }
 
 install_swap() { # install_swap <commit>
@@ -328,14 +502,20 @@ lane2_main() {
     local cmd="${1:-}"; shift || true
 
     lane2_in_container && die 4 "run on the hub"
-    lane2_is_root || die 4 "lane2 install must run as root"
     command -v jq >/dev/null || die 4 "required tool missing: jq"
+    case "$cmd" in
+        install) lane2_is_root || die 4 "lane2 install must run as root" ;;
+        policy) ;;
+        *) die 2 "usage: lane2 [--config-dir DIR] install <commit> | install --verify | policy update" ;;
+    esac
     lane2_load_config "$CONFDIR/lane2.conf" || die 4 "hub config unreadable: $CONFDIR/lane2.conf"
-    install_settings
+    common_settings
 
     case "$cmd" in
-        install) cmd_install "$@" ;;
-        *) die 2 "usage: lane2 [--config-dir DIR] install <commit> | install --verify" ;;
+        install) install_settings; cmd_install "$@" ;;
+        policy)
+            lane2_is_operator || die 4 "lane2 policy update must run as the operator ($OPERATOR)"
+            cmd_policy "$@" ;;
     esac
 }
 

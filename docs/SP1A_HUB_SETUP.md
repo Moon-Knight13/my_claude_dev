@@ -85,17 +85,17 @@ Story 2.2).
 ## Stores (AD-7)
 
 One directory per store under the state root, owned by its only writer. Mode is
-0700, or 0750 where another identity must read it, through the group.
+0700, or 2750 (setgid) where another identity must read it, through the group: files the writer creates carry the reader's group.
 
 | Store | Owner (writer) | Group | Mode | Readers |
 |---|---|---|---|---|
-| `gate-policy` | operator (`lane2 policy update`) | `lane2-gate` | 0750 | gate |
+| `gate-policy` | operator (`lane2 policy update`) | `lane2-gate` | 2750 | gate |
 | `gate-store` | `lane2-gate` | `lane2-gate` | 0700 | gate (`lane2 review` access arrives with Story 2.4) |
-| `operator-log` | `lane2-gate` | operator | 0750 | notifier, review, health |
+| `operator-log` | `lane2-gate` | operator | 2750 | notifier, review, health |
 | `events` | operator (supervisor, `lane2` commands) | operator | 0700 | notifier, health |
-| `sessions` | operator (supervisor) | `lane2-gate` | 0750 | gate, health, review |
+| `sessions` | operator (supervisor) | `lane2-gate` | 2750 | gate, health, review |
 | `workspaces` | operator (`lane2` commands) | operator | 0700 | supervisor, push, relay, health, rescan |
-| `exclusions` | operator (`lane2 review`) | `lane2-gate` | 0750 | gate |
+| `exclusions` | operator (`lane2 review`) | `lane2-gate` | 2750 | gate |
 | `eval` | operator | operator | 0700 | eval harness ([SP1A_EVAL_SET.md](SP1A_EVAL_SET.md)) |
 | `fleet` | operator | operator | 0700 | parallel-verify records ([SP1A_FLEET.md](SP1A_FLEET.md)) |
 | `push` | operator (push step) | operator | 0700 | push step |

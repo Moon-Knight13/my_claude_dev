@@ -55,6 +55,24 @@ lane2_load_config() {
 
 lane2_conf() { printf '%s' "${LANE2_CONF[$1]:-${2:-}}"; }
 
+# lane2_conf_file_get <file> <KEY> — one key from another hub config file
+# (e.g. fleet.conf), same parsing rules, last assignment wins. Empty if absent.
+lane2_conf_file_get() {
+    local file="$1" key="$2" line val=""
+    [[ -f "$file" && -r "$file" ]] || return 0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="${line%$'\r'}"
+        [[ "$line" =~ ^[[:space:]]*${key}=(.*)$ ]] || continue
+        val="${BASH_REMATCH[1]}"
+        case "$val" in
+            \"*\") val="${val%\"}"; val="${val#\"}" ;;
+            \'*\') val="${val%\'}"; val="${val#\'}" ;;
+            *) val="${val%%[[:space:]]#*}"; val="${val%"${val##*[![:space:]]}"}" ;;
+        esac
+    done < "$file"
+    printf '%s' "$val"
+}
+
 # --- environment -------------------------------------------------------------
 
 lane2_in_container() {
@@ -65,6 +83,20 @@ lane2_in_container() {
 }
 
 lane2_is_root() { [[ "$(id -u)" == 0 ]]; }
+
+lane2_is_operator() {
+    local op; op="$(lane2_uid operator 2>/dev/null)" || return 1
+    [[ -n "$op" && "$(id -u)" == "$op" ]]
+}
+
+# The policy repository is private and reached with the host's own SSH config,
+# so scp-style user@host:path is allowed here as well. Local paths and file://
+# are refused for the same reason as the code origin.
+lane2_check_policy_repo() {
+    local url="$1"
+    lane2_check_origin "$url" && return 0
+    [[ "$url" =~ ^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+:[A-Za-z0-9._/-]+$ && "$url" != *..* ]]
+}
 
 # Only a remote origin is accepted. A local path, file:// URL, or anything
 # without a scheme could point into a workspace the agent writes, which is the
@@ -126,17 +158,19 @@ lane2_check_identity() {
 # --- stores (AD-7) -----------------------------------------------------------
 
 # name owner-role group-role mode. One subdirectory per store under the state
-# root, owned by its sole writer. Mode is 0700, except 0750 where AD-7 names a
-# reader under another identity; that reader gets read through the group.
+# root, owned by its sole writer. Mode is 0700, except where AD-7 names a reader
+# under another identity: that reader gets read through the group, and the
+# directory is setgid (2750) so files the writer creates carry the reader's
+# group without the writer being a member of it.
 lane2_stores() {
     cat <<'EOF'
-gate-policy  operator gate     0750
+gate-policy  operator gate     2750
 gate-store   gate     gate     0700
-operator-log gate     operator 0750
+operator-log gate     operator 2750
 events       operator operator 0700
-sessions     operator gate     0750
+sessions     operator gate     2750
 workspaces   operator operator 0700
-exclusions   operator gate     0750
+exclusions   operator gate     2750
 eval         operator operator 0700
 fleet        operator operator 0700
 push         operator operator 0700
@@ -174,6 +208,21 @@ lane2_ensure_stores() {
             printf '  OK  store %s created\n' "$name"
         fi
     done < <(lane2_stores)
+}
+
+# lane2_check_store <state-root> <name> — rc 0 when the store exists with exactly
+# its table owner, group, and mode. For non-root callers that use a store root
+# created it.
+lane2_check_store() {
+    local root="$1" want_name="$2" name owner group mode want
+    while read -r name owner group mode; do
+        [[ "$name" == "$want_name" ]] || continue
+        [[ -d "$root/$name" && ! -L "$root/$name" ]] || return 1
+        want="$(lane2_uid "$owner") $(lane2_gid "$group") ${mode#0}"
+        [[ "$(stat -c '%u %g %a' "$root/$name")" == "$want" ]]
+        return
+    done < <(lane2_stores)
+    return 1
 }
 
 # --- digests -----------------------------------------------------------------
