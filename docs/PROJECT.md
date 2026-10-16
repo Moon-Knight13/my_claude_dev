@@ -474,6 +474,10 @@ acceptable). What matters if you change it:
 - **Fail closed.** The sensitivity classifier is a **local-LLM judge**
   (`scripts/orchestrator/classify-sensitivity.sh`) — opt-in via `ORCH_CLASSIFIER`;
   until enabled, AUTO keeps the built-in stub that treats everything as sensitive.
+  It reads the prompt on stdin, never argv. With `LOCAL_MODEL_API=openai` it
+  calls the model through `fleet_call` (`scripts/lib/fleet.sh`), the one
+  model-call client; a model request anywhere else fails a lint test
+  (`docs/SP1A_FLEET.md`).
   The judge runs on a **local endpoint only** (it reads the raw prompt, so it
   refuses a non-local endpoint) and **fails closed**: a timeout, error, or any
   answer that is not a clean `nonsensitive` resolves to *sensitive*. It disables

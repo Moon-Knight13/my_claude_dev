@@ -18,7 +18,8 @@
 # API:
 #   orch_load_config <file>              parse ORCH_MODE + the ORCH_MODEL registry
 #   orch_resolve_mode <override>         override > config > default(AUTO); validated
-#   orch_classify <prompt>               "sensitive"|"nonsensitive" (MVP: stub)
+#   orch_classify <prompt>               "sensitive"|"nonsensitive"; runs ORCH_CLASSIFIER
+#                                        with the prompt on stdin (fail-closed stub without it)
 #   orch_eligible_tiers <sensitive> <mode>   the eligible tier set (the invariant)
 #   orch_pick_model <eligible-tiers>     best-rank model in an eligible tier
 #   orch_tier_egresses <tier>            0 if the tier leaves the box (frontier)
@@ -81,7 +82,8 @@ orch_resolve_mode() { # orch_resolve_mode <override> ; prints the effective mode
 orch_classify() { # orch_classify <prompt> ; prints "sensitive"|"nonsensitive"
     if [[ -n "${ORCH_CLASSIFIER:-}" && -x "${ORCH_CLASSIFIER}" ]]; then
         local out
-        out="$("$ORCH_CLASSIFIER" "$1" 2>/dev/null)" || { printf 'sensitive'; return 0; }
+        # The prompt goes on stdin, never argv (process list; E2BIG at ~128 KiB).
+        out="$(printf '%s' "$1" | "$ORCH_CLASSIFIER" 2>/dev/null)" || { printf 'sensitive'; return 0; }
         case "$out" in
             nonsensitive) printf 'nonsensitive' ;;
             *)            printf 'sensitive' ;;             # anything else -> fail closed

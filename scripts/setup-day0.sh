@@ -115,4 +115,15 @@ Next steps (the only manual, auth-gated part — two browser logins):
 EOF
 fi
 
+# 6. Hub hardware check (SP1a, FR-21/FR-22): print the host's saved result and
+#    model recommendations. Host only: inside a container this prints nothing,
+#    because the check runs on the host and its result never reaches a container.
+# shellcheck source=scripts/lib/hw.sh disable=SC1090,SC1091
+source "$_SCRIPT_DIR/lib/hw.sh"
+_hw="$(hw_next_steps 2>/dev/null || true)"
+if [[ -n "$_hw" ]]; then
+    echo ""
+    printf '%s\n' "$_hw"
+fi
+
 exit 0

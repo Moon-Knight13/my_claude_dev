@@ -24,10 +24,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Local-model transport under test. Add `openai` here when the
-        # llama-server (OpenAI-compatible) mock lands; run-all.sh passes it to
-        # every suite as LOCAL_MODEL_API.
-        transport: [ollama]
+        # Local-model transport under test; run-all.sh passes it to every
+        # suite as LOCAL_MODEL_API. `ollama` runs the Ollama mock, `openai` the
+        # llama-server mock through fleet_call (SP1a story 1.3). Both legs stay
+        # until Story 1.7 removes the Ollama path.
+        transport: [ollama, openai]
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -39,7 +40,7 @@ jobs:
           # zsh: the ctp-bridge and guard-stack suites drive the zsh wrapper.
           sudo apt-get update -qq
           sudo apt-get install -y -qq zsh >/dev/null
-          for b in bash jq python3 git script zsh timeout; do
+          for b in bash jq python3 git script zsh timeout curl; do
             command -v "$b" >/dev/null || { echo "::error::missing $b"; exit 1; }
           done
 

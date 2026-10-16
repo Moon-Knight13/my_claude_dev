@@ -514,10 +514,10 @@
   </section>
 
   <section aria-labelledby="sp1a-h">
-    <span class="badge planned">status&nbsp;<b>planned</b>&nbsp;·&nbsp;design&nbsp;accepted&nbsp;2026-10-16&nbsp;·&nbsp;not&nbsp;yet&nbsp;built</span>
+    <span class="badge planned">status&nbsp;<b>planned</b>&nbsp;·&nbsp;design&nbsp;accepted&nbsp;2026-10-16&nbsp;·&nbsp;first&nbsp;parts&nbsp;built</span>
     <p class="eyebrow">Roadmap · design only</p>
     <h2 id="sp1a-h">Next: the SP1a trust core (planned)</h2>
-    <p class="section-note">None of this exists yet. SP1a is the agreed design for doing sensitive work with a local model while Claude handles the heavy non-sensitive work &mdash; with sensitive material kept out of Claude's reach by <b>separation first</b> and a <b>fail-closed gate</b> as the safety net.</p>
+    <p class="section-note">Most of this does not exist yet; the parts that have landed are listed at the end of this section. SP1a is the agreed design for doing sensitive work with a local model while Claude handles the heavy non-sensitive work &mdash; with sensitive material kept out of Claude's reach by <b>separation first</b> and a <b>fail-closed gate</b> as the safety net.</p>
 
     <div class="dgram">
       <div class="dgram-h"><h3>One trusted hub, one untrusted container per session</h3><span class="path">planned · docs/SP1A_ARCHITECTURE.md</span></div>
@@ -613,6 +613,16 @@
       </div>
       <p class="d-note">Honest limit: until a later outbound gateway, anything in the container could still be sent to <b>any account</b> on an allowlisted service &mdash; accepted only because the container holds nothing sensitive. Full design, threat model and decision index: <span class="path">docs/SP1A_ARCHITECTURE.md</span> in the repository.</p>
     </div>
+
+    <div class="dgram">
+      <div class="dgram-h"><h3>Landed so far</h3><span class="path">built</span></div>
+      <div class="pipe">
+        <div class="check"><div class="cn">eval set</div><div class="cw"><b>The classifier's miss rate is measured honestly.</b> The operator writes and freezes a held-out split before any tuning; the set stays on the hub and leaves it only encrypted.</div><div class="cs">scripts/hub/eval-set.sh</div></div>
+        <div class="check"><div class="cn">hardware check</div><div class="cw"><b>Know before setup whether a host can run the classifier.</b> Run on the host, it reports GPU, Vulkan/RADV, Mesa, usable GPU memory and system memory, says <b>pass</b> or <b>below floor</b>, and on a pass recommends which models to download. Below floor means gated sessions are floor-only, by declaration. An unreadable value never passes. The minimum is <b>provisional</b> until the bake-off measures it.</div><div class="cs">scripts/hub/hw-check.sh</div></div>
+        <div class="check"><div class="cn">fleet_call</div><div class="cw"><b>Every local-model call goes through one client.</b> It checks health and context fit first, applies the pinned classifier settings, and treats any fault as a block &mdash; so eval and production call the model the same way.</div><div class="cs">scripts/lib/fleet.sh</div></div>
+      </div>
+      <p class="d-note">Operator docs: <span class="path">docs/SP1A_EVAL_SET.md</span>, <span class="path">docs/SP1A_HARDWARE_CHECK.md</span> and <span class="path">docs/SP1A_FLEET.md</span>.</p>
+    </div>
   </section>
 
   <footer>
@@ -624,6 +634,7 @@
       <span>docs/BMAD_WORKFLOW.md</span>
       <span>docs/KANBAN_WORKFLOW.md</span>
       <span>docs/SP1A_ARCHITECTURE.md (planned)</span>
+      <span>docs/SP1A_FLEET.md</span>
     </div>
     <p class="fine">The repository README is the source of truth; this overview is a briefing companion. Apache-2.0.</p>
   </footer>
