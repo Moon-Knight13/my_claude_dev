@@ -228,6 +228,28 @@
   .check .cw { font-size: 13px; color: var(--ink-soft); margin-top: 4px; line-height: 1.4; }
   .check .cs { font-family: var(--mono); font-size: 10.5px; color: var(--steel-soft); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 7px; }
 
+  /* --- Planned SP1a section --- */
+  .badge.planned { border-style: dashed; border-color: var(--accent); margin-bottom: 14px; }
+  .badge.planned b { color: var(--accent-ink); }
+  .sp1a-svg { display: block; width: 100%; height: auto; }
+  .sp1a-svg text { font-family: var(--mono); fill: var(--ink); }
+  .sp1a-svg .t-s { font-size: 11px; fill: var(--ink-soft); }
+  .sp1a-svg .t-m { font-size: 13px; }
+  .sp1a-svg .t-k { font-size: 11px; letter-spacing: 0.09em; }
+  .sp1a-svg .k-acc { fill: var(--accent-ink); }
+  .sp1a-svg .k-gate { fill: var(--gate); }
+  .sp1a-svg .k-steel { fill: var(--steel-soft); }
+  .sp1a-svg .zone-c { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 5; }
+  .sp1a-svg .zone-h { fill: none; stroke: var(--gate); stroke-width: 2; }
+  .sp1a-svg .zone-s { fill: none; stroke: var(--steel-soft); stroke-width: 1; stroke-dasharray: 3 4; }
+  .sp1a-svg .bx { fill: var(--ground); stroke: var(--line); stroke-width: 1.2; }
+  .sp1a-svg .bx-gate { fill: var(--ground); stroke: var(--gate); stroke-width: 1.6; }
+  .sp1a-svg .bx-out { fill: var(--surface); stroke: var(--steel-soft); stroke-width: 1; stroke-dasharray: 4 3; }
+  .sp1a-svg .ln { fill: none; stroke: var(--steel); stroke-width: 1.4; }
+  .sp1a-svg .ln-acc { fill: none; stroke: var(--accent); stroke-width: 1.6; }
+  .sp1a-svg .ah { fill: var(--steel); }
+  .sp1a-svg .ah-acc { fill: var(--accent); }
+
   @media (max-width: 560px) {
     body { font-size: 17px; }
     .lanes { grid-template-columns: 1fr; }
@@ -491,6 +513,108 @@
     </div>
   </section>
 
+  <section aria-labelledby="sp1a-h">
+    <span class="badge planned">status&nbsp;<b>planned</b>&nbsp;·&nbsp;design&nbsp;accepted&nbsp;2026-10-16&nbsp;·&nbsp;not&nbsp;yet&nbsp;built</span>
+    <p class="eyebrow">Roadmap · design only</p>
+    <h2 id="sp1a-h">Next: the SP1a trust core (planned)</h2>
+    <p class="section-note">None of this exists yet. SP1a is the agreed design for doing sensitive work with a local model while Claude handles the heavy non-sensitive work &mdash; with sensitive material kept out of Claude's reach by <b>separation first</b> and a <b>fail-closed gate</b> as the safety net.</p>
+
+    <div class="dgram">
+      <div class="dgram-h"><h3>One trusted hub, one untrusted container per session</h3><span class="path">planned · docs/SP1A_ARCHITECTURE.md</span></div>
+      <svg class="sp1a-svg" viewBox="0 0 760 380" role="img" aria-labelledby="sp1a-svg-t sp1a-svg-d">
+        <title id="sp1a-svg-t">SP1a planned architecture</title>
+        <desc id="sp1a-svg-d">An untrusted Lane 2 container holding Claude Code reaches the trusted hub only through three read-only per-session sockets: a gate socket, a gh relay socket and a proxy bridge. On the hub the gate checks content with a term list and a local classifier from the model fleet; the push step and gh relay ask the gate before writing to allowlisted repositories; a Squid proxy reaches allowlisted domains only; a per-session supervisor starts, freezes and stops the container and acts on breach signals from the gate.</desc>
+        <defs>
+          <marker id="sp1a-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0 L10 5 L0 10 z"/></marker>
+          <marker id="sp1a-ah-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-acc" d="M0 0 L10 5 L0 10 z"/></marker>
+        </defs>
+
+        <!-- untrusted container -->
+        <rect class="zone-c" x="8" y="16" width="180" height="348" rx="10"/>
+        <text class="t-k k-acc" x="22" y="38">UNTRUSTED</text>
+        <text class="t-k k-acc" x="22" y="54">CONTAINER</text>
+        <text class="t-s" x="22" y="72">Claude Code · no</text>
+        <text class="t-s" x="22" y="86">sensitive files</text>
+        <rect class="bx" x="24" y="144" width="148" height="44" rx="6"/>
+        <text class="t-m" x="98" y="171" text-anchor="middle">hook shims</text>
+        <rect class="bx" x="24" y="224" width="148" height="44" rx="6"/>
+        <text class="t-m" x="98" y="251" text-anchor="middle">gh shim</text>
+        <rect class="bx" x="24" y="304" width="148" height="44" rx="6"/>
+        <text class="t-m" x="98" y="331" text-anchor="middle">web requests</text>
+
+        <!-- per-session sockets -->
+        <rect class="zone-s" x="204" y="124" width="126" height="240" rx="8"/>
+        <text class="t-s" x="267" y="116" text-anchor="middle">per-session · read-only</text>
+        <rect class="bx" x="212" y="144" width="110" height="44" rx="6"/>
+        <text class="t-m" x="267" y="171" text-anchor="middle">gate socket</text>
+        <rect class="bx" x="212" y="224" width="110" height="44" rx="6"/>
+        <text class="t-m" x="267" y="251" text-anchor="middle">relay socket</text>
+        <rect class="bx" x="212" y="304" width="110" height="44" rx="6"/>
+        <text class="t-m" x="267" y="331" text-anchor="middle">proxy bridge</text>
+
+        <!-- hub -->
+        <rect class="zone-h" x="352" y="16" width="284" height="348" rx="10"/>
+        <text class="t-k k-gate" x="366" y="38">HUB · TRUSTED</text>
+        <rect class="bx" x="368" y="64" width="130" height="44" rx="6"/>
+        <text class="t-m" x="433" y="91" text-anchor="middle">supervisor</text>
+        <rect class="bx" x="514" y="64" width="110" height="44" rx="6"/>
+        <text class="t-s" x="569" y="83" text-anchor="middle">health · hw check</text>
+        <text class="t-s" x="569" y="98" text-anchor="middle">notifier</text>
+        <rect class="bx-gate" x="368" y="144" width="130" height="44" rx="6"/>
+        <text class="t-m k-gate" x="433" y="163" text-anchor="middle">gate</text>
+        <text class="t-s" x="433" y="179" text-anchor="middle">floor + classifier</text>
+        <rect class="bx" x="514" y="144" width="110" height="44" rx="6"/>
+        <text class="t-m" x="569" y="163" text-anchor="middle">model fleet</text>
+        <text class="t-s" x="569" y="179" text-anchor="middle">local, pinned</text>
+        <rect class="bx" x="368" y="224" width="130" height="44" rx="6"/>
+        <text class="t-m" x="433" y="243" text-anchor="middle">push step</text>
+        <text class="t-s" x="433" y="259" text-anchor="middle">+ gh relay</text>
+        <rect class="bx" x="368" y="304" width="130" height="44" rx="6"/>
+        <text class="t-m" x="433" y="323" text-anchor="middle">Squid proxy</text>
+        <text class="t-s" x="433" y="339" text-anchor="middle">allowlist only</text>
+
+        <!-- outside -->
+        <rect class="bx-out" x="652" y="224" width="100" height="44" rx="6"/>
+        <text class="t-s" x="702" y="243" text-anchor="middle">allowlisted</text>
+        <text class="t-s" x="702" y="258" text-anchor="middle">repos</text>
+        <rect class="bx-out" x="652" y="304" width="100" height="44" rx="6"/>
+        <text class="t-s" x="702" y="323" text-anchor="middle">allowlisted</text>
+        <text class="t-s" x="702" y="338" text-anchor="middle">domains</text>
+
+        <!-- flows -->
+        <path class="ln" d="M172 166 H210" marker-end="url(#sp1a-ah)"/>
+        <path class="ln" d="M322 166 H366" marker-end="url(#sp1a-ah)"/>
+        <path class="ln" d="M172 246 H210" marker-end="url(#sp1a-ah)"/>
+        <path class="ln" d="M322 246 H366" marker-end="url(#sp1a-ah)"/>
+        <path class="ln" d="M172 326 H210" marker-end="url(#sp1a-ah)"/>
+        <path class="ln" d="M322 326 H366" marker-end="url(#sp1a-ah)"/>
+        <path class="ln" d="M498 166 H512" marker-end="url(#sp1a-ah)"/>
+        <path class="ln" d="M433 224 V190" marker-end="url(#sp1a-ah)"/>
+        <text class="t-s k-steel" x="440" y="210">hub socket</text>
+        <path class="ln" d="M498 246 H650" marker-end="url(#sp1a-ah)"/>
+        <path class="ln" d="M498 326 H650" marker-end="url(#sp1a-ah)"/>
+        <path class="ln-acc" d="M433 144 V110" marker-end="url(#sp1a-ah-acc)"/>
+        <text class="t-s k-acc" x="440" y="131">breach</text>
+        <path class="ln-acc" d="M368 86 H190" marker-end="url(#sp1a-ah-acc)"/>
+        <text class="t-s k-acc" x="279" y="78" text-anchor="middle">start · freeze · stop</text>
+      </svg>
+      <p class="d-note">The container's only ways out are three sockets the hub creates for that one session. Everything Claude is about to see goes through the gate; every git-host write leaves from the hub; web traffic reaches only allowlisted domains. The diagram shows the <b>planned</b> design.</p>
+    </div>
+
+    <div class="dgram">
+      <div class="dgram-h"><h3>What it will do</h3><span class="path">planned</span></div>
+      <div class="pipe">
+        <div class="check"><div class="cn">separation</div><div class="cw"><b>Sensitive work never enters the container.</b> Only workspaces the operator marks mountable go in, and only after a full scan, history included. Everything else stays on the hub with the local model.</div><div class="cs">lane 1 / lane 2</div></div>
+        <div class="check"><div class="cn">the gate</div><div class="cw"><b>Two layers, allow or block.</b> A term list and a local classifier check prompts, expansions, tool inputs and tool results. Never rewrites. Any fault is a block.</div><div class="cs">fail closed</div></div>
+        <div class="check"><div class="cn">opaque verdicts</div><div class="cw"><b>Claude sees only a ref.</b> The reason goes to the operator as a hub notification, so the model cannot learn which rule matched.</div><div class="cs">ref only</div></div>
+        <div class="check"><div class="cn">breach</div><div class="cw"><b>Sensitive content found inside means stop.</b> The session is latched, frozen and cut off, and the workspace quarantined until the operator reviews it &mdash; with a login token rotation offered.</div><div class="cs">latch · cut</div></div>
+        <div class="check"><div class="cn">push from the hub</div><div class="cw"><b>The container cannot push.</b> The hub checks every new object, path and message, then pushes to an allowlisted repo. Issue and PR text goes through a relay.</div><div class="cs">hub only</div></div>
+        <div class="check"><div class="cn">fallbacks</div><div class="cw"><b>Only by declaration.</b> A floor-only session when the classifier is down, or an <b>UNPROTECTED</b> container that says so at start. The gate never picks either itself.</div><div class="cs">visible</div></div>
+      </div>
+      <p class="d-note">Honest limit: until a later outbound gateway, anything in the container could still be sent to <b>any account</b> on an allowlisted service &mdash; accepted only because the container holds nothing sensitive. Full design, threat model and decision index: <span class="path">docs/SP1A_ARCHITECTURE.md</span> in the repository.</p>
+    </div>
+  </section>
+
   <footer>
     <p style="margin:0 0 4px;font-family:var(--sans);font-weight:640;color:var(--ink)">Where to go deeper</p>
     <div class="docs">
@@ -499,6 +623,7 @@
       <span>docs/AI_ROUTING_POLICY.md</span>
       <span>docs/BMAD_WORKFLOW.md</span>
       <span>docs/KANBAN_WORKFLOW.md</span>
+      <span>docs/SP1A_ARCHITECTURE.md (planned)</span>
     </div>
     <p class="fine">The repository README is the source of truth; this overview is a briefing companion. Apache-2.0.</p>
   </footer>
