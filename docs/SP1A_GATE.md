@@ -112,6 +112,7 @@ no log.
 | Peer not the operator or a hub service | `fault:peer` |
 | Invalid `GATE_` config | `fault:config` |
 | Handler work crashed without an answer | `fault:internal` |
+| Retained-payload store full, over the origin's quota, corrupt, unwritable, or locked too long | `fault:store` |
 | Handler died or socket missing | no answer — the client blocks |
 
 ### Deadlines
@@ -166,6 +167,84 @@ and no log line.
 - `scripts/tests/test-lane2-health.sh` (tier `ci`): the `health` op and
   `lane2 health`. `scripts/tests/test-eval-via-gate.sh` (tier `ci`): the bulk
   eval, its manifest checks, and its budget.
+
+## What a block leaves behind
+
+The caller learns only that it was blocked; the operator learns why
+(Story 2.4).
+
+### Opaque verdicts and refs
+
+Every block carries a ref: `gr-` and 32 lowercase hex from 128 random bits,
+never derived from content, time, or a counter, and never reused. A container
+caller (Epic 4) receives only `v`, `verdict`, and `ref`; inside Claude the
+shims show the fixed text from the public pattern file
+`scripts/lib/gate-patterns.conf`:
+
+    blocked by gate · ref <ref> · see hub notification
+
+On the hub socket, a block on any op except `eval` and `health` carries
+`detail: {"reason_category": …}` and nothing else. `eval` and `health` keep their
+per-layer detail and are neither retained nor logged.
+
+### Retained payloads
+
+The blocked payload is kept as a 0600 file named by its ref in
+`<state>/gate-store/payloads/` (0700, the gate's only). Nothing writes a payload
+anywhere else: not a log, not the journal.
+
+`/etc/lane2/gate.conf`:
+
+```bash
+GATE_RETAIN_DAYS=7                 # whole days, 1..30; anything else stops the gate
+GATE_STORE_MAX_BYTES=268435456     # total
+GATE_QUOTA_OPERATOR_BYTES=67108864 # operator- and hub-origin payloads
+GATE_QUOTA_CONTAINER_BYTES=201326592
+```
+
+- **Expiry:** the gate purges expired payloads on every connection; an expired
+  ref is remembered so review can say "expired".
+- **Quotas:** a payload over the total or its origin's quota blocks with
+  `fault:store` and writes a log line. Nothing unexpired is evicted to make room,
+  and container-origin payloads can never use the operator quota.
+- **Atomic:** the bound check and insert happen under one lock; a lock wait over
+  2 s, an unreadable or corrupt index, or an unwritable store counts as full.
+
+### Operator log
+
+`<state>/operator-log/gate.jsonl`, one line per block, written only by the gate:
+
+```json
+{"time":"…","op":"push","origin":"container","session":null,"reason_category":"fault:protocol","ref":"gr-…"}
+```
+
+Every value is the gate's own: an op the gate does not know is logged as
+`unknown`, and nothing from the payload or a header field reaches the log.
+`session` is filled in when Epic 4 adds sessions.
+
+### Notifications
+
+`lane2-notify` (a user unit for the operator, installed by `lane2 install`)
+follows the operator log and the lane2 event log and calls `notify-send` with
+fixed text, the category, and the ref, markup-escaped:
+
+- a `hit:*` on a container-origin op is **critical**, sent at once, never coalesced;
+- everything else is coalesced per session per `LANE2_NOTIFY_COALESCE` seconds
+  (`lane2.conf`, default 60), with a count of what was held;
+- a malformed log line is counted and skipped, never shown.
+
+The gate blocks whether or not the notifier runs.
+
+### `lane2 review show <ref>`
+
+```bash
+sudo scripts/hub/lane2 review show gr-…
+```
+
+Shows the operator log metadata and the retained payload. An unknown ref says
+`not found`; an expired one says `expired`. It runs as root (payloads are
+readable only by the gate and review), refuses inside a container, and offers no
+decisions yet (Epic 4). See the runbook: [Read a block](SP1A_RUNBOOK.md#read-a-block).
 
 ## Policy repository
 
