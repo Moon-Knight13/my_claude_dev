@@ -46,6 +46,8 @@ source "$LANE2_HERE/../lib/lane2.sh"
 source "$LANE2_HERE/../lib/gate.sh"
 # shellcheck source=scripts/lib/gate-client.sh
 source "$LANE2_HERE/../lib/gate-client.sh"
+# shellcheck source=scripts/lib/lane2-image.sh
+source "$LANE2_HERE/../lib/lane2-image.sh"
 
 # file:// is refused for git; tests that source this script may relax it to
 # fetch from a local bare fixture. A root run cannot change it.
@@ -244,8 +246,12 @@ install_record() { # install_record <commit>
     jq -n --arg commit "$commit" --arg time "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
           --arg code "$(lane2_tree_digest "$dir")" --arg gate "$gate" --arg pv "$pv" \
           --argjson pins "$pins" \
+          --arg img "${LANE2_IMAGE_ID:-}" --arg cv "${LANE2_CLAUDE_VERSION:-}" \
+          --arg cs "${LANE2_CLAUDE_SHA256:-}" --arg idg "${LANE2_INTEGRATION_DIGEST:-}" \
           '{commit: $commit, installed_at: $time, installed_code_digest: $code,
             gate_code_digest: $gate, policy_version: (if $pv == "" then null else $pv end),
+            container: (if $img == "" then null else
+                {image_id: $img, claude_version: $cv, claude_sha256: $cs, integration_digest: $idg} end),
             pins: $pins}' > "$tmp"
     chmod 600 "$tmp"
     mv -f "$tmp" "$STATE/install/manifest.json"
@@ -466,6 +472,12 @@ cmd_install() {
     install_fetch "$commit"
     install_export "$commit"
     install_render "$commit"
+    # The Lane 2 image, built from the installed tree before anything swaps: a
+    # failed build leaves the previous install and image in force.
+    LANE2_IMAGE_ID=""
+    if [[ -f "$SRC_TREE/scripts/hub/container/Dockerfile" ]]; then
+        lane2_image_build "$SRC_TREE" "$STATE/install" || exit 4
+    fi
     install_place "$commit"
     install_swap "$commit"
     install_units || exit 4
@@ -492,6 +504,28 @@ cmd_verify() {
     [[ -z "$bad" ]] || { fail "group- or world-writable path in the install: ${bad#"$dir"/}"; rc=4; }
     bad="$(find "$dir" ! -uid "$(lane2_uid root)" -print -quit)"
     [[ -z "$bad" ]] || { fail "path not owned by root in the install: ${bad#"$dir"/}"; rc=4; }
+    verify_image "$rec" || rc=4
+    return "$rc"
+}
+
+# The Lane 2 image (story 3.1): present and pinned, the claude binary as recorded
+# and at or above the floor, and userns-remap in effect. Health calls this too.
+verify_image() { # verify_image <install record>
+    local rec="$1" img sha v n rc=0
+    local -a uids=()
+    img="$(jq -r '.container.image_id // ""' "$rec")"
+    [[ -n "$img" ]] || { printf '  !!  no Lane 2 image recorded (no container in the installed tree)\n'; return 0; }
+    sha="$(jq -r '.container.claude_sha256 // ""' "$rec")"
+    if lane2_image_check "$img"; then ok "Lane 2 image present: $img"; else fail "Lane 2 image $img missing or not the pinned digest"; return 4; fi
+    if lane2_claude_digest_check "$img" "$sha"; then ok "claude binary matches its pin"; else fail "claude binary in image $img does not match its pin"; rc=4; fi
+    v="$(lane2_claude_version_in "$img")"
+    if [[ -n "$v" ]] && _lane2_ver_ge "$v" "$LANE2_CLAUDE_FLOOR"; then ok "claude --version $v >= $LANE2_CLAUDE_FLOOR"
+    else fail "claude --version in image $img is below $LANE2_CLAUDE_FLOOR or unreadable"; rc=4; fi
+    for n in "$OPERATOR" "${LANE2_SERVICE_IDENTITIES[@]}"; do
+        uids+=("$(getent passwd "$n" | cut -d: -f3)")
+    done
+    if lane2_userns_verify "$img" "${uids[@]}"; then ok "userns-remap in effect; container root maps to an unprivileged range"
+    else fail "userns-remap: $LANE2_USERNS_REASON"; rc=4; fi
     return "$rc"
 }
 

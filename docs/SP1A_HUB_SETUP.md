@@ -30,6 +30,24 @@ checkout you run it from, so a dirty or unmerged local tree cannot reach the hub
    local path or `file://` URL is refused, because it could point into a
    workspace the agent writes.
 
+## Docker
+
+The Lane 2 image needs **rootful** Docker (the Ubuntu package, not rootless) with
+`userns-remap` to a dedicated user (AD-21):
+
+```bash
+sudo apt install docker.io
+sudo useradd --system --no-create-home --shell /usr/sbin/nologin lane2-remap
+echo 'lane2-remap:<start>:65536' | sudo tee -a /etc/subuid /etc/subgid   # a range no hub account uses
+echo '{"userns-remap": "lane2-remap"}' | sudo tee /etc/docker/daemon.json
+sudo systemctl restart docker
+```
+
+Pick `<start>` above every existing uid (for example well above 100000) so the
+range overlaps neither you nor a `lane2-*` service identity. Then pin the base
+image digest ([SP1A_WORKSPACE_SEPARATION.md](SP1A_WORKSPACE_SEPARATION.md#pinning)).
+`lane2 install --verify` reports ` FAIL userns-remap: …` until this is right.
+
 ## Install
 
 Merge the change on the git host first, then on the hub:
