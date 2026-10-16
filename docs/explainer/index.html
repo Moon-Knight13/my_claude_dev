@@ -619,8 +619,9 @@
       <div class="pipe">
         <div class="check"><div class="cn">eval set</div><div class="cw"><b>The classifier's miss rate is measured honestly.</b> The operator writes and freezes a held-out split before any tuning; the set stays on the hub and leaves it only encrypted.</div><div class="cs">scripts/hub/eval-set.sh</div></div>
         <div class="check"><div class="cn">hardware check</div><div class="cw"><b>Know before setup whether a host can run the classifier.</b> Run on the host, it reports GPU, Vulkan/RADV, Mesa, usable GPU memory and system memory, says <b>pass</b> or <b>below floor</b>, and on a pass recommends which models to download. Below floor means gated sessions are floor-only, by declaration. An unreadable value never passes. The minimum is <b>provisional</b> until the bake-off measures it.</div><div class="cs">scripts/hub/hw-check.sh</div></div>
+        <div class="check"><div class="cn">fleet_call</div><div class="cw"><b>Every local-model call goes through one client.</b> It checks health and context fit first, applies the pinned classifier settings, and treats any fault as a block &mdash; so eval and production call the model the same way.</div><div class="cs">scripts/lib/fleet.sh</div></div>
       </div>
-      <p class="d-note">Operator docs: <span class="path">docs/SP1A_EVAL_SET.md</span> and <span class="path">docs/SP1A_HARDWARE_CHECK.md</span>.</p>
+      <p class="d-note">Operator docs: <span class="path">docs/SP1A_EVAL_SET.md</span>, <span class="path">docs/SP1A_HARDWARE_CHECK.md</span> and <span class="path">docs/SP1A_FLEET.md</span>.</p>
     </div>
   </section>
 
@@ -633,6 +634,7 @@
       <span>docs/BMAD_WORKFLOW.md</span>
       <span>docs/KANBAN_WORKFLOW.md</span>
       <span>docs/SP1A_ARCHITECTURE.md (planned)</span>
+      <span>docs/SP1A_FLEET.md</span>
     </div>
     <p class="fine">The repository README is the source of truth; this overview is a briefing companion. Apache-2.0.</p>
   </footer>

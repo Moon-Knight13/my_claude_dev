@@ -88,7 +88,11 @@ reasoning-only local call; see *Doing the work locally* below.
 | `scripts/hub/eval-set.sh` | SP1a eval set: validate, freeze the held-out split, draft with a local model, encrypted export ([SP1A_EVAL_SET.md](SP1A_EVAL_SET.md)). |
 | `scripts/tests/test-eval-set.sh` | Eval-set rules, held-out sizing, freeze, drafting refusal, tracked-file hygiene. |
 | `scripts/tests/test-orchestrator.sh` | Routing/invariant unit tests (22). |
-| `scripts/tests/test-classifier.sh` | Classifier contract tests — strict parse, fail-closed, never-egress (mocked model, 19). |
+| `scripts/tests/test-classifier.sh` | Classifier contract tests — strict parse, fail-closed, never-egress, stdin only, parallel-verify; per transport leg (`LOCAL_MODEL_API`). |
+| `scripts/lib/fleet.sh` | `fleet_call`, the one model-call client: health, context fit, pinned settings, fail closed ([SP1A_FLEET.md](SP1A_FLEET.md)). |
+| `scripts/hub/fleet/classifier.settings.json` | The pinned classifier settings every classifier call uses on the `openai` transport. |
+| `scripts/tests/test-fleet-call.sh` | `fleet_call` sequence, faults, endpoint policy, determinism, no-argv, and the AD-10 lint. |
+| `scripts/tests/mock-llama-server.py` | `llama-server` mock for the `openai` CI leg. |
 | `.orchestrator.conf.example` | Config template: mode + model registry + classifier notes. |
 
 ## Which machine does this run on?
@@ -164,7 +168,9 @@ Classifier knobs (env / `.env`): `ORCH_CLASSIFIER` (points at the judge script �
 **this enables AUTO classification**; unset ⇒ fail-closed stub),
 `ORCH_CLASSIFIER_ENDPOINT` (LOCAL only), `ORCH_CLASSIFIER_MODEL`,
 `ORCH_CLASSIFIER_TIMEOUT`, `ORCH_CLASSIFIER_KEEP_ALIVE`,
-`ORCH_CLASSIFIER_PROMPT_FILE`.
+`ORCH_CLASSIFIER_PROMPT_FILE`, `ORCH_CLASSIFIER_MAX_BYTES`, and
+`LOCAL_MODEL_API` (`ollama` default, or `openai` for `fleet_call`; see
+[The classifier](#the-classifier)).
 
 ## The word list that can't be argued with
 
@@ -465,6 +471,28 @@ The judgement is the **LLM's**; the script is its socket + safety fuse. It:
   - **fails closed** — a timeout, error, empty/garbled output, or anything that is
     not a clean `nonsensitive` verdict resolves to `sensitive`.
 
+**The prompt arrives on stdin.** `orch_classify` pipes the prompt into the
+classifier. A prompt passed as an argument is refused (verdict `sensitive`),
+because arguments show in the process list and fail with E2BIG at about
+128 KiB. A prompt over `ORCH_CLASSIFIER_MAX_BYTES` (default 1 MiB) is also
+`sensitive`. It is never cut to fit.
+
+**Two transports (SP1a migration).** `LOCAL_MODEL_API` chooses how the
+classifier reaches the model:
+
+- `ollama` (default) — the Ollama-native call described here, configured by
+  `ORCH_CLASSIFIER_*`.
+- `openai` — `fleet_call` to the `classifier` fleet member on a `llama-server`.
+  It runs a health check, a context-fit check, and one request with the pinned
+  settings file `scripts/hub/fleet/classifier.settings.json` (temperature 0,
+  fixed seed, a JSON verdict limited to `sensitive|nonsensitive`). Endpoint and
+  model come only from the fleet config (`/etc/lane2/fleet.conf`, or
+  `--fleet-config FILE`), never from the environment.
+- Any other value — `sensitive`.
+
+Both fail closed exactly as before. The sequence, faults, config, and migration
+plan are in [SP1A_FLEET.md](SP1A_FLEET.md).
+
 **Thinking-model note.** With a reasoning model (e.g. qwen3) the verdict is parsed
 from the **last non-empty line** (stripping a `\boxed{}` remnant), because such
 models emit a reasoning remnant before the answer even when thinking is requested
@@ -494,6 +522,11 @@ held-out split frozen before tuning. Its rubric, case format, and commands are i
 [SP1A_EVAL_SET.md](SP1A_EVAL_SET.md). `eval-classifier.sh` reads the new case
 format (multi-block cases are scored as their blocks joined) until the SP1a eval
 harness replaces it.
+
+`eval-classifier.sh --parallel-verify` runs every case under both transports
+and records, on the hub only, whether each verdict matched. With no
+differences it writes the zero-diff record that removing the Ollama path needs.
+See [SP1A_FLEET.md](SP1A_FLEET.md#transport-migration-local_model_api).
 
 ### Adding your own examples
 

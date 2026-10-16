@@ -1,0 +1,8 @@
+{
+  "max_tokens": 2048,
+  "timeout_seconds": 300,
+  "params": {
+    "temperature": 0.7,
+    "cache_prompt": false
+  }
+}

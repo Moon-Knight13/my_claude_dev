@@ -13,8 +13,10 @@
 #
 # Transports: the local-model API under test is passed through as
 # LOCAL_MODEL_API (default: ollama). CI runs this script once per transport in a
-# matrix, so adding the OpenAI-compatible mock later is a matrix entry, not a
-# restructure.
+# matrix: `ollama` (Ollama mock) and `openai` (llama-server mock through
+# fleet_call, scripts/tests/mock-llama-server.py). Suites with a transport
+# branch (test-classifier.sh) pick their leg from it; suites for Ollama-only
+# legacy scripts run the same way in both legs.
 #
 # Usage: bash scripts/tests/run-all.sh [suite-name-substring ...]
 # Env:   TESTS_DIR (default: this directory), SUITE_TIMEOUT (seconds, default 300),

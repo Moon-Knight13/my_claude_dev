@@ -22,6 +22,8 @@
 #
 # Config: <config-dir>/lane2.conf (default config dir /etc/lane2), parsed, never
 # sourced; the last assignment wins, except LANE2_EVAL_CANDIDATE, which repeats.
+# draft calls the model through fleet_call (scripts/lib/fleet.sh) as fleet
+# member "draft", whose endpoint and alias are in <config-dir>/fleet.conf.
 # The config directory is a flag, not an environment variable: hub tools read no
 # security-relevant setting from the environment (architecture conventions).
 #
@@ -37,7 +39,9 @@ set -euo pipefail
 
 EVALSET_CATEGORIES=(plain obfuscated buried-5k buried-20k multi-block inference adversarial)
 EVALSET_MAX_STDIN=65536          # bytes read from a draft request
-EVALSET_MAX_RESPONSE=1048576     # bytes read from the drafting model
+EVALSET_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib/fleet.sh disable=SC1091
+source "$EVALSET_HERE/../lib/fleet.sh"
 
 ok()   { printf '  OK  %s\n' "$1"; }
 fail() { printf ' FAIL %s\n' "$1"; }
@@ -355,13 +359,8 @@ cmd_frozen_check() {
     ok "held-out split matches its freeze record"
 }
 
-# A drafting endpoint must be plain http on loopback: no userinfo, no other host.
-evalset_loopback() {
-    [[ "$1" =~ ^http://(127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|localhost|\[::1\])(:[0-9]{1,5})?(/[^@]*)?$ ]]
-}
-
 cmd_draft() {
-    local category="" model sha endpoint cand cid csha store body resp content id
+    local category="" model sha fleet_model cand cid csha store content id
     while (( $# )); do
         case "$1" in
             --category) category="${2:-}"; shift 2 || die 2 "usage: eval-set.sh draft [--category C]" ;;
@@ -375,10 +374,17 @@ cmd_draft() {
 
     model="$(conf LANE2_EVAL_DRAFT_MODEL)"
     sha="$(conf LANE2_EVAL_DRAFT_SHA256 | tr 'A-F' 'a-f')"
-    endpoint="$(conf LANE2_EVAL_DRAFT_ENDPOINT)"
     [[ -n "$model" && "$sha" =~ ^[0-9a-f]{64}$ ]] \
         || die 4 "drafting model not configured (LANE2_EVAL_DRAFT_MODEL, LANE2_EVAL_DRAFT_SHA256)"
-    evalset_loopback "$endpoint" || die 4 "drafting endpoint must be http on loopback"
+    # The endpoint lives in fleet config (member "draft"), like every model
+    # endpoint (AD-10). The old setting is refused rather than silently ignored.
+    [[ -z "$(conf LANE2_EVAL_DRAFT_ENDPOINT)" ]] \
+        || die 4 "LANE2_EVAL_DRAFT_ENDPOINT moved to fleet.conf as FLEET_DRAFT_ENDPOINT"
+    fleet_load_config || die 4 "fleet config missing or unreadable: $FLEET_CONF_FILE"
+    fleet_member_endpoint draft || die 4 "FLEET_DRAFT_ENDPOINT missing or not loopback / hub socket"
+    fleet_model="$(fleet_member_model draft)" || die 4 "FLEET_DRAFT_MODEL missing or malformed"
+    [[ "$fleet_model" == "$model" ]] \
+        || die 4 "FLEET_DRAFT_MODEL must be the drafting model (LANE2_EVAL_DRAFT_MODEL)"
     (( ${#EVALSET_CANDIDATES[@]} > 0 )) \
         || die 4 "no classifier candidates configured (LANE2_EVAL_CANDIDATE); cannot prove the drafting model is not one"
     for cand in "${EVALSET_CANDIDATES[@]}"; do
@@ -391,18 +397,12 @@ cmd_draft() {
     done
 
     store="$(evalset_store create)"
-    body="$(head -c "$EVALSET_MAX_STDIN" | jq -Rsc --arg model "$model" '
-        {model: $model, temperature: 0.7, stream: false,
-         messages: [
-           {role: "system", content: "Draft one realistic example input for a sensitivity classifier eval set. Reply with the example text only."},
-           {role: "user", content: .}]}')"
-    resp="$(printf '%s' "$body" \
-        | curl -sS --fail --noproxy '*' --max-time 300 \
-               -H 'Content-Type: application/json' --data-binary @- \
-               "${endpoint%/}/v1/chat/completions" 2>/dev/null \
-        | head -c "$EVALSET_MAX_RESPONSE")" || die 4 "drafting model call failed"
-    content="$(jq -er '.choices[0].message.content | select(type == "string" and length > 0)' \
-        <<<"$resp" 2>/dev/null)" || die 4 "drafting model returned no draft"
+    # One model-call client (AD-10): fleet_call checks health and fit, applies
+    # the drafting settings, and fails closed. The request reaches it on stdin.
+    content="$(head -c "$EVALSET_MAX_STDIN" \
+        | fleet_call draft "$EVALSET_HERE/fleet/draft.settings.json" "$EVALSET_HERE/fleet/draft.system.md" \
+            2>/dev/null)" || die 4 "drafting model call failed"
+    [[ -n "$content" ]] || die 4 "drafting model returned no draft"
 
     evalset_lock "$store"
     id="draft-$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
@@ -468,6 +468,7 @@ evalset_main() {
     fi
     command -v jq >/dev/null || die 4 "jq not installed"
     evalset_load_config "$confdir/lane2.conf"
+    fleet_use_config "$confdir/fleet.conf"
 
     case "$cmd" in
         validate)     cmd_validate "$@" ;;
