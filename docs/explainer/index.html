@@ -517,7 +517,7 @@
     <span class="badge planned">status&nbsp;<b>planned</b>&nbsp;·&nbsp;design&nbsp;accepted&nbsp;2026-10-16&nbsp;·&nbsp;not&nbsp;yet&nbsp;built</span>
     <p class="eyebrow">Roadmap · design only</p>
     <h2 id="sp1a-h">Next: the SP1a trust core (planned)</h2>
-    <p class="section-note">None of this exists yet. SP1a is the agreed design for doing sensitive work with a local model while Claude handles the heavy non-sensitive work &mdash; with sensitive material kept out of Claude's reach by <b>separation first</b> and a <b>fail-closed gate</b> as the safety net.</p>
+    <p class="section-note">Most of this does not exist yet. Landed so far: the operator-owned eval set (<span class="path">docs/SP1A_EVAL_SET.md</span>) and <b>fleet_call</b>, the one client every local-model call goes through &mdash; health check, context-fit check, pinned classifier settings, any fault is a block (<span class="path">docs/SP1A_FLEET.md</span>). SP1a is the agreed design for doing sensitive work with a local model while Claude handles the heavy non-sensitive work &mdash; with sensitive material kept out of Claude's reach by <b>separation first</b> and a <b>fail-closed gate</b> as the safety net.</p>
 
     <div class="dgram">
       <div class="dgram-h"><h3>One trusted hub, one untrusted container per session</h3><span class="path">planned · docs/SP1A_ARCHITECTURE.md</span></div>
@@ -624,6 +624,7 @@
       <span>docs/BMAD_WORKFLOW.md</span>
       <span>docs/KANBAN_WORKFLOW.md</span>
       <span>docs/SP1A_ARCHITECTURE.md (planned)</span>
+      <span>docs/SP1A_FLEET.md</span>
     </div>
     <p class="fine">The repository README is the source of truth; this overview is a briefing companion. Apache-2.0.</p>
   </footer>

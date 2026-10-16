@@ -107,9 +107,20 @@ file is parsed, never sourced. The last assignment of a key wins, except
 | `LANE2_EVAL_HELDOUT_MISSES` | `0` | Held-out misses you allow at that bound: 0, 1, or 2. |
 | `LANE2_EVAL_DRAFT_MODEL` | — | Model id of the drafting model. |
 | `LANE2_EVAL_DRAFT_SHA256` | — | Its model file sha256. |
-| `LANE2_EVAL_DRAFT_ENDPOINT` | — | Its OpenAI-compatible endpoint; plain `http` on loopback only. |
 | `LANE2_EVAL_CANDIDATE` | — | `<model id> <model file sha256>` of one classifier candidate. Repeat per candidate. |
 | `LANE2_EVAL_EXPORT_RECIPIENT` | — | Full fingerprint of the gpg key exports are encrypted to. |
+
+`draft` calls the drafting model through `fleet_call`
+([SP1A_FLEET.md](SP1A_FLEET.md)) as fleet member `draft`. Its endpoint and alias
+live in `<config dir>/fleet.conf`, like every model endpoint:
+
+| Key (in `fleet.conf`) | Meaning |
+|---|---|
+| `FLEET_DRAFT_ENDPOINT` | `http://127.x.y.z:<port>`, `http://[::1]:<port>`, or `unix:<FLEET_SOCKET_DIR>/<name>.sock`. |
+| `FLEET_DRAFT_MODEL` | The alias the drafting model is served under. Must equal `LANE2_EVAL_DRAFT_MODEL`. |
+
+`LANE2_EVAL_DRAFT_ENDPOINT` is no longer read. If it is still set, `draft`
+refuses (exit 4) and says where the setting moved.
 
 ## How many held-out cases you need
 
@@ -176,7 +187,12 @@ echo "a support ticket that quotes a customer's account number" \
 - the drafting model's id or file checksum matches any configured classifier
   candidate, or
 - no candidates are configured, or
-- the endpoint is not plain `http` on loopback.
+- the `draft` fleet member's endpoint is missing or is not loopback or a hub
+  socket, or its alias differs from `LANE2_EVAL_DRAFT_MODEL`.
+
+The call itself runs the full `fleet_call` sequence: health, context fit, the
+drafting settings in `scripts/hub/fleet/draft.settings.json`. Any fault stores
+nothing and exits 4.
 
 A draft goes to `drafts.jsonl` unlabelled, with `provenance:
 local:<id>@<sha256>`. It never goes into either split. Read each draft, then

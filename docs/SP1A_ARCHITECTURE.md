@@ -6,7 +6,8 @@
 > [SAFETY_HARNESS.md](SAFETY_HARNESS.md). Each part of this page will be
 > replaced by operator docs as the matching story lands.
 >
-> Landed so far: the eval set and held-out freeze — [SP1A_EVAL_SET.md](SP1A_EVAL_SET.md).
+> Landed so far: the eval set and held-out freeze — [SP1A_EVAL_SET.md](SP1A_EVAL_SET.md);
+> the one model-call client `fleet_call` — [SP1A_FLEET.md](SP1A_FLEET.md).
 
 ## Why
 

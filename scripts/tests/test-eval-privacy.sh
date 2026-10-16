@@ -33,7 +33,7 @@ EOF
 CLS="$TMP/cls.sh"
 cat > "$CLS" <<'MOCK'
 #!/usr/bin/env bash
-case "$1" in
+case "$(cat)" in
     *zzsecretnote*) echo nonsensitive ;;
     *)              echo sensitive ;;
 esac

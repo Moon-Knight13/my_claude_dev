@@ -3,7 +3,8 @@
 # shellcheck disable=SC2015
 # test-eval-set.sh — the operator-owned eval set and its held-out freeze
 # (SP1a story 1.1, #97; FR-35, FR-38, FR-50, NFR-5).
-# tier: ci — synthetic fixtures only; the drafting model is a PATH curl stub.
+# tier: ci — synthetic fixtures only; the drafting model is the llama-server
+# mock (scripts/tests/mock-llama-server.py), reached through fleet_call.
 #
 # Pins: every validation rule; Clopper-Pearson sizing at 0/1/2 misses for <= 10%
 # and <= 5% (and the addendum A3 table); freeze / re-freeze; drafting-model
@@ -254,62 +255,91 @@ check "leaked with no prior freeze refused" "$RC" 3
 
 # =============================================================================
 echo "== draft =="
+# The drafting model is the llama-server mock, reached through fleet_call as
+# fleet member "draft" (story 1.3). A PATH curl wrapper logs every argv.
+MS="$TMP/llama"; mkdir -p "$MS"
+MOCK_STATE_DIR="$MS" python3 "$ROOT/scripts/tests/mock-llama-server.py" & MOCK_PID=$!
+trap 'kill "$MOCK_PID" 2>/dev/null; rm -rf "$TMP"' EXIT
+for _ in $(seq 50); do [[ -s "$MS/port" ]] && break; sleep 0.1; done
+PORT="$(cat "$MS/port" 2>/dev/null)"
+printf '%s' 'ZZDRAFTTEXT drafted case' > "$MS/content"
 STUBDIR="$TMP/bin"; mkdir -p "$STUBDIR"
 CALLS="$TMP/curl-calls"
 cat > "$STUBDIR/curl" <<EOF
 #!/usr/bin/env bash
 printf '%s\n' "\$*" >> "$CALLS"
-cat > "$TMP/curl-body"
-printf '{"choices":[{"message":{"content":"ZZDRAFTTEXT drafted case"}}]}'
+exec $(command -v curl) "\$@"
 EOF
 chmod +x "$STUBDIR/curl"
 SHA_D="$(printf 'd%.0s' {1..64})"; SHA_C="$(printf 'c%.0s' {1..64})"
 draft() { OUT="$(PATH="$STUBDIR:$PATH" es draft "$@" <<<"ZZREQUEST write one" 2>&1)"; RC=$?; }
+fleetconf() { # fleetconf [endpoint] [model]
+    printf '%s\n' "FLEET_PROBE_TIMEOUT=2" "FLEET_DRAFT_ENDPOINT=${1:-http://127.0.0.1:$PORT}" \
+        "FLEET_DRAFT_MODEL=${2:-drafter}" > "$CONF/fleet.conf"
+}
+fleetconf
 
 mkset; rm -f "$CALLS"
 writeconf "LANE2_EVAL_DRAFT_MODEL=drafter" "LANE2_EVAL_DRAFT_SHA256=$SHA_D" \
-          "LANE2_EVAL_DRAFT_ENDPOINT=http://127.0.0.1:8090" \
           "LANE2_EVAL_CANDIDATE=classifier-a $SHA_C" "LANE2_EVAL_CANDIDATE=drafter $SHA_C"
 draft
 (( RC >= 4 )) && ok "drafting model id matches a candidate: refused (exit $RC)" || bad "id match not refused (exit $RC)"
 [[ ! -e "$CALLS" ]] && ok "no model call made" || bad "model called despite refusal"
 
 writeconf "LANE2_EVAL_DRAFT_MODEL=drafter" "LANE2_EVAL_DRAFT_SHA256=$SHA_D" \
-          "LANE2_EVAL_DRAFT_ENDPOINT=http://127.0.0.1:8090" \
           "LANE2_EVAL_CANDIDATE=classifier-a $SHA_C" "LANE2_EVAL_CANDIDATE=renamed-copy ${SHA_D^^}"
 draft
 (( RC >= 4 )) && ok "drafting model checksum matches a candidate: refused" || bad "checksum match not refused (exit $RC)"
 [[ ! -e "$CALLS" ]] && ok "no model call made" || bad "model called despite refusal"
 
+writeconf "LANE2_EVAL_DRAFT_MODEL=drafter" "LANE2_EVAL_DRAFT_SHA256=$SHA_D" "LANE2_EVAL_CANDIDATE=classifier-a $SHA_C"
 for ep in "http://192.0.2.10:8090" "https://127.0.0.1:8090" "http://user@127.0.0.1:8090" "http://127.0.0.1.example.test:8090"; do
-    writeconf "LANE2_EVAL_DRAFT_MODEL=drafter" "LANE2_EVAL_DRAFT_SHA256=$SHA_D" \
-              "LANE2_EVAL_DRAFT_ENDPOINT=$ep" "LANE2_EVAL_CANDIDATE=classifier-a $SHA_C"
+    fleetconf "$ep"
     draft
     (( RC >= 4 )) && ok "non-loopback endpoint refused: $ep" || bad "endpoint accepted: $ep (exit $RC)"
 done
 [[ ! -e "$CALLS" ]] && ok "no model call made" || bad "model called despite refusal"
+fleetconf "" other-model
+draft
+(( RC >= 4 )) && ok "fleet draft alias differs from LANE2_EVAL_DRAFT_MODEL: refused" || bad "alias mismatch accepted (exit $RC)"
+fleetconf
+writeconf "LANE2_EVAL_DRAFT_MODEL=drafter" "LANE2_EVAL_DRAFT_SHA256=$SHA_D" "LANE2_EVAL_CANDIDATE=classifier-a $SHA_C" \
+          "LANE2_EVAL_DRAFT_ENDPOINT=http://127.0.0.1:$PORT"
+draft
+(( RC >= 4 )) && ok "old LANE2_EVAL_DRAFT_ENDPOINT refused, not ignored" || bad "old endpoint setting accepted (exit $RC)"
+[[ ! -e "$CALLS" ]] && ok "no model call made" || bad "model called despite refusal"
 
-writeconf "LANE2_EVAL_DRAFT_MODEL=drafter" "LANE2_EVAL_DRAFT_SHA256=$SHA_D" \
-          "LANE2_EVAL_DRAFT_ENDPOINT=http://127.0.0.1:8090"
+writeconf "LANE2_EVAL_DRAFT_MODEL=drafter" "LANE2_EVAL_DRAFT_SHA256=$SHA_D"
 draft
 (( RC >= 4 )) && ok "no candidates configured: refused" || bad "drafted with no candidate list (exit $RC)"
 
-writeconf "LANE2_EVAL_DRAFT_MODEL=drafter" "LANE2_EVAL_DRAFT_SHA256=$SHA_D" \
-          "LANE2_EVAL_DRAFT_ENDPOINT=http://127.0.0.1:8090" "LANE2_EVAL_CANDIDATE=classifier-a $SHA_C"
+writeconf "LANE2_EVAL_DRAFT_MODEL=drafter" "LANE2_EVAL_DRAFT_SHA256=$SHA_D" "LANE2_EVAL_CANDIDATE=classifier-a $SHA_C"
 HELD_BEFORE="$(sha256sum < "$STORE/heldout.jsonl")"; TUNE_BEFORE="$(sha256sum < "$STORE/tuning.jsonl")"
+: > "$MS/requests.jsonl"
 draft --category obfuscated
 check "a valid draft request exits 0" "$RC" 0
 hasnt "draft text not printed" "$OUT" ZZDRAFTTEXT
 D="$(tail -1 "$STORE/drafts.jsonl" 2>/dev/null)"
+check "draft text stored" "$(jq -r .prompt <<<"$D")" "ZZDRAFTTEXT drafted case"
 check "draft provenance local:<id>@<sha256>" "$(jq -r .provenance <<<"$D")" "local:drafter@$SHA_D"
 check "draft is unlabelled" "$(jq -r '.label, .labelled_by, .split' <<<"$D" | tr '\n' ' ')" "null null null "
 check "draft keeps the requested category" "$(jq -r .category <<<"$D")" obfuscated
 check "drafts file is 0600" "$(stat -c %a "$STORE/drafts.jsonl")" 600
 check "held-out split untouched" "$(sha256sum < "$STORE/heldout.jsonl")" "$HELD_BEFORE"
 check "tuning split untouched" "$(sha256sum < "$STORE/tuning.jsonl")" "$TUNE_BEFORE"
+check "drafted through fleet_call (health, props, template, tokenize, completion)" \
+    "$(jq -r .path "$MS/requests.jsonl" | tr '\n' ' ')" "/health /props /apply-template /tokenize /v1/chat/completions "
 has "model called with proxies off" "$(cat "$CALLS")" "--noproxy *"
 hasnt "request text never on argv" "$(cat "$CALLS")" ZZREQUEST
-has "request text sent in the body" "$(cat "$TMP/curl-body")" ZZREQUEST
+has "request text sent in the body" "$(cat "$MS/requests.jsonl")" ZZREQUEST
+check "drafting settings applied" \
+    "$(jq -r 'select(.path == "/v1/chat/completions") | .body | fromjson | .temperature' "$MS/requests.jsonl")" 0.7
+printf 'truncated' > "$MS/mode"
+NDRAFTS="$(wc -l < "$STORE/drafts.jsonl")"
+draft
+(( RC >= 4 )) && ok "a truncated draft reply is a fault" || bad "truncated reply accepted (exit $RC)"
+check "a truncated draft reply stores nothing" "$(wc -l < "$STORE/drafts.jsonl")" "$NDRAFTS"
+printf 'ok' > "$MS/mode"
 draft --category nonsense
 check "unknown category is a usage error" "$RC" 2
 
