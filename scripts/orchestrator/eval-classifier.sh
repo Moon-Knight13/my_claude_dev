@@ -40,7 +40,8 @@ declare -a MISSES=() FALARMS=()
 
 while IFS= read -r line || [[ -n "$line" ]]; do
     [[ -n "$line" ]] || continue
-    prompt="$(jq -r '.prompt' <<<"$line" 2>/dev/null)" || continue
+    # Multi-block cases (docs/SP1A_EVAL_SET.md) are scored as their blocks joined.
+    prompt="$(jq -r '.prompt // (.blocks // [] | join("\n\n"))' <<<"$line" 2>/dev/null)" || continue
     label="$(jq -r '.label'  <<<"$line" 2>/dev/null)"
     note="$(jq -r '.note // ""' <<<"$line" 2>/dev/null)"
     [[ "$label" == "sensitive" || "$label" == "nonsensitive" ]] || continue

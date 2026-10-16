@@ -17,3 +17,12 @@ README.md
 
 # May be relicensed per project
 LICENSE
+
+# SP1a paths (AD-14): every new or changed template-owned path an SP1a story
+# touches is listed here in the same PR, so template sync cannot overwrite it.
+scripts/hub/eval-set.sh
+scripts/tests/test-eval-set.sh
+scripts/tests/fixtures/sensitivity-eval.jsonl
+scripts/orchestrator/eval-classifier.sh
+docs/SP1A_EVAL_SET.md
+docs/ORCHESTRATOR.md

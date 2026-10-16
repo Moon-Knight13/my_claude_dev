@@ -5,6 +5,8 @@
 > design. Today's behaviour is in [ORCHESTRATOR.md](ORCHESTRATOR.md) and
 > [SAFETY_HARNESS.md](SAFETY_HARNESS.md). Each part of this page will be
 > replaced by operator docs as the matching story lands.
+>
+> Landed so far: the eval set and held-out freeze — [SP1A_EVAL_SET.md](SP1A_EVAL_SET.md).
 
 ## Why
 

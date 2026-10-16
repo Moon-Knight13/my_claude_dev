@@ -84,7 +84,9 @@ reasoning-only local call; see *Doing the work locally* below.
 | `scripts/lib/contract.sh` | The disclosure boundary (#63) — opaque handles, contract validation, positive-disclosure projection, term floor, sanitiser backstop, owner approval. |
 | `scripts/tests/test-contract.sh` | Disclosure tests — nothing undeclared crosses, no paths, floor not bypassable, approval per contract (53). |
 | `scripts/orchestrator/eval-classifier.sh` | Measures the judge against labelled fixtures; headline metric = sensitive-recall. |
-| `scripts/tests/fixtures/sensitivity-eval.jsonl` | Labelled eval cases (synthetic PII/IP + adversarial near-misses). |
+| `scripts/tests/fixtures/sensitivity-eval.jsonl` | Synthetic eval cases in the SP1a case format — the format reference ([SP1A_EVAL_SET.md](SP1A_EVAL_SET.md)). |
+| `scripts/hub/eval-set.sh` | SP1a eval set: validate, freeze the held-out split, draft with a local model, encrypted export ([SP1A_EVAL_SET.md](SP1A_EVAL_SET.md)). |
+| `scripts/tests/test-eval-set.sh` | Eval-set rules, held-out sizing, freeze, drafting refusal, tracked-file hygiene. |
 | `scripts/tests/test-orchestrator.sh` | Routing/invariant unit tests (22). |
 | `scripts/tests/test-classifier.sh` | Classifier contract tests — strict parse, fail-closed, never-egress (mocked model, 19). |
 | `.orchestrator.conf.example` | Config template: mode + model registry + classifier notes. |
@@ -486,6 +488,12 @@ to the cloud.
 
 It needs a live local model, so run it on the box by hand. It is not a CI check —
 the fixed behaviour is covered by `test-classifier.sh`.
+
+SP1a replaces this with an operator-owned eval set kept on the hub, with a
+held-out split frozen before tuning. Its rubric, case format, and commands are in
+[SP1A_EVAL_SET.md](SP1A_EVAL_SET.md). `eval-classifier.sh` reads the new case
+format (multi-block cases are scored as their blocks joined) until the SP1a eval
+harness replaces it.
 
 ### Adding your own examples
 
