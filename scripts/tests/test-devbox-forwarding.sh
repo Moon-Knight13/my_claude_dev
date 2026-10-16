@@ -75,11 +75,15 @@ if grep -q 'LOCAL_MODEL_TUNNEL:-false' "$SH"; then ok "bash tunnel defaults off"
 if grep -q "falling back to 'ForwardAgent yes'" "$SH"; then bad "bash never falls back to ForwardAgent yes"; else ok "bash never falls back to ForwardAgent yes"; fi
 if grep -q 'ssh_host_block ' "$SH"; then ok "bash writes the block via ssh_host_block"; else bad "bash writes the block via ssh_host_block"; fi
 if grep -q 'ProxyJump' "$SH"; then ok "bash documents ProxyJump"; else bad "bash documents ProxyJump"; fi
-if grep -q '"remote.SSH.enableAgentForwarding": fwd,' "$SH" \
-   && ! grep -q '"remote.SSH.enableAgentForwarding": True' "$SH"; then
-    ok "bash VSCode agent forwarding follows the Host block decision"
+if grep -q 'if fwd:' "$SH" && ! grep -qE '"remote.SSH.enableAgentForwarding": (True|False|fwd)' "$SH"; then
+    ok "bash VSCode agent forwarding only switched on by opt-in, never forced off"
 else
-    bad "bash VSCode agent forwarding follows the Host block decision"
+    bad "bash VSCode agent forwarding only switched on by opt-in, never forced off"
+fi
+if grep -q 'box-side identity check skipped: no agent is forwarded' "$SH"; then
+    ok "bash skips the forwarded-agent identity check when forwarding is off"
+else
+    bad "bash skips the forwarded-agent identity check when forwarding is off"
 fi
 # The PowerShell patterns below match a literal `$` on purpose.
 # shellcheck disable=SC2016
@@ -89,10 +93,10 @@ if grep -q 'ForwardAgent yes\$TunnelLine' "$PS1"; then bad "ps1 no longer hardco
 # shellcheck disable=SC2016
 if grep -q '\$Forward = "no"' "$PS1"; then ok "ps1 defaults ForwardAgent no"; else bad "ps1 defaults ForwardAgent no"; fi
 # shellcheck disable=SC2016
-if grep -q 'enableAgentForwarding" -NotePropertyValue \$fwdOn' "$PS1"; then
-    ok "ps1 VSCode agent forwarding follows the Host block decision"
+if grep -q 'if (\$fwdOn) {' "$PS1" && ! grep -q 'NotePropertyValue \$fwdOn' "$PS1"; then
+    ok "ps1 VSCode agent forwarding only switched on by opt-in, never forced off"
 else
-    bad "ps1 VSCode agent forwarding follows the Host block decision"
+    bad "ps1 VSCode agent forwarding only switched on by opt-in, never forced off"
 fi
 
 echo

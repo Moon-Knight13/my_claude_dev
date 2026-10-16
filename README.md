@@ -49,7 +49,7 @@ domain, and an optional IP — then:
   required keys are known), and `LOCAL_MODEL_TUNNEL=true` adds the tunnel. For onward hops prefer
   `ssh -J <alias> <next-host>` (ProxyJump). A re-run warns if an older block still forwards;
 - runs `ssh-copy-id` so login is passwordless — **your box password is entered live, once, and never stored**;
-- installs the VSCode **Remote-SSH** extension and sets `remote.SSH.useExecServer=false`, with VSCode agent forwarding matching the `ForwardAgent` choice above;
+- installs the VSCode **Remote-SSH** extension and sets `remote.SSH.useExecServer=false`, and switches VSCode agent forwarding on only if you opted in above (it is a global VSCode setting, so it is never forced off);
 - prints a reminder to add your **public** key to the git server;
 - **verifies which identity the git server actually returns**, from this machine and from the
   box, and pins the box to the right key only if the two disagree. A wrong key authenticates

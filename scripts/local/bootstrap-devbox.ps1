@@ -383,11 +383,16 @@ if ($code) {
         $json = Get-Content $us -Raw | ConvertFrom-Json
         if (-not $json) { $json = [pscustomobject]@{} }
         $json | Add-Member -NotePropertyName "remote.SSH.useExecServer" -NotePropertyValue $false -Force
-        # VSCode's agent forwarding follows the Host block decision (issue #86).
+        # VSCode's agent-forwarding setting is GLOBAL to every Remote-SSH host, so
+        # it is only switched ON by the explicit opt-in (issue #86) and never
+        # forced off, which would break forwarding other hosts rely on.
         $fwdOn = ($env:FORWARD_AGENT -eq "all")
-        $json | Add-Member -NotePropertyName "remote.SSH.enableAgentForwarding" -NotePropertyValue $fwdOn -Force
+        if ($fwdOn) {
+            $json | Add-Member -NotePropertyName "remote.SSH.enableAgentForwarding" -NotePropertyValue $true -Force
+        }
         ($json | ConvertTo-Json -Depth 20) | Set-Content $us
-        Info "set remote.SSH.useExecServer=false + remote.SSH.enableAgentForwarding=$($fwdOn.ToString().ToLower())"
+        if ($fwdOn) { Info "set remote.SSH.useExecServer=false + remote.SSH.enableAgentForwarding=true" }
+        else { Info "set remote.SSH.useExecServer=false (VSCode agent forwarding left unchanged)" }
     } catch {
         Note "could not edit settings.json automatically — set remote.SSH.useExecServer=false by hand"
     }

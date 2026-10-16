@@ -373,8 +373,11 @@ if command -v code >/dev/null 2>&1; then
     US="$US_DIR/settings.json"
     if command -v python3 >/dev/null 2>&1; then
         mkdir -p "$US_DIR"; [[ -f "$US" ]] || echo '{}' > "$US"
-        # VSCode's agent forwarding follows the same decision as the Host block
-        # (issue #86): on only when the developer opted in to forwarding.
+        # VSCode's agent-forwarding setting is GLOBAL to every Remote-SSH host, so
+        # it is only ever switched ON (when the developer opts in to forwarding,
+        # issue #86) and never forced off: forcing it off would break forwarding
+        # for other hosts the developer deliberately configured. The Host block's
+        # `ForwardAgent no` is what keeps this box's default safe.
         FWD_ON="false"; [[ "$FORWARD_VALUE" != "no" ]] && FWD_ON="true"
         US_PATH="$US" FWD_ON="$FWD_ON" python3 - <<'PY'
 import json, os, sys
@@ -387,10 +390,9 @@ except Exception:
     print(f"  !!  {p} not valid JSON; set remote.SSH.useExecServer=false + "
           f"remote.SSH.enableAgentForwarding={'true' if fwd else 'false'} by hand",
           file=sys.stderr); sys.exit(0)
-desired = {
-    "remote.SSH.useExecServer": False,       # guide-mandated
-    "remote.SSH.enableAgentForwarding": fwd, # matches the Host block's ForwardAgent
-}
+desired = {"remote.SSH.useExecServer": False}  # guide-mandated
+if fwd:  # only switched on by an explicit opt-in; never forced off (global setting)
+    desired["remote.SSH.enableAgentForwarding"] = True
 changed = [k for k, v in desired.items() if d.get(k) is not v]
 for k, v in desired.items():
     d[k] = v
@@ -442,14 +444,26 @@ LAPTOP_ID="$( { probe_key "$KEY" || true; } | head -1)"
 info "from this machine, pinned to $(basename "$KEY"):"
 echo "       ${LAPTOP_ID:-<no response>}"
 
-BOX_ID="$(ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 \
-    "${ALIAS}" \
-    "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -p ${GIT_SSH_PORT} -T git@${GIT_HOST} 2>&1 | head -1" \
-    2>/dev/null || true)"
-info "from the box, unpinned (whichever key the agent offers first):"
-echo "       ${BOX_ID:-<no response — is the agent forwarded? run scripts/host/diagnose-git-auth.sh on the box>}"
+if [[ "$FORWARD_VALUE" == "no" ]]; then
+    # The box-side check authenticates with the FORWARDED agent. With forwarding
+    # off (the default, issue #86) it cannot succeed, and a failure here would
+    # wrongly suggest pinning. Skip it and say why.
+    note "box-side identity check skipped: no agent is forwarded (ForwardAgent no)"
+    note "git over SSH from the box needs a forwarded key; re-run with SCOPE_AGENT=true or"
+    note "FORWARD_AGENT=all to verify, or use HTTPS remotes on the box"
+    BOX_ID="skipped"
+else
+    BOX_ID="$(ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 \
+        "${ALIAS}" \
+        "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -p ${GIT_SSH_PORT} -T git@${GIT_HOST} 2>&1 | head -1" \
+        2>/dev/null || true)"
+    info "from the box, unpinned (whichever key the agent offers first):"
+    echo "       ${BOX_ID:-<no response — is the agent forwarded? run scripts/host/diagnose-git-auth.sh on the box>}"
+fi
 
-if [[ -n "$BOX_ID" && "$BOX_ID" == "$LAPTOP_ID" ]]; then
+if [[ "$BOX_ID" == "skipped" ]]; then
+    :
+elif [[ -n "$BOX_ID" && "$BOX_ID" == "$LAPTOP_ID" ]]; then
     info "the box already resolves to the same identity — NO pin needed"
     note "leaving the box's ssh config untouched (it is a shared account)"
 else
