@@ -68,7 +68,8 @@ runs; Story 3.3 (`lane2 up`) starts containers only from it. It requires:
 Lane 2 runs on **rootful** Docker with `userns-remap` to a dedicated user: inside
 the container uid 0 is an unprivileged host uid that owns no hub store. Setup is
 in [SP1A_HUB_SETUP.md](SP1A_HUB_SETUP.md#docker). `lane2 install --verify` checks
-it (and `lane2 health` will); Story 3.3 refuses `lane2 up` without it. It fails
+it and `lane2 health` reports the result (its `image` line); Story 3.3 refuses
+`lane2 up` without it. It fails
 when remap is off, the daemon is rootless, the remap user is `default` or shared,
 the subordinate range overlaps the operator or a service identity, or a probe
 container's root is not inside that range.

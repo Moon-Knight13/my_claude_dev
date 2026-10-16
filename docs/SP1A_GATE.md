@@ -3,8 +3,9 @@
 The gate is the hub's one sensitivity decision core (AD-1). Every sensitivity
 check asks it, over a fixed protocol, and it answers **allow** or **block** —
 never edited content. Landed so far: the gate's **policy** (Story 2.2) and the
-**gate service on the hub socket** (Story 2.3). The per-session container
-sockets, the cache, and the operator log follow in later stories.
+**gate service on the hub socket** (Story 2.3), and its **`health` op and bulk
+`eval`** (Story 2.6). The per-session container sockets, the cache, and the
+operator log follow in later stories.
 
 ## The gate service
 
@@ -34,8 +35,9 @@ results. Container sockets (later) never carry `detail`.
 
 | Op on the hub socket | Now |
 |---|---|
-| `eval` | Implemented: runs each requested layer, reports each; no cache, no log |
-| `push`, `git_text`, `mount_scan`, `rescan`, `health` | `block` (`fault:protocol`) until their stories add them |
+| `eval` | Implemented: runs each requested layer, reports each; no cache, no log. With a `manifest`, a bulk eval (below) |
+| `health` | Implemented: runs the operator's two probes (below); no cache, no retained payload, no log |
+| `push`, `git_text`, `mount_scan`, `rescan` | `block` (`fault:protocol`) until their stories add them |
 | `prompt`, `expansion`, `tool_input`, `tool_result` | `block` (`fault:protocol`): container ops, never on the hub socket |
 
 A malformed header, a missing or unknown `v`, an unknown op, an extra header
@@ -59,6 +61,44 @@ decided by the gate and never transcoded.
 Content over the classifier's context blocks with `fault:oversize` until Story
 2.7 adds chunking.
 
+### The `health` op
+
+Header `{"v":1,"op":"health"}` and no payload (any other field, or a payload, is
+`fault:protocol`). The gate loads its policy strictly and computes
+`policy_version` as for any request, then runs two probes from the policy
+checkout, `health-probe-sensitive.txt` and `health-probe-negative.txt`, through
+the same floor and classifier:
+
+- the sensitive probe must be blocked **by the classifier**; the negative probe
+  must be allowed;
+- a probe that hits the floor is a failure (`hits-floor`), so the floor alone
+  can never pass health;
+- the answer is `allow` when both pass, else `block` with `detail.probes`
+  (`ok`, `hits-floor`, `missing`, `non-text`, `classifier-fault`, `oversize`, or
+  `wrong-verdict` for each) and reason `fault:classifier` or `fault:policy`.
+
+Nothing in the answer names a term or quotes a probe. `lane2 health` asks this op
+([SP1A_HUB_SETUP.md](SP1A_HUB_SETUP.md#health)).
+
+### Bulk `eval` with a manifest
+
+The eval harness sends its cases as one bulk request (AD-20):
+`{"v":1,"op":"eval","layers":["floor","classifier"],"manifest":"<dir>"}` with no
+payload. The manifest directory must be directly under
+`<state root>/manifests/` (store `manifests`, operator-owned, group
+`lane2-gate`, 2750), a real directory, and hold only regular files named
+`000001`, `000002`, … with no gap, at most 1500. A symlink, a gap, a foreign
+file, a path elsewhere, or a payload is `fault:protocol`. The gate reads the
+files under its own identity and never reads a workspace.
+
+Each case gets every requested layer, reported on its own, as two characters in
+`detail.cases` (floor, then classifier: `h` hit, `c` clear, `e` could not run,
+`-` not requested). A case that is empty, over `GATE_MAX_REQUEST`, or not text
+is `e`. `detail.inputs` names what the gate used: `policy_version`, the prompt
+and settings checksums, and whether the settings cache prompts. A bulk eval is
+bounded by `GATE_EVAL_BUDGET`, not `GATE_DEADLINE`; it writes no cache entry and
+no log.
+
 ### Faults — every one is a block
 
 | Case | Reason |
@@ -72,6 +112,7 @@ Content over the classifier's context blocks with `fault:oversize` until Story
 | Peer not the operator or a hub service | `fault:peer` |
 | Invalid `GATE_` config | `fault:config` |
 | Handler work crashed without an answer | `fault:internal` |
+| Retained-payload store full, over the origin's quota, corrupt, unwritable, or locked too long | `fault:store` |
 | Handler died or socket missing | no answer — the client blocks |
 
 ### Deadlines
@@ -84,10 +125,13 @@ GATE_MAX_REQUEST=1048576
 GATE_DEADLINE=25        # the gate answers fault:timeout by then
 GATE_SHIM_TIMEOUT=28    # callers give up after this
 GATE_HOOK_TIMEOUT=30    # Claude Code's hook timeout; must be 30
+GATE_EVAL_BUDGET=600    # a bulk eval's budget, seconds (GATE_DEADLINE..9000)
 ```
 
 `GATE_DEADLINE < GATE_SHIM_TIMEOUT < GATE_HOOK_TIMEOUT = 30`, each margin at
-least 2 s. `gate-hub.socket` runs `gate-handler --check-config` before it
+least 2 s, and `GATE_DEADLINE <= GATE_EVAL_BUDGET <= 9000`. The handler runs
+every request inside the larger bound and enforces `GATE_DEADLINE` itself on
+everything but a bulk eval. `gate-hub.socket` runs `gate-handler --check-config` before it
 starts: invalid deadlines stop the gate. A handler that finds them invalid
 answers `fault:config`.
 
@@ -120,6 +164,87 @@ and no log line.
   the client's fail-closed cases.
 - `scripts/tests/test-gate-hub.sh` (tier `hub`): real socket activation, the real
   peer check, and the real classifier. `sudo LANE2_HUB_TEST=1 bash scripts/tests/test-gate-hub.sh`.
+- `scripts/tests/test-lane2-health.sh` (tier `ci`): the `health` op and
+  `lane2 health`. `scripts/tests/test-eval-via-gate.sh` (tier `ci`): the bulk
+  eval, its manifest checks, and its budget.
+
+## What a block leaves behind
+
+The caller learns only that it was blocked; the operator learns why
+(Story 2.4).
+
+### Opaque verdicts and refs
+
+Every block carries a ref: `gr-` and 32 lowercase hex from 128 random bits,
+never derived from content, time, or a counter, and never reused. A container
+caller (Epic 4) receives only `v`, `verdict`, and `ref`; inside Claude the
+shims show the fixed text from the public pattern file
+`scripts/lib/gate-patterns.conf`:
+
+    blocked by gate · ref <ref> · see hub notification
+
+On the hub socket, a block on any op except `eval` and `health` carries
+`detail: {"reason_category": …}` and nothing else. `eval` and `health` keep their
+per-layer detail and are neither retained nor logged.
+
+### Retained payloads
+
+The blocked payload is kept as a 0600 file named by its ref in
+`<state>/gate-store/payloads/` (0700, the gate's only). Nothing writes a payload
+anywhere else: not a log, not the journal.
+
+`/etc/lane2/gate.conf`:
+
+```bash
+GATE_RETAIN_DAYS=7                 # whole days, 1..30; anything else stops the gate
+GATE_STORE_MAX_BYTES=268435456     # total
+GATE_QUOTA_OPERATOR_BYTES=67108864 # operator- and hub-origin payloads
+GATE_QUOTA_CONTAINER_BYTES=201326592
+```
+
+- **Expiry:** the gate purges expired payloads on every connection; an expired
+  ref is remembered so review can say "expired".
+- **Quotas:** a payload over the total or its origin's quota blocks with
+  `fault:store` and writes a log line. Nothing unexpired is evicted to make room,
+  and container-origin payloads can never use the operator quota.
+- **Atomic:** the bound check and insert happen under one lock; a lock wait over
+  2 s, an unreadable or corrupt index, or an unwritable store counts as full.
+
+### Operator log
+
+`<state>/operator-log/gate.jsonl`, one line per block, written only by the gate:
+
+```json
+{"time":"…","op":"push","origin":"container","session":null,"reason_category":"fault:protocol","ref":"gr-…"}
+```
+
+Every value is the gate's own: an op the gate does not know is logged as
+`unknown`, and nothing from the payload or a header field reaches the log.
+`session` is filled in when Epic 4 adds sessions.
+
+### Notifications
+
+`lane2-notify` (a user unit for the operator, installed by `lane2 install`)
+follows the operator log and the lane2 event log and calls `notify-send` with
+fixed text, the category, and the ref, markup-escaped:
+
+- a `hit:*` on a container-origin op is **critical**, sent at once, never coalesced;
+- everything else is coalesced per session per `LANE2_NOTIFY_COALESCE` seconds
+  (`lane2.conf`, default 60), with a count of what was held;
+- a malformed log line is counted and skipped, never shown.
+
+The gate blocks whether or not the notifier runs.
+
+### `lane2 review show <ref>`
+
+```bash
+sudo scripts/hub/lane2 review show gr-…
+```
+
+Shows the operator log metadata and the retained payload. An unknown ref says
+`not found`; an expired one says `expired`. It runs as root (payloads are
+readable only by the gate and review), refuses inside a container, and offers no
+decisions yet (Epic 4). See the runbook: [Read a block](SP1A_RUNBOOK.md#read-a-block).
 
 ## Policy repository
 
@@ -131,6 +256,7 @@ this public one:
 | `term-list.txt` | The term floor: one term per line. Matched by code, case-insensitive, on word boundaries. `#` lines and blank lines are ignored. Entries shorter than 3 characters are rejected, not used. |
 | `classifier-prompt.md` | The classifier's instructions. Must not be empty. |
 | `fixtures/*.gpg`, `fixtures/*.age` | Optional eval fixtures, **encrypted only**. A plaintext fixture (or any `.jsonl`, `.json`, or `.csv`) fails validation. |
+| `health-probe-sensitive.txt`, `health-probe-negative.txt` | The health probes (Story 2.6): a text the classifier must block with no term-list hit, and a text the gate must allow. |
 | `README.md`, `.gitignore`, `.gitattributes` | Allowed. Any other file fails validation. |
 
 `scripts/orchestrator/term-list.example.txt` shows the term-list format with
