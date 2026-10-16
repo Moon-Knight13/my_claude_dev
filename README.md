@@ -1,6 +1,7 @@
 # my_claude_dev
 
 [![ci](https://github.com/Moon-Knight13/my_claude_dev/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Moon-Knight13/my_claude_dev/actions/workflows/ci.yml)
+[![tests](https://github.com/Moon-Knight13/my_claude_dev/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/Moon-Knight13/my_claude_dev/actions/workflows/tests.yml)
 [![semgrep](https://github.com/Moon-Knight13/my_claude_dev/actions/workflows/semgrep.yml/badge.svg?branch=main)](https://github.com/Moon-Knight13/my_claude_dev/actions/workflows/semgrep.yml)
 [![secret-scan](https://github.com/Moon-Knight13/my_claude_dev/actions/workflows/secret-scan.yml/badge.svg?branch=main)](https://github.com/Moon-Knight13/my_claude_dev/actions/workflows/secret-scan.yml)
 
@@ -214,6 +215,21 @@ Claude Code CLI (authenticated) · optional Ollama on host port 11434 for local-
 
 See [docs/TEMPLATE_GUIDE.md](docs/TEMPLATE_GUIDE.md) for the full setup guide including
 Caveman token compression and PII-Shield.
+
+## Tests
+
+Every `scripts/tests/test-*.sh` suite runs in CI on each push and PR (the `tests`
+workflow), using local mocks — no live model or network endpoint. Run them the same
+way locally:
+
+```bash
+bash scripts/tests/run-all.sh            # all suites, one PASS/FAIL line each
+bash scripts/tests/run-all.sh guard ctp  # only suites whose name contains a filter
+```
+
+A suite that fails for a tracked reason is listed in `scripts/tests/known-failures.txt`
+with its issue number; it is still run and reported but does not fail the build, and
+the runner warns once it starts passing so the entry gets removed.
 
 ## Repository Structure
 

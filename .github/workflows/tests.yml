@@ -1,0 +1,57 @@
+name: tests
+
+# Runs every scripts/tests/test-*.sh suite (issue #88) through
+# scripts/tests/run-all.sh. Suites use local mocks (fake curl on PATH, Python HTTP
+# mocks), so no live model or network endpoint is needed.
+#
+# Kept in its own workflow, not ci.yml: ci.yml is template-owned and template sync
+# would overwrite a job added there.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  suites:
+    name: scripts/tests (${{ matrix.transport }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # Local-model transport under test. Add `openai` here when the
+        # llama-server (OpenAI-compatible) mock lands; run-all.sh passes it to
+        # every suite as LOCAL_MODEL_API.
+        transport: [ollama]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Install suite dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          # zsh: the ctp-bridge and guard-stack suites drive the zsh wrapper.
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq zsh >/dev/null
+          for b in bash jq python3 git script zsh timeout; do
+            command -v "$b" >/dev/null || { echo "::error::missing $b"; exit 1; }
+          done
+
+      - name: Self-test the runner
+        shell: bash
+        run: bash scripts/tests/test-run-all.sh
+
+      - name: Run suites
+        shell: bash
+        env:
+          LOCAL_MODEL_API: ${{ matrix.transport }}
+        run: bash scripts/tests/run-all.sh
