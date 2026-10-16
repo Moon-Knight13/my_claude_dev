@@ -172,6 +172,7 @@ sessions     operator gate     2750
 workspaces   operator operator 0700
 exclusions   operator gate     2750
 eval         operator operator 0700
+manifests    operator gate     2750
 fleet        operator operator 0700
 push         operator operator 0700
 install      root     root     0700

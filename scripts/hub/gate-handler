@@ -8,7 +8,8 @@
 #   1. refuses a peer that is not the operator or a hub service identity;
 #   2. reads ONE request: one header line (at most 4096 bytes), then raw payload
 #      bytes until the client half-closes, at most GATE_MAX_REQUEST bytes;
-#   3. decides in a child process bounded by GATE_DEADLINE;
+#   3. decides in a child process bounded by GATE_DEADLINE (a bulk eval with a
+#      manifest: GATE_EVAL_BUDGET); ops: eval, health (scripts/lib/gate-health.sh);
 #   4. answers ONE line and exits, which closes the connection.
 # Every fault answers block. Nothing it prints names a term.
 #
@@ -33,10 +34,12 @@ GATE_HERE="$(dirname "$GATE_HANDLER")"
 source "$GATE_HERE/../lib/lane2.sh"
 # shellcheck source=scripts/lib/gate.sh
 source "$GATE_HERE/../lib/gate.sh"
+# shellcheck source=scripts/lib/gate-health.sh
+source "$GATE_HERE/../lib/gate-health.sh"
 
 GATE_HEADER_MAX=4096
 GATE_CONTAINER_OPS=(prompt expansion tool_input tool_result)
-GATE_PENDING_OPS=(push git_text mount_scan rescan health)   # later stories
+GATE_PENDING_OPS=(push git_text mount_scan rescan)   # later stories
 
 # --- config ------------------------------------------------------------------
 
@@ -55,6 +58,7 @@ gate_load() { # gate_load <confdir> — rc 4 on any unusable value
     [[ -n "$GATE_OPERATOR" ]] || return 4
     [[ "$GATE_MAX_REQUEST" =~ ^[1-9][0-9]{0,9}$ ]] || return 4
     gate_check_deadlines "$GATE_DEADLINE" "$GATE_SHIM_TIMEOUT" "$GATE_HOOK_TIMEOUT" || return 4
+    gate_load_budget "$d/gate.conf" "$GATE_DEADLINE" || return 4
 }
 
 # --- peer --------------------------------------------------------------------
@@ -109,6 +113,7 @@ gate_work() { # gate_work <confdir> <tmpdir> — reads the request from stdin
     local conf="$1" t="$2" line op layers size rc
     gate_load "$conf" || gate_result "$t" block fault:config
     export LC_ALL=C
+    gate_watchdog_arm "$GATE_DEADLINE" "$t"
 
     # one header line, bounded
     IFS= read -r -n "$GATE_HEADER_MAX" line || gate_result "$t" block fault:protocol
@@ -121,13 +126,9 @@ gate_work() { # gate_work <confdir> <tmpdir> — reads the request from stdin
     for o in "${GATE_CONTAINER_OPS[@]}" "${GATE_PENDING_OPS[@]}"; do
         [[ "$op" == "$o" ]] && gate_result "$t" block fault:protocol
     done
-    [[ "$op" == eval ]] || gate_result "$t" block fault:protocol
-    jq -e '(keys - ["v", "op", "layers"]) == []
-           and (.layers | type) == "array" and (.layers | length) > 0
-           and (.layers | length) == (.layers | unique | length)
-           and all(.layers[]; . == "floor" or . == "classifier")' "$t/header" >/dev/null 2>&1 \
-        || gate_result "$t" block fault:protocol
-    layers="$(jq -r '.layers | join(" ")' "$t/header")"
+    [[ "$op" == eval || "$op" == health ]] || gate_result "$t" block fault:protocol
+    gate_header_ok "$t/header" "$op" || gate_result "$t" block fault:protocol
+    layers="$(jq -r '.layers // [] | join(" ")' "$t/header")"
 
     # payload until half-close, bounded; over the limit is a block, never truncated
     head -c "$(( GATE_MAX_REQUEST + 1 ))" > "$t/payload"
@@ -137,14 +138,30 @@ gate_work() { # gate_work <confdir> <tmpdir> — reads the request from stdin
 
     # the policy, strictly; and policy_version must compute (AD-19)
     gate_policy_load "$GATE_STATE/gate-policy" "$GATE_OPERATOR" || gate_result "$t" block fault:policy
-    local model sha build digest
+    local model sha build digest pv
     model="$(lane2_conf_file_get "$GATE_FLEET_CONF" FLEET_CLASSIFIER_MODEL)"
     sha="$(lane2_conf_file_get "$GATE_FLEET_CONF" FLEET_CLASSIFIER_SHA256 | tr 'A-F' 'a-f')"
     build="$(lane2_conf_file_get "$GATE_FLEET_CONF" FLEET_RUNTIME_BUILD)"
     [[ -d "$GATE_PREFIX/current" ]] || gate_result "$t" block fault:policy
     digest="$(lane2_tree_digest "$GATE_PREFIX/current" "${LANE2_GATE_CODE[@]}")"
-    gate_policy_version "$GATE_TERM_FILE" "$GATE_PROMPT_FILE" "$model" "$sha" "$build" "$digest" >/dev/null \
+    pv="$(gate_policy_version "$GATE_TERM_FILE" "$GATE_PROMPT_FILE" "$model" "$sha" "$build" "$digest")" \
         || gate_result "$t" block fault:policy
+
+    # --- health op and bulk eval (story 2.6; scripts/lib/gate-health.sh) ------
+    # Neither writes a cache entry, a retained payload, or an operator log line.
+    if [[ "$op" == health ]]; then
+        (( size == 0 )) || gate_result "$t" block fault:protocol
+        gate_health_probes "$GATE_STATE/gate-policy/current" "$GATE_FLEET_CONF"
+        gate_result "$t" "$GATE_HEALTH_VERDICT" "$GATE_HEALTH_REASON" "$GATE_HEALTH_DETAIL"
+    fi
+    if jq -e 'has("manifest")' "$t/header" >/dev/null 2>&1; then
+        (( size == 0 )) || gate_result "$t" block fault:protocol
+        gate_watchdog_disarm      # a bulk eval runs to GATE_EVAL_BUDGET instead
+        gate_eval_manifest "$(jq -r .manifest "$t/header")" "$GATE_STATE" "$layers" "$GATE_FLEET_CONF" \
+            || gate_result "$t" block fault:protocol
+        gate_result "$t" "$GATE_EVAL_VERDICT" "$GATE_EVAL_REASON" \
+            "$(jq -nc --arg c "$GATE_EVAL_CODES" --argjson i "$(gate_eval_inputs "$pv")" '{cases: $c, inputs: $i}')"
+    fi
 
     # eval: each requested layer, reported on its own; no cache, no log
     local floor="" cls="" verdict=allow reason=""
@@ -177,12 +194,14 @@ gate_serve() { # gate_serve <confdir>
     t="${RUNTIME_DIRECTORY:-}"
     [[ -n "$t" && -d "$t" ]] || t="$(mktemp -d)" || { gate_answer block fault:internal; return 0; }
     chmod 700 "$t"
-    rm -f "$t/result"
-    timeout -k 1 "$GATE_DEADLINE" bash "$GATE_HANDLER" --work "$conf" "$t" <&0 || rc=$?
+    rm -f "$t/result" "$t/timeout"
+    # The work keeps its stderr (journal); only the shell's own "Terminated"
+    # notice for a stopped work group is dropped.
+    { timeout -k 1 "$GATE_WORK_LIMIT" bash "$GATE_HANDLER" --work "$conf" "$t" <&0 2>&3; } 3>&2 2>/dev/null || rc=$?
     # Drain what is left of the request (bounded) before answering: closing a
     # socket with unread bytes resets it, and the client would lose the answer.
     timeout 1 head -c "$(( GATE_MAX_REQUEST + GATE_HEADER_MAX + 1 ))" > /dev/null 2>&1 <&0 || true
-    if (( rc == 124 || rc == 137 )); then
+    if (( rc == 124 || rc == 137 )) || [[ -e "$t/timeout" ]]; then
         gate_answer block fault:timeout
     elif [[ -s "$t/result" ]] && jq -e '.verdict == "allow" or .verdict == "block"' "$t/result" >/dev/null 2>&1; then
         gate_answer "$(jq -r .verdict "$t/result")" "$(jq -r .reason "$t/result")" "$(jq -c .detail "$t/result")"

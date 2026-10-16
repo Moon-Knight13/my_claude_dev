@@ -107,6 +107,23 @@ hw_detect_gpu() {
     done
 }
 
+# hw_driver_version — sets HW_DRIVER_VERSION to the kernel GPU driver's version,
+# or "in-tree <kernel>" for an in-tree driver with no version file; empty when
+# there is no GPU driver. Also sets HW_KERNEL_RELEASE; calls hw_detect_gpu.
+# Shared by the eval record and the health check's selection line (story 2.6).
+hw_driver_version() {
+    local kernel v=""
+    hw_detect_gpu || true
+    kernel="$(hw_read "$HW_PROC/sys/kernel/osrelease" || true)"
+    HW_KERNEL_RELEASE="$(hw_clean "$kernel")"
+    if [[ -n "$HW_GPU_DRIVER" ]]; then
+        v="$(hw_read "$HW_SYSFS/module/$HW_GPU_DRIVER/version" || true)"
+        v="$(hw_clean "$v")"
+        [[ -n "$v" || -z "$HW_KERNEL_RELEASE" ]] || v="in-tree $HW_KERNEL_RELEASE"
+    fi
+    HW_DRIVER_VERSION="$v"
+}
+
 # hw_detect_driver — driver readiness for Vulkan compute on the picked card.
 # Needs hw_detect_gpu first. Sets HW_DRV_STATE (ok|fail|unknown), HW_DRV_TEXT.
 hw_detect_driver() {

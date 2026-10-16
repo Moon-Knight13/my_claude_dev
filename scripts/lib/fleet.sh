@@ -23,6 +23,7 @@
 #   fleet_member_model <m>     print member <m>'s model alias (rc 4 if missing)
 #   fleet_call <member> <settings-file> [system-prompt-file] < input
 #                              print the validated model output
+#   fleet_health <member>      rc 0 when the member's /health answers 200
 #   fleet_in_container         rc 0 inside a container
 #
 # Config: one hub config file, default /etc/lane2/fleet.conf. It is parsed,
@@ -159,6 +160,24 @@ _fleet_http() {
 }
 
 _fleet_size() { wc -c < "$1" 2>/dev/null | tr -d ' '; }
+
+# fleet_health <member> — rc 0 when the member's /health answers 200 within
+# FLEET_PROBE_TIMEOUT; 4 config fault, 5 unhealthy or unreachable. No model
+# request: this is the first probe of fleet_call on its own, for `lane2 health`.
+fleet_health() (
+    set +e
+    umask 077
+    local member="$1" probe d code
+    command -v curl >/dev/null 2>&1 || exit 4
+    fleet_load_config || exit 4
+    fleet_member_endpoint "$member" || exit 4
+    probe="$(fleet_conf FLEET_PROBE_TIMEOUT 5)"
+    _fleet_int "$probe" 1 120 || exit 4
+    d="$(mktemp -d)" || exit 4
+    code="$(_fleet_http /health "$probe" - "$d/health" 65536)"
+    rm -rf "$d"
+    [[ "$code" == 200 ]] || exit 5
+)
 
 # fleet_call <member> <settings-file> [system-prompt-file] < input
 # Runs in a subshell so its temp directory is always removed.
