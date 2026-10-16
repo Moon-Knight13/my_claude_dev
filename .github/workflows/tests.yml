@@ -38,9 +38,10 @@ jobs:
         run: |
           set -euo pipefail
           # zsh: the ctp-bridge and guard-stack suites drive the zsh wrapper.
+          # socat: gate_client (the gate suites use a real socket).
           sudo apt-get update -qq
-          sudo apt-get install -y -qq zsh >/dev/null
-          for b in bash jq python3 git script zsh timeout curl; do
+          sudo apt-get install -y -qq zsh socat >/dev/null
+          for b in bash jq python3 git script zsh timeout curl socat perl; do
             command -v "$b" >/dev/null || { echo "::error::missing $b"; exit 1; }
           done
 

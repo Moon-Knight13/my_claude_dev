@@ -1,0 +1,210 @@
+#!/usr/bin/env bash
+# gate-handler — one connection to the gate's hub socket (SP1a story 2.3;
+# AD-1, AD-2, AD-3, AD-20, FR-4, FR-5, FR-10, FR-11, NFR-6).
+#
+# systemd socket activation (gate-hub.socket, Accept=yes) starts one handler per
+# connection under the gate identity, with the connected socket as stdin and
+# stdout. The handler:
+#   1. refuses a peer that is not the operator or a hub service identity;
+#   2. reads ONE request: one header line (at most 4096 bytes), then raw payload
+#      bytes until the client half-closes, at most GATE_MAX_REQUEST bytes;
+#   3. decides in a child process bounded by GATE_DEADLINE;
+#   4. answers ONE line and exits, which closes the connection.
+# Every fault answers block. Nothing it prints names a term.
+#
+#   gate-handler <config dir>                  serve the connection on stdin/stdout
+#   gate-handler --check-config <config dir>   validate GATE_ config; exit 0 or 4
+#                                              (ExecStartPre of gate-hub.socket:
+#                                              invalid deadlines stop the gate)
+#
+# Response: {"v":1,"verdict":"allow"} or {"v":1,"verdict":"block","ref":"gr-…"},
+# plus "detail" (reason, per-layer results) — on this hub socket only.
+#
+# Config: <config dir>/lane2.conf (LANE2_OPERATOR, LANE2_PREFIX,
+# LANE2_STATE_ROOT), gate.conf (GATE_*), fleet.conf (the classifier member).
+# The config dir is the unit's argument; nothing is read from the environment.
+#
+# No `set -e`: the handler must answer whatever happens.
+set -uo pipefail
+
+GATE_HANDLER="$(readlink -f "${BASH_SOURCE[0]}")"
+GATE_HERE="$(dirname "$GATE_HANDLER")"
+# shellcheck source=scripts/lib/lane2.sh
+source "$GATE_HERE/../lib/lane2.sh"
+# shellcheck source=scripts/lib/gate.sh
+source "$GATE_HERE/../lib/gate.sh"
+
+GATE_HEADER_MAX=4096
+GATE_CONTAINER_OPS=(prompt expansion tool_input tool_result)
+GATE_PENDING_OPS=(push git_text mount_scan rescan health)   # later stories
+
+# --- config ------------------------------------------------------------------
+
+gate_load() { # gate_load <confdir> — rc 4 on any unusable value
+    local d="$1"
+    [[ "$d" == /* ]] || return 4
+    lane2_load_config "$d/lane2.conf" || return 4
+    GATE_OPERATOR="$(lane2_conf LANE2_OPERATOR)"
+    GATE_PREFIX="$(lane2_conf LANE2_PREFIX /opt/lane2)"
+    GATE_STATE="$(lane2_conf LANE2_STATE_ROOT /var/lib/lane2)"
+    GATE_FLEET_CONF="$d/fleet.conf"
+    GATE_MAX_REQUEST="$(lane2_conf_file_get "$d/gate.conf" GATE_MAX_REQUEST)"; GATE_MAX_REQUEST="${GATE_MAX_REQUEST:-1048576}"
+    GATE_DEADLINE="$(lane2_conf_file_get "$d/gate.conf" GATE_DEADLINE)"; GATE_DEADLINE="${GATE_DEADLINE:-25}"
+    GATE_SHIM_TIMEOUT="$(lane2_conf_file_get "$d/gate.conf" GATE_SHIM_TIMEOUT)"; GATE_SHIM_TIMEOUT="${GATE_SHIM_TIMEOUT:-28}"
+    GATE_HOOK_TIMEOUT="$(lane2_conf_file_get "$d/gate.conf" GATE_HOOK_TIMEOUT)"; GATE_HOOK_TIMEOUT="${GATE_HOOK_TIMEOUT:-30}"
+    [[ -n "$GATE_OPERATOR" ]] || return 4
+    [[ "$GATE_MAX_REQUEST" =~ ^[1-9][0-9]{0,9}$ ]] || return 4
+    gate_check_deadlines "$GATE_DEADLINE" "$GATE_SHIM_TIMEOUT" "$GATE_HOOK_TIMEOUT" || return 4
+}
+
+# --- peer --------------------------------------------------------------------
+
+# The connecting process's uid, from SO_PEERCRED on the socket on stdin. bash
+# cannot read socket options; perl (perl-base, essential on Ubuntu) can.
+gate_peer_uid() {
+    perl -MSocket -e '
+        my $c = getsockopt(STDIN, SOL_SOCKET, SO_PEERCRED) or exit 1;
+        my ($pid, $uid, $gid) = unpack("lll", $c); print $uid;' 2>/dev/null
+}
+
+gate_peer_allowed() { # gate_peer_allowed <uid>
+    local uid="$1" n u
+    [[ "$uid" =~ ^[0-9]+$ ]] || return 1
+    u="$(getent passwd "$GATE_OPERATOR" | cut -d: -f3)"
+    [[ -n "$u" && "$uid" == "$u" ]] && return 0
+    for n in "${LANE2_SERVICE_IDENTITIES[@]}"; do
+        u="$(getent passwd "$n" | cut -d: -f3)"
+        [[ -n "$u" && "$uid" == "$u" ]] && return 0
+    done
+    return 1
+}
+
+# --- answer ------------------------------------------------------------------
+
+gate_ref() { printf 'gr-%s' "$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"; }
+
+GATE_ANSWERED=""
+gate_answer() { # gate_answer <allow|block> <reason> [detail json]
+    [[ -z "$GATE_ANSWERED" ]] || return 0
+    GATE_ANSWERED=1
+    local d="${3:-}"; [[ -n "$d" ]] || d='{}'
+    if [[ "$1" == allow ]]; then
+        jq -nc --argjson d "$d" '{v: 1, verdict: "allow"} + (if $d == {} then {} else {detail: $d} end)'
+    else
+        jq -nc --arg ref "$(gate_ref)" --arg r "$2" --argjson d "$d" \
+            '{v: 1, verdict: "block", ref: $ref, detail: ({reason: $r} + $d)}'
+    fi
+}
+
+# --- the work (child, bounded by the deadline) -------------------------------
+
+gate_result() { # gate_result <dir> <allow|block> <reason> [detail json]
+    local d="${4:-}"; [[ -n "$d" ]] || d='{}'
+    jq -nc --arg v "$2" --arg r "$3" --argjson d "$d" '{verdict: $v, reason: $r, detail: $d}' > "$1/result.tmp" \
+        && mv -f "$1/result.tmp" "$1/result"
+    exit 0
+}
+
+gate_work() { # gate_work <confdir> <tmpdir> — reads the request from stdin
+    local conf="$1" t="$2" line op layers size rc
+    gate_load "$conf" || gate_result "$t" block fault:config
+    export LC_ALL=C
+
+    # one header line, bounded
+    IFS= read -r -n "$GATE_HEADER_MAX" line || gate_result "$t" block fault:protocol
+    (( ${#line} < GATE_HEADER_MAX )) || gate_result "$t" block fault:protocol
+    printf '%s' "$line" > "$t/header"
+    jq -e 'type == "object" and (.v | type) == "number" and .v == 1 and (.op | type) == "string"' \
+        "$t/header" >/dev/null 2>&1 || gate_result "$t" block fault:protocol
+    op="$(jq -r .op "$t/header")"
+    local o
+    for o in "${GATE_CONTAINER_OPS[@]}" "${GATE_PENDING_OPS[@]}"; do
+        [[ "$op" == "$o" ]] && gate_result "$t" block fault:protocol
+    done
+    [[ "$op" == eval ]] || gate_result "$t" block fault:protocol
+    jq -e '(keys - ["v", "op", "layers"]) == []
+           and (.layers | type) == "array" and (.layers | length) > 0
+           and (.layers | length) == (.layers | unique | length)
+           and all(.layers[]; . == "floor" or . == "classifier")' "$t/header" >/dev/null 2>&1 \
+        || gate_result "$t" block fault:protocol
+    layers="$(jq -r '.layers | join(" ")' "$t/header")"
+
+    # payload until half-close, bounded; over the limit is a block, never truncated
+    head -c "$(( GATE_MAX_REQUEST + 1 ))" > "$t/payload"
+    size="$(wc -c < "$t/payload" | tr -d ' ')"
+    (( size <= GATE_MAX_REQUEST )) || gate_result "$t" block fault:oversize
+    gate_is_text "$t/payload" || gate_result "$t" block fault:non-text
+
+    # the policy, strictly; and policy_version must compute (AD-19)
+    gate_policy_load "$GATE_STATE/gate-policy" "$GATE_OPERATOR" || gate_result "$t" block fault:policy
+    local model sha build digest
+    model="$(lane2_conf_file_get "$GATE_FLEET_CONF" FLEET_CLASSIFIER_MODEL)"
+    sha="$(lane2_conf_file_get "$GATE_FLEET_CONF" FLEET_CLASSIFIER_SHA256 | tr 'A-F' 'a-f')"
+    build="$(lane2_conf_file_get "$GATE_FLEET_CONF" FLEET_RUNTIME_BUILD)"
+    [[ -d "$GATE_PREFIX/current" ]] || gate_result "$t" block fault:policy
+    digest="$(lane2_tree_digest "$GATE_PREFIX/current" "${LANE2_GATE_CODE[@]}")"
+    gate_policy_version "$GATE_TERM_FILE" "$GATE_PROMPT_FILE" "$model" "$sha" "$build" "$digest" >/dev/null \
+        || gate_result "$t" block fault:policy
+
+    # eval: each requested layer, reported on its own; no cache, no log
+    local floor="" cls="" verdict=allow reason=""
+    if [[ " $layers " == *" floor "* ]]; then
+        rc=0; gate_floor_match "$(cat -- "$t/payload")" || rc=$?
+        case "$rc" in 0) floor=hit ;; 1) floor=clear ;; *) floor=fault:policy ;; esac
+    fi
+    if [[ " $layers " == *" classifier "* ]]; then
+        rc=0; gate_classify "$t/payload" "$GATE_FLEET_CONF" || rc=$?
+        case "$rc" in 0) cls=clear ;; 3) cls=hit ;; *) cls="$GATE_FAULT" ;; esac
+    fi
+    if [[ -n "$floor" && "$floor" != clear ]]; then
+        verdict=block; [[ "$floor" == hit ]] && reason=hit:floor || reason="$floor"
+    fi
+    if [[ -z "$reason" && -n "$cls" && "$cls" != clear ]]; then
+        verdict=block; [[ "$cls" == hit ]] && reason=hit:classifier || reason="$cls"
+    fi
+    gate_result "$t" "$verdict" "$reason" \
+        "$(jq -nc --arg f "$floor" --arg c "$cls" \
+            '{layers: ((if $f == "" then {} else {floor: $f} end) + (if $c == "" then {} else {classifier: $c} end))}')"
+}
+
+# --- the connection ----------------------------------------------------------
+
+gate_serve() { # gate_serve <confdir>
+    local conf="$1" t uid rc=0
+    if ! gate_load "$conf"; then gate_answer block fault:config; return 0; fi
+    uid="$(gate_peer_uid)" || uid=""
+    if ! gate_peer_allowed "$uid"; then gate_answer block fault:peer; return 0; fi
+    t="${RUNTIME_DIRECTORY:-}"
+    [[ -n "$t" && -d "$t" ]] || t="$(mktemp -d)" || { gate_answer block fault:internal; return 0; }
+    chmod 700 "$t"
+    rm -f "$t/result"
+    timeout -k 1 "$GATE_DEADLINE" bash "$GATE_HANDLER" --work "$conf" "$t" <&0 || rc=$?
+    # Drain what is left of the request (bounded) before answering: closing a
+    # socket with unread bytes resets it, and the client would lose the answer.
+    timeout 1 head -c "$(( GATE_MAX_REQUEST + GATE_HEADER_MAX + 1 ))" > /dev/null 2>&1 <&0 || true
+    if (( rc == 124 || rc == 137 )); then
+        gate_answer block fault:timeout
+    elif [[ -s "$t/result" ]] && jq -e '.verdict == "allow" or .verdict == "block"' "$t/result" >/dev/null 2>&1; then
+        gate_answer "$(jq -r .verdict "$t/result")" "$(jq -r .reason "$t/result")" "$(jq -c .detail "$t/result")"
+    else
+        gate_answer block fault:internal
+    fi
+    [[ -z "${RUNTIME_DIRECTORY:-}" ]] && rm -rf -- "$t"
+    return 0
+}
+
+gate_handler_main() {
+    case "${1:-}" in
+        --check-config)
+            if gate_load "${2:-}"; then echo "  OK  gate config valid"; exit 0; fi
+            echo " FAIL gate config invalid (deadlines must satisfy gate < shim < hook = 30 s, margins >= 2 s)"
+            exit 4 ;;
+        --work) gate_work "${2:-}" "${3:-}" ;;
+        /*) gate_serve "$1" ;;
+        *) gate_answer block fault:config ;;
+    esac
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    gate_handler_main "$@"
+fi

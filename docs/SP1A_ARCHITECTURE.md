@@ -11,7 +11,8 @@
 > the one model-call client `fleet_call` — [SP1A_FLEET.md](SP1A_FLEET.md);
 > the eval harness with honest reporting — [SP1A_EVAL_HARNESS.md](SP1A_EVAL_HARNESS.md);
 > hub deployment from a merged commit, `lane2 install` — [SP1A_HUB_SETUP.md](SP1A_HUB_SETUP.md);
-> the private policy repository, strict policy loading, and `policy_version` — [SP1A_GATE.md](SP1A_GATE.md).
+> the private policy repository, strict policy loading, and `policy_version`;
+> the gate service and protocol v1 on the hub socket, with `lane2 check` — [SP1A_GATE.md](SP1A_GATE.md).
 
 ## Why
 

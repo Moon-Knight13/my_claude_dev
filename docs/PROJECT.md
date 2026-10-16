@@ -504,8 +504,9 @@ acceptable). What matters if you change it:
   codenames) to neutral placeholders before a prompt reaches Claude, preserving
   the task. It is defense-in-depth on top of the classifier, not the gate: it runs
   **local-only** (refuses a non-local endpoint), and if it cannot sanitise,
-  `ORCH_SANITISE_ON_FAIL` decides — `passthrough` (default: the classifier already
-  cleared the prompt) or `block`. Held line: it de-identifies **data**, it must
+  `ORCH_SANITISE_ON_FAIL` decides — `block` (default since SP1a story 2.3: fail
+  closed) or an explicit `passthrough` (the classifier already cleared the prompt).
+  This reverses the earlier passthrough default. Held line: it de-identifies **data**, it must
   **not** be used to disguise a prohibited **action** as an allowed one. Its
   prompt is tuned/guarded exactly like the classifier's, and marker-stripping is
   measured by `scripts/orchestrator/eval-sanitiser.sh`.

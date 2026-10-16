@@ -239,7 +239,8 @@ pv "$T" "$PR" model "$SHA" latest "$GD" >/dev/null; check "malformed build tag f
 pv "$T" "$PR" model "$SHA" b1234 "" >/dev/null; check "missing gate digest faults" "$?" 4
 chmod 000 "$T"; pv "$T" "$PR" model "$SHA" b1234 "$GD" >/dev/null; check "unreadable term list faults" "$?" 4; chmod 644 "$T"
 GCALLS="$(cd "$ROOT" && grep -rlE 'gate_policy_version' scripts --exclude-dir=tests 2>/dev/null | sort | tr '\n' ' ')"
-check "policy_version computed only by the gate lib and lane2" "$GCALLS" "scripts/hub/lane2 scripts/lib/gate.sh "
+check "policy_version computed only by the gate lib, lane2, and the gate (start of each request)" "$GCALLS" \
+    "scripts/hub/gate-handler scripts/hub/lane2 scripts/lib/gate.sh "
 
 # =============================================================================
 echo "== public-repo hygiene =="

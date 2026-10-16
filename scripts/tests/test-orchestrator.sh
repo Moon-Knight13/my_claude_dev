@@ -104,9 +104,12 @@ check "sanitised prompt reaches claude" "$out" "CLAUDE_GOT:HELLO WORLD"
 # sanitiser fails + block -> refuse handoff (exit 7)
 env "${E[@]}" PATH="$MB:$PATH" ORCH_SANITISER="$FAILSAN" ORCH_SANITISE_ON_FAIL=block bash "$ORCH" --mode CLAUDE-ONLY 'hello' >/dev/null 2>&1; rc=$?
 check "sanitiser fail + block -> exit 7" "$rc" 7
-# sanitiser fails + passthrough (default) -> claude gets the original
-out="$(env "${E[@]}" PATH="$MB:$PATH" ORCH_SANITISER="$FAILSAN" bash "$ORCH" --mode CLAUDE-ONLY 'hello' 2>/dev/null)"
-check "sanitiser fail passthrough -> original" "$out" "CLAUDE_GOT:hello"
+# sanitiser fails + no setting -> fail closed by default (SP1a story 2.3)
+env "${E[@]}" PATH="$MB:$PATH" ORCH_SANITISER="$FAILSAN" bash "$ORCH" --mode CLAUDE-ONLY 'hello' >/dev/null 2>&1; rc=$?
+check "sanitiser fail, default -> blocks (exit 7)" "$rc" 7
+# sanitiser fails + explicit passthrough -> claude gets the original
+out="$(env "${E[@]}" PATH="$MB:$PATH" ORCH_SANITISER="$FAILSAN" ORCH_SANITISE_ON_FAIL=passthrough bash "$ORCH" --mode CLAUDE-ONLY 'hello' 2>/dev/null)"
+check "sanitiser fail + explicit passthrough -> original" "$out" "CLAUDE_GOT:hello"
 # no sanitiser configured -> original reaches claude unchanged
 out="$(env "${E[@]}" PATH="$MB:$PATH" bash "$ORCH" --mode CLAUDE-ONLY 'hello' 2>/dev/null)"
 check "no sanitiser -> original to claude" "$out" "CLAUDE_GOT:hello"

@@ -124,15 +124,16 @@ case "$P_TIER" in
         SEND="$PROMPT"
         # C2 sanitiser (opt-in): strip incidental identifiers before egress. It is
         # defense-in-depth on top of the classifier, not the gate. If it cannot
-        # sanitise, ORCH_SANITISE_ON_FAIL decides: passthrough (default — the
-        # classifier already cleared this prompt) or block.
+        # sanitise, ORCH_SANITISE_ON_FAIL decides: block (default, fail closed —
+        # SP1a story 2.3) or an explicit passthrough (the classifier already
+        # cleared this prompt). Anything but the word passthrough blocks.
         if [[ -n "${ORCH_SANITISER:-}" && -x "${ORCH_SANITISER}" ]]; then
             if _san="$(printf '%s' "$PROMPT" | "$ORCH_SANITISER")" && [[ -n "$_san" ]]; then
                 SEND="$_san"
             else
-                case "${ORCH_SANITISE_ON_FAIL:-passthrough}" in
-                    block) echo "orchestrate.sh: sanitiser failed and ORCH_SANITISE_ON_FAIL=block; refusing handoff" >&2; exit 7 ;;
-                    *)     echo "orchestrate.sh: sanitiser failed; passing original through (classifier already cleared it)" >&2 ;;
+                case "${ORCH_SANITISE_ON_FAIL:-block}" in
+                    passthrough) echo "orchestrate.sh: sanitiser failed; ORCH_SANITISE_ON_FAIL=passthrough, passing original through (classifier already cleared it)" >&2 ;;
+                    *) echo "orchestrate.sh: sanitiser failed; refusing handoff (set ORCH_SANITISE_ON_FAIL=passthrough to send the original)" >&2; exit 7 ;;
                 esac
             fi
         fi
