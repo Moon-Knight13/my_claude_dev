@@ -159,7 +159,8 @@ refuses an invalid held-out split.
 
 `eval-set.sh frozen-check` exits 0 only when the held-out split still matches
 its last freeze record. Every tuning or held-out eval run calls it first and does
-not start otherwise.
+not start otherwise. The eval harness that runs and reports the eval is
+described in [SP1A_EVAL_HARNESS.md](SP1A_EVAL_HARNESS.md).
 
 ### 3. If held-out cases leak into tuning, replace them
 

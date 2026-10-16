@@ -267,7 +267,7 @@ jq -e '.params | has("cache_prompt") and has("id_slot")' "$SETTINGS" >/dev/null 
 jq -e '.max_tokens | type == "number" and . > 0' "$SETTINGS" >/dev/null && ok "max_tokens pinned" || bad "max_tokens missing"
 CALLERS="$(grep -rl 'classifier.settings.json' "$ROOT/scripts/orchestrator" "$ROOT/scripts/hub" | sed "s|$ROOT/||" | sort | tr '\n' ' ')"
 check "every classifier caller uses the one settings file" "$CALLERS" \
-    "scripts/orchestrator/classify-sensitivity.sh scripts/orchestrator/eval-classifier.sh "
+    "scripts/hub/eval-harness.sh scripts/orchestrator/classify-sensitivity.sh scripts/orchestrator/eval-classifier.sh "
 
 # =============================================================================
 echo "== AD-10 lint: model requests only in scripts/lib/fleet.sh =="
