@@ -1,0 +1,17 @@
+[Unit]
+Description=lane2 gate handler (one hub-socket connection)
+
+[Service]
+User=lane2-gate
+Group=lane2-gate
+ExecStart=@LANE2_CODE@/scripts/hub/gate-handler @LANE2_CONFIG@
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+RuntimeDirectory=lane2-gate/%i
+RuntimeDirectoryMode=0700
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+LimitCORE=0

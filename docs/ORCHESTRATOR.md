@@ -589,7 +589,8 @@ reaches it.
   endpoint and refuses a non-local one; it never egresses.
 - **Transform-or-fail** — on model error/timeout/empty rewrite it exits non-zero
   with no output, and the front door applies `ORCH_SANITISE_ON_FAIL`:
-  `passthrough` (default — the classifier already cleared the prompt) or `block`.
+  `block` (default since SP1a story 2.3 — fail closed) or an explicit
+  `passthrough` (the classifier already cleared the prompt).
 - **Held line** — it de-identifies *data*; it must not be used to disguise a
   prohibited *action* as an allowed one (the rewrite is the same work).
 - **Measured, not assumed** — `eval-sanitiser.sh` injects known markers and checks

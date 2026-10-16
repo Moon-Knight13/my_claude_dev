@@ -44,6 +44,8 @@ LANE2_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$LANE2_HERE/../lib/lane2.sh"
 # shellcheck source=scripts/lib/gate.sh
 source "$LANE2_HERE/../lib/gate.sh"
+# shellcheck source=scripts/lib/gate-client.sh
+source "$LANE2_HERE/../lib/gate-client.sh"
 
 # file:// is refused for git; tests that source this script may relax it to
 # fetch from a local bare fixture. A root run cannot change it.
@@ -493,6 +495,35 @@ cmd_verify() {
     return "$rc"
 }
 
+# --- check (story 2.3) -------------------------------------------------------
+
+# lane2 check [--layers floor,classifier] < text — ask the gate's eval op.
+# Prints the verdict, the reason, and each layer's result; never a term.
+# Exit 0 allow, 3 block, 4 a local fault (which is also a block).
+cmd_check() {
+    local layers="floor,classifier" sock dl hdr rc=0
+    while (( $# )); do
+        case "$1" in
+            --layers) layers="${2:-}"; shift 2 || die 2 "usage: lane2 check [--layers floor,classifier]" ;;
+            *) die 2 "usage: lane2 check [--layers floor,classifier] < text" ;;
+        esac
+    done
+    [[ "$layers" =~ ^(floor|classifier)(,(floor|classifier))?$ ]] || die 2 "--layers takes floor, classifier, or both"
+    sock="$(lane2_conf_file_get "$CONFDIR/gate.conf" GATE_HUB_SOCKET)"; sock="${sock:-/run/lane2/gate/hub.sock}"
+    dl="$(lane2_conf_file_get "$CONFDIR/gate.conf" GATE_SHIM_TIMEOUT)"; dl="${dl:-28}"
+    hdr="$(jq -nc --arg l "$layers" '{v: 1, op: "eval", layers: ($l | split(","))}')"
+    gate_client "$sock" "$dl" "$hdr" || rc=$?
+    if (( rc == 4 )); then fail "could not ask the gate (local fault); treat as block"; return 4; fi
+    if (( rc == 0 )); then ok "allow"; else
+        local why ref
+        why="$(jq -r '.detail.reason // "no well-formed answer"' <<<"${GATE_CLIENT_RESPONSE:-null}" 2>/dev/null)" || why="no well-formed answer"
+        ref="$(jq -r '.ref // empty' <<<"${GATE_CLIENT_RESPONSE:-null}" 2>/dev/null)" || ref=""
+        fail "block: ${why:-no well-formed answer}${ref:+ (ref $ref)}"
+    fi
+    jq -r '.detail.layers // {} | to_entries[] | "      \(.key): \(.value)"' <<<"${GATE_CLIENT_RESPONSE:-null}" 2>/dev/null || true
+    return "$rc"
+}
+
 lane2_main() {
     CONFDIR=/etc/lane2
     if [[ "${1:-}" == --config-dir ]]; then
@@ -505,8 +536,8 @@ lane2_main() {
     command -v jq >/dev/null || die 4 "required tool missing: jq"
     case "$cmd" in
         install) lane2_is_root || die 4 "lane2 install must run as root" ;;
-        policy) ;;
-        *) die 2 "usage: lane2 [--config-dir DIR] install <commit> | install --verify | policy update" ;;
+        policy|check) ;;
+        *) die 2 "usage: lane2 [--config-dir DIR] install <commit> | install --verify | policy update | check" ;;
     esac
     lane2_load_config "$CONFDIR/lane2.conf" || die 4 "hub config unreadable: $CONFDIR/lane2.conf"
     common_settings
@@ -516,6 +547,7 @@ lane2_main() {
         policy)
             lane2_is_operator || die 4 "lane2 policy update must run as the operator ($OPERATOR)"
             cmd_policy "$@" ;;
+        check) cmd_check "$@" ;;
     esac
 }
 

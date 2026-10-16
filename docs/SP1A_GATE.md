@@ -1,8 +1,125 @@
 # SP1a gate
 
-The gate is the hub's one sensitivity decision core (AD-1). Story 2.3 adds the
-gate service. This page starts with what has landed: the gate's **policy** and
-the rule that the gate never runs without it.
+The gate is the hub's one sensitivity decision core (AD-1). Every sensitivity
+check asks it, over a fixed protocol, and it answers **allow** or **block** —
+never edited content. Landed so far: the gate's **policy** (Story 2.2) and the
+**gate service on the hub socket** (Story 2.3). The per-session container
+sockets, the cache, and the operator log follow in later stories.
+
+## The gate service
+
+`gate-hub.socket` listens on `/run/lane2/gate/hub.sock` with `Accept=yes`:
+systemd starts one `gate-handler` per connection (`gate-hub@.service`) as
+`lane2-gate`, with `PrivateTmp`, a 0700 runtime directory, `NoNewPrivileges`,
+`ProtectSystem=strict`, `ProtectHome`, and core dumps off. Both units are
+installed by `lane2 install`; the socket starts at boot.
+
+**Peers.** The handler reads the connecting process's uid from the socket
+(`SO_PEERCRED`). Only the operator and the hub service identities are served;
+anyone else gets `block` (`fault:peer`). The socket file is world-connectable on
+purpose — the uid check is the control.
+
+### Protocol v1
+
+One request per connection:
+
+1. one header line, at most 4096 bytes: `{"v":1,"op":"eval","layers":["floor","classifier"]}`
+2. the payload: raw bytes until the client half-closes, at most `GATE_MAX_REQUEST`
+3. one answer line, then the connection closes:
+   - `{"v":1,"verdict":"allow"}`
+   - `{"v":1,"verdict":"block","ref":"gr-<32 hex>"}`
+
+On this hub socket the answer also carries `detail`: the reason and per-layer
+results. Container sockets (later) never carry `detail`.
+
+| Op on the hub socket | Now |
+|---|---|
+| `eval` | Implemented: runs each requested layer, reports each; no cache, no log |
+| `push`, `git_text`, `mount_scan`, `rescan`, `health` | `block` (`fault:protocol`) until their stories add them |
+| `prompt`, `expansion`, `tool_input`, `tool_result` | `block` (`fault:protocol`): container ops, never on the hub socket |
+
+A malformed header, a missing or unknown `v`, an unknown op, an extra header
+field, a header without a newline or over 4096 bytes: `block` (`fault:protocol`).
+A payload over `GATE_MAX_REQUEST` is `fault:oversize` and is never truncated. A
+payload that is not valid UTF-8 or contains a NUL byte is `fault:non-text`,
+decided by the gate and never transcoded.
+
+### Floor OR classifier
+
+1. **Floor:** the policy's term list, matched case-insensitively at word
+   boundaries (`gate_floor_match`). A hit blocks with `hit:floor`; the
+   classifier is not called. The answer never says which term matched.
+2. **Classifier:** only on a clear floor. The call goes only through
+   `fleet_call` to the classifier member's loopback endpoint with the pinned
+   settings file, and its request body is the production one
+   (`classify-sensitivity.sh`). `sensitive` blocks with `hit:classifier`. The
+   classifier input carries nothing from the floor result, and a clear floor
+   never turns a `sensitive` into allow.
+
+Content over the classifier's context blocks with `fault:oversize` until Story
+2.7 adds chunking.
+
+### Faults — every one is a block
+
+| Case | Reason |
+|---|---|
+| Classifier error, loading (503), unavailable, malformed, unparseable, partial, or truncated answer, non-local endpoint | `fault:classifier` |
+| Input over `GATE_MAX_REQUEST` or over the classifier context | `fault:oversize` |
+| Gate deadline exceeded | `fault:timeout` |
+| Gate policy missing, empty, unreadable; a `policy_version` input missing | `fault:policy` |
+| Not valid UTF-8, or a NUL byte | `fault:non-text` |
+| Bad framing, unknown or unavailable op | `fault:protocol` |
+| Peer not the operator or a hub service | `fault:peer` |
+| Invalid `GATE_` config | `fault:config` |
+| Handler work crashed without an answer | `fault:internal` |
+| Handler died or socket missing | no answer — the client blocks |
+
+### Deadlines
+
+`/etc/lane2/gate.conf`:
+
+```bash
+GATE_HUB_SOCKET=/run/lane2/gate/hub.sock
+GATE_MAX_REQUEST=1048576
+GATE_DEADLINE=25        # the gate answers fault:timeout by then
+GATE_SHIM_TIMEOUT=28    # callers give up after this
+GATE_HOOK_TIMEOUT=30    # Claude Code's hook timeout; must be 30
+```
+
+`GATE_DEADLINE < GATE_SHIM_TIMEOUT < GATE_HOOK_TIMEOUT = 30`, each margin at
+least 2 s. `gate-hub.socket` runs `gate-handler --check-config` before it
+starts: invalid deadlines stop the gate. A handler that finds them invalid
+answers `fault:config`.
+
+### The client rule
+
+Every hub caller uses `gate_client` (`scripts/lib/gate-client.sh`). Only a
+well-formed `{"v":1,"verdict":"allow"}` within the caller's deadline is an allow.
+Anything else — empty, malformed, oversized, trailing data, timeout, socket
+missing, unknown `v` — is a block (exit 3; exit 4 for a local fault, also a
+block). A block is never retried into an allow. The input is streamed whole:
+never truncated, sampled, or split.
+
+### `lane2 check`
+
+```bash
+printf '%s' "text to check" | scripts/hub/lane2 check [--layers floor,classifier]
+```
+
+Asks the gate's `eval` op. Prints `OK allow`, or `FAIL block: <reason> (ref gr-…)`,
+and each layer's result (`hit`, `clear`, or a fault). Never prints a term. Exit 0
+allow, 3 block, 4 local fault. Refuses inside a container. Writes no cache entry
+and no log line.
+
+### Tests
+
+- `scripts/tests/test-gate-protocol.sh` and `test-gate-faults.sh` (tier `ci`):
+  the real handler behind a real unix socket, the llama-server mock as the
+  classifier, synthetic terms — every framing case, every fault above, the
+  floor-never-clears test, the body-equality test, the no-sanitiser lint, and
+  the client's fail-closed cases.
+- `scripts/tests/test-gate-hub.sh` (tier `hub`): real socket activation, the real
+  peer check, and the real classifier. `sudo LANE2_HUB_TEST=1 bash scripts/tests/test-gate-hub.sh`.
 
 ## Policy repository
 
