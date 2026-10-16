@@ -42,9 +42,14 @@ domain, and an optional IP — then:
   generating `~/.ssh/id_ed25519_<user>_<machine>` only when there is nothing to reuse — a
   second, unregistered key would compete for position in agent order, which is the fault
   the identity check below exists to catch;
-- writes an idempotent `~/.ssh/config` `Host` block with `IdentityFile` and `ForwardAgent` (**outside the repo**);
+- writes an idempotent `~/.ssh/config` `Host` block with `IdentityFile` and **`ForwardAgent no`** (**outside the repo**).
+  The box account is shared, so agent forwarding and the local-model reverse tunnel are **opt-in**:
+  `SCOPE_AGENT=true SCOPE_AGENT_KEYS="…"` forwards only the listed keys (OpenSSH ≥ 8.9; older clients get no
+  forwarding), `FORWARD_AGENT=all` forwards every agent key (needed to deploy from the box until the
+  required keys are known), and `LOCAL_MODEL_TUNNEL=true` adds the tunnel. For onward hops prefer
+  `ssh -J <alias> <next-host>` (ProxyJump). A re-run warns if an older block still forwards;
 - runs `ssh-copy-id` so login is passwordless — **your box password is entered live, once, and never stored**;
-- installs the VSCode **Remote-SSH** extension and sets `remote.SSH.useExecServer=false` + agent forwarding;
+- installs the VSCode **Remote-SSH** extension and sets `remote.SSH.useExecServer=false`, and switches VSCode agent forwarding on only if you opted in above (it is a global VSCode setting, so it is never forced off);
 - prints a reminder to add your **public** key to the git server;
 - **verifies which identity the git server actually returns**, from this machine and from the
   box, and pins the box to the right key only if the two disagree. A wrong key authenticates

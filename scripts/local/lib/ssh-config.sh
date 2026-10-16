@@ -109,3 +109,51 @@ ssh_write_managed_block() {
     fi
     rm -f "$tmp"
 }
+
+# --- Agent-forwarding policy (issue #86) --------------------------------------
+# The box account is shared and everyone on it has sudo, so a forwarded agent is
+# usable by every colleague for the life of the session. Forwarding is therefore
+# OFF unless the developer asks for it, and a request that cannot be honoured as
+# asked degrades to "no" — never silently to "yes".
+
+# Decide the ForwardAgent value.
+# Args: <mode> <scoped_sock> <ssh_major> <ssh_minor>
+#   mode: "" or no (default) | scoped (SCOPE_AGENT=true) | all (FORWARD_AGENT=all)
+#   scoped_sock: socket path of the scoped agent (used only for mode=scoped)
+# Prints: no | yes | <socket path>
+ssh_forward_value() {
+    local mode="${1:-no}" sock="${2:-}" major="${3:-0}" minor="${4:-0}"
+    case "$mode" in
+        all) echo "yes" ;;
+        scoped)
+            if [[ -n "$sock" ]] && (( major > 8 || (major == 8 && minor >= 9) )); then
+                echo "$sock"
+            else
+                echo "no"
+            fi ;;
+        *) echo "no" ;;
+    esac
+}
+
+# Emit a fresh Host block. The local-model tunnel line is included only when the
+# caller passes one (the tunnel is opt-in: LOCAL_MODEL_TUNNEL=true).
+# Args: <alias> <host> <hostname> <user> <key> <forward_value> [tunnel_line]
+ssh_host_block() {
+    printf '\nHost %s %s\n' "$1" "$2"
+    printf '  HostName %s\n' "$3"
+    printf '  User %s\n' "$4"
+    printf '  IdentityFile %s\n' "$5"
+    printf '  ForwardAgent %s\n' "$6"
+    if [[ -n "${7:-}" ]]; then printf '%s\n' "$7"; fi
+}
+
+# Report risky directives already in the developer's own Host block for this box,
+# so a re-run can warn about defaults this script no longer writes.
+# Args: <alias> <host>   Reads config text on stdin.
+# Prints one finding per line: "ForwardAgent yes" and/or the RemoteForward line.
+ssh_risky_directives() {
+    _ssh_matching_directives "$1" "$2" | _ssh_norm | awk '
+        tolower($1)=="forwardagent" && tolower($2)=="yes" { print "ForwardAgent yes" }
+        tolower($1)=="remoteforward"                     { print }
+    '
+}
