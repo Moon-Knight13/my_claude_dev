@@ -78,7 +78,7 @@ if gh auth status >/dev/null 2>&1; then
         echo "  >>  gh authenticated — applying GitHub repo settings (bootstrap-github-settings.sh)…"
         # ADMIN_BYPASS=true: give repo admins a break-glass bypass so the owner of a
         # freshly auto-configured repo is never locked out of their own default branch
-        # (e.g. merging the first template-sync PR). Manual callers keep the script's
+        # (e.g. merging the first PR). Manual callers keep the script's
         # stricter default of no bypass.
         APPLY=true ADMIN_BYPASS=true bash scripts/bootstrap-github-settings.sh \
             || echo "  !!  bootstrap-github-settings.sh failed (continuing)"

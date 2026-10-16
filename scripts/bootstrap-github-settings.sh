@@ -17,8 +17,8 @@ IFS=$'\n\t'
 # Also applies repo-level settings: merge hygiene (squash/rebase only,
 # auto-delete branches). "Allow GitHub Actions to create and approve pull
 # requests" is OPT-IN (default OFF) since it can bypass human PR review; enable
-# it with ALLOW_ACTIONS_PR_APPROVAL=true when the template-sync workflow (or
-# other PR-creating automation) needs bot approval.
+# it with ALLOW_ACTIONS_PR_APPROVAL=true when PR-creating automation needs bot
+# approval.
 #
 # Safe by default: dry-run unless APPLY=true, targets the default branch (or the
 # BRANCH override, once REQUIRE_DEFAULT_BRANCH=false unlocks it), and refuses to
@@ -221,7 +221,7 @@ gh api \
 # Allow GitHub Actions to create and approve pull requests. OPT-IN, default OFF:
 # letting Actions approve PRs can bypass the human-in-the-loop review gate on
 # main, so we do NOT enable it automatically. Set ALLOW_ACTIONS_PR_APPROVAL=true
-# to opt in (e.g. for repos whose template-sync flow relies on bot approval).
+# to opt in (e.g. for repos whose PR automation relies on bot approval).
 # This endpoint only accepts PUT (PATCH 404s); the body is partial, so the
 # repo's default_workflow_permissions is kept. Tolerate only a policy-lock
 # 404 (the field is already enforced at the account level); any other failure

@@ -30,7 +30,7 @@ Rules:
 --------------------------------------------------------------------------------
 Owner note — privacy of THIS file:
 
-This shipped default is **committed and public** (and template-synced). Keep it
+This shipped default is **committed and public**. Keep it
 **generic** — never put real organisation-specific sensitive examples here.
 
 Tune your real classifier prompt in a PRIVATE on-box copy:
