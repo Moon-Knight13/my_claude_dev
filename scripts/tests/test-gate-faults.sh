@@ -66,7 +66,7 @@ echo "== handler faults =="
 gf_conf "GATE_DEADLINE=29"; blocks "invalid deadlines at request time" fault:config; gf_conf
 OUT="$(printf '{"v":1,"op":"eval","layers":["floor"]}\nx' | bash "$GF_HANDLER" "$CONF" 2>/dev/null)"
 check "a peer that is not a socket (unknown uid): block" "$(jq -r .verdict <<<"$OUT")" block
-check "  reason fault:peer" "$(jq -r .detail.reason <<<"$OUT")" "fault:peer"
+check "  reason_category fault:peer (opaque block)" "$(jq -r .detail.reason_category <<<"$OUT")" "fault:peer"
 PA() { bash -c 'source "$1"; gate_load "$2" >/dev/null; gate_peer_allowed "$3"' _ "$GF_HANDLER" "$CONF" "$1"; }
 PA "$(id -u)" && ok "the operator is an allowed peer" || bad "operator refused"
 PA 0 && bad "root accepted as a peer" || ok "root is not an allowed peer"
@@ -75,7 +75,7 @@ PA 65534 && bad "nobody accepted as a peer" || ok "another account is refused"
 CRASH="$TMP/crash.sh"; printf 'exit 1\n' > "$CRASH"
 OUT="$(printf '{"v":1,"op":"eval","layers":["floor"]}\nx' | \
     bash -c 'source "$1"; gate_peer_uid() { id -u; }; GATE_HANDLER="$3"; gate_serve "$2"' _ "$GF_HANDLER" "$CONF" "$CRASH" 2>/dev/null)"
-check "work crashes without an answer: fault:internal block" "$(jq -r '"\(.verdict) \(.detail.reason)"' <<<"$OUT")" "block fault:internal"
+check "work crashes without an answer: fault:internal block" "$(jq -r '"\(.verdict) \(.detail.reason_category)"' <<<"$OUT")" "block fault:internal"
 
 echo "== deadline validation at gate start =="
 cfg() { gf_conf "$@"; bash "$GF_HANDLER" --check-config "$CONF" >/dev/null 2>&1; echo $?; }

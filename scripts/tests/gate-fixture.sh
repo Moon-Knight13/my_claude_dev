@@ -21,7 +21,9 @@ gf_setup() {
     TMP="$(mktemp -d)"
     trap 'gf_teardown' EXIT
     CONF="$TMP/etc"; STATE="$TMP/state"; PREFIX="$TMP/opt"; MS="$TMP/mock"; SOCK="$TMP/hub.sock"
-    mkdir -p "$CONF" "$STATE/gate-policy/trees/p1" "$PREFIX/c1/scripts/lib" "$MS" "$TMP/bin"
+    mkdir -p "$CONF" "$STATE/gate-policy/trees/p1" "$PREFIX/c1/scripts/lib" "$MS" "$TMP/bin" \
+             "$STATE/gate-store" "$STATE/operator-log" "$STATE/events"
+    chmod 700 "$STATE/gate-store"
     cp "$GF_ROOT/scripts/lib/gate.sh" "$PREFIX/c1/scripts/lib/gate.sh"; ln -s c1 "$PREFIX/current"
     printf '# synthetic\nzzalpha\nzzbravo\n' > "$STATE/gate-policy/trees/p1/term-list.txt"
     printf 'Classify the text. Reply with the JSON verdict.\n' > "$STATE/gate-policy/trees/p1/classifier-prompt.md"
@@ -35,7 +37,8 @@ gf_setup() {
         export PATH="$TMP/bin:$PATH"
     fi
     gf_conf
-    python3 "$GF_ROOT/scripts/tests/accept-socket.py" "$SOCK" bash "$GF_HANDLER" "$CONF" & GF_PIDS+=($!)
+    # Handler stderr stands in for the journal (the marker scan reads it).
+    python3 "$GF_ROOT/scripts/tests/accept-socket.py" "$SOCK" bash "$GF_HANDLER" "$CONF" 2>"$TMP/handler.err" & GF_PIDS+=($!)
     for (( i = 0; i < 50; i++ )); do [[ -S "$SOCK" ]] && break; sleep 0.1; done
     # shellcheck source=/dev/null
     source "$GF_ROOT/scripts/lib/gate-client.sh"
@@ -69,9 +72,9 @@ gf_ask() {
     hdr="$(jq -nc --arg l "$1" '{v: 1, op: "eval", layers: ($l | split(","))}')"
     RC=0; gate_client "$SOCK" 20 "$hdr" < <(printf '%s' "$2") || RC=$?
     RESP="$GATE_CLIENT_RESPONSE"
-    REASON="$(jq -r '.detail.reason // ""' <<<"${RESP:-null}" 2>/dev/null)"
+    REASON="$(jq -r '.detail.reason // .detail.reason_category // ""' <<<"${RESP:-null}" 2>/dev/null)"
 }
 
 # gf_raw <mode> < bytes — a raw connection (gate-raw-client.py).
 gf_raw() { python3 "$GF_ROOT/scripts/tests/gate-raw-client.py" "$SOCK" "$1"; }
-gf_reason_of() { jq -r '.detail.reason // ""' <<<"$1" 2>/dev/null | head -1; }
+gf_reason_of() { jq -r '.detail.reason // .detail.reason_category // ""' <<<"$1" 2>/dev/null | head -1; }
