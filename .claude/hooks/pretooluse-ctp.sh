@@ -10,6 +10,13 @@
 #           wrapper for the agent path).
 #   (silent exit 0) — no opinion; other permissions decide.
 #
+# FAIL CLOSED (issue #87). This is the agent path: if the guard stack cannot be
+# found or its required layers cannot load, nothing can be classified, so every
+# call this hook sees is DENIED with a reason that says how to fix it. Any other
+# unexpected failure exits 2, which Claude Code treats as blocking; a plain
+# non-zero exit would be a non-blocking error, i.e. fail open. The operator path
+# (running ctp-bridge by hand) does not go through this hook and is unaffected.
+#
 # The wrapper re-classifies from its own argv and is authoritative on the run;
 # this hook is defense in depth plus the human prompt. Boundary values come from
 # the config file, never from the caller's environment.
@@ -19,6 +26,16 @@
 # point #1: it parses the tool call, asks the stack for a verdict, and renders that
 # verdict in the hook's JSON protocol. It decides nothing on its own.
 set -euo pipefail
+# Any command failure under `set -e` would otherwise exit non-zero-but-not-2,
+# which Claude Code does not treat as a block. Turn it into a blocking exit.
+trap 'echo "pretooluse-ctp: guard hook failed unexpectedly; denying this call (fail closed)" >&2; exit 2' ERR
+
+# Deny without the stack (emit() below needs nothing from it either, but is
+# defined after the stack loads; keep this self-contained).
+_deny_unavailable() {
+    printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\n' "$1"
+    exit 0
+}
 
 _HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Installed at user scope (~/.claude/hooks) on the box, but also runs from the
@@ -33,12 +50,14 @@ _find_stack() {
     done
     return 1
 }
-_STACK="$(_find_stack)" || exit 0   # no stack, no opinion (fail open to other perms)
+_STACK="$(_find_stack)" \
+    || _deny_unavailable "ctp guard stack not found, so this call cannot be checked and is denied (fail closed). Install it with: bash scripts/install-ctp-bridge.sh"
 # shellcheck source=scripts/lib/guard-stack.sh disable=SC1091
 source "$_STACK"
-# Required layers missing ⇒ we cannot classify anything, so hold no opinion and
-# let the other permissions decide — exactly as a missing guard lib always did.
-guard_stack_load hook || exit 0
+# Required layers missing ⇒ we cannot classify anything, so deny rather than let
+# the call through unchecked.
+guard_stack_load hook \
+    || _deny_unavailable "ctp guard stack is incomplete (a required layer failed to load), so this call is denied (fail closed). Reinstall with: bash scripts/install-ctp-bridge.sh"
 
 emit() { # emit <allow|deny|ask> <reason>
     printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"%s","permissionDecisionReason":"%s"}}\n' \
