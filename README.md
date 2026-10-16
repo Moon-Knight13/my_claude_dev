@@ -194,6 +194,8 @@ the on-box safety harness in action.
 Served from [`docs/explainer/`](docs/explainer/index.html); the page is self-contained, so
 you can also open the HTML locally.
 
+**Planned (not yet built):** [docs/SP1A_ARCHITECTURE.md](docs/SP1A_ARCHITECTURE.md) — the SP1a trust core design (sensitivity gate, local model fleet, gated per-session Claude container); design accepted 2026-10-16.
+
 ## Prerequisites
 
 **Laptop (to connect):** VS Code with the Remote-SSH extension · an SSH client · a GitLab
