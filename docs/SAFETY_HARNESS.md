@@ -52,6 +52,7 @@ provisioned:
         │  PreToolUse hook  ~/.claude/hooks/            │
         │  pretooluse-ctp.sh   (fires BEFORE the tool)  │
         │                                               │
+        │   • guard stack absent → deny  (fail closed)  │
         │   • guarded path?      → deny  (secret / PII) │
         │   • bare ctp / docker? → deny  (use bridge)   │
         │   • ctp bridge call?   → ask   (human confirm)│
@@ -69,7 +70,11 @@ provisioned:
 ```
 
 The PreToolUse hook runs **outside** the agent's own command, so the agent cannot
-edit or disable it. Its boundary values come from a gitignored on-box config file
+edit or disable it. It **fails closed**: if its guard stack is missing or a
+required layer cannot load, every call it sees is denied with a reason telling
+you to run `bash scripts/install-ctp-bridge.sh`, and any unexpected hook error
+exits 2 (Claude Code's blocking code) rather than letting the call through. Only
+the agent path is affected; running `ctp-bridge` yourself does not use the hook. Its boundary values come from a gitignored on-box config file
 (`~/.ctp-bridge.conf`), never from the agent's environment — an agent that could
 set an env var in the same call could otherwise rewrite its own limits.
 
