@@ -15,6 +15,14 @@ units that serve the models (`llama-server` under systemd, pinned and
 checksum-verified) are Story 1.2. Until then, point the fleet config at a
 `llama-server` you started yourself.
 
+## Install
+
+Fleet units are installed only by `lane2 install` from a merged commit
+([SP1A_HUB_SETUP.md](SP1A_HUB_SETUP.md)), never by hand from a checkout. Story 1.2
+ships them in `scripts/hub/units/` as `fleet-<member>.service`; each runs as its
+own identity (`lane2-fleet-orchestrator`, `lane2-fleet-classifier`), is
+boot-enabled with `Restart=on-failure`, and is rendered from the installed tree.
+
 ## How a call works
 
 ```bash
