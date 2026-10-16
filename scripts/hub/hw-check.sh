@@ -193,8 +193,11 @@ hwcheck_main() {
             '[.classes[] | select(.min_gpu_mem_gb <= $g)] | max_by(.min_gpu_mem_gb)
              | "\(.name) (>= \(.min_gpu_mem_gb) GB usable GPU memory)"' <<<"$T")"
         say "recommended downloads:"
+        # ($g * 10 | round) / 10 makes $g a computed number: jq 1.7 prints a
+        # --argjson literal as given ("41.0"), jq 1.6 canonicalises it ("41").
         while IFS= read -r line; do say "$line"; done < <(jq -r --argjson g "$gtt_gb" '
             . as $t
+            | (($g * 10 | round) / 10) as $g
             | ("orchestrator", "classifier") as $r
             | [$t.models[] | select(.role == $r)] as $rows
             | ([$rows[] | select(.need_gpu_mem_gb <= $g)] | max_by(.need_gpu_mem_gb)) as $pick
