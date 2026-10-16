@@ -1,21 +1,10 @@
 #!/usr/bin/env bash
-# Project-specific container setup — the derivative's extension point.
+# Project-specific container setup — the project's extension point.
 #
-# Every other entry in devcontainer.json's postStartCommand is template-owned,
-# which leaves a derivative with nowhere to run its own start-time setup:
-# editing devcontainer.json downstream works until the next template-sync
-# reverts it (`-X theirs`), and adding devcontainer.json to .templatesyncignore
-# would sever the channel that carries devcontainer security fixes downstream.
-# This script exists so that dilemma does not arise.
-#
-# The template ships it as a no-op. To use it in a derivative:
-#
-#   1. Replace the body below with whatever your project needs at container
-#      start (extra runtime deps, symlinks, fetching a fixture, …).
-#   2. Add `scripts/project-setup.sh` to .templatesyncignore so sync stops
-#      proposing the template's no-op version. Do this only AFTER the file
-#      exists locally — listing a path sync has not delivered yet means it
-#      never arrives, and postStartCommand then dies with exit 127.
+# The last entry in devcontainer.json's postStartCommand, so start-time setup
+# has one home instead of growing devcontainer.json. Ships as a no-op: replace
+# the body below with whatever the project needs at container start (extra
+# runtime deps, symlinks, fetching a fixture, …).
 #
 # Two constraints worth respecting:
 #

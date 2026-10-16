@@ -192,7 +192,7 @@ still need a human are the interactive auth flows.
 | Populate CODEOWNERS | `setup-day0.sh` derives the owner from the git remote (warns if it looks like an org — orgs need `@org/team`, not a bare `@org`) |
 | Claude plugins | postStartCommand; `setup-day0.sh` re-installs any missing plugin on re-run |
 | Apply GitHub branch-protection ruleset | `setup-day0.sh`, best-effort **once gh is authenticated** (passes `ADMIN_BYPASS=true` so admins keep a break-glass bypass) |
-| Allow Actions to create/approve PRs | `bootstrap-github-settings.sh` (applied with the ruleset; needed by template-sync) |
+| Allow Actions to create/approve PRs | `bootstrap-github-settings.sh`, opt-in with `ALLOW_ACTIONS_PR_APPROVAL=true` |
 | Create the Kanban board | `setup-day0.sh`, best-effort **once gh has the `project` scope** |
 
 The two GitHub bootstraps need auth (below), so they apply on the **re-run** of
@@ -215,7 +215,6 @@ If gh was already logged in without the Projects scope, add it with
 
 | Step | Command | Notes |
 |------|---------|-------|
-| Add `TEMPLATE_SYNC_TOKEN` secret | Fine-grained PAT: contents + pull requests + workflows write | Only needed when a template-sync PR changes `.github/workflows/` files; falls back to `GITHUB_TOKEN` otherwise |
 | Install Ollama | See [Ollama docs](https://ollama.com) | Only needed for local model routing; `check-day0.sh` reports it as a non-blocking WARN when unreachable |
 
 The manual bootstrap commands remain available as a fallback:
@@ -382,20 +381,13 @@ Switching one off does two things:
    start does not reinstall what you removed.
 
 It does **not** delete anything — delete the files yourself once the switch is
-off. `template.conf` is listed in `.templatesyncignore`, so sync never
-overwrites your choices.
+off.
 
 ### Why this exists
 
-The validator's required-file list used to be flat, and the validator is itself
-template-owned. A derivative that deleted a subsystem it never used went red in
-CI, and could not fix it locally because the next sync reverted the edit. The
-only escape was to ignore-list the validator, which then froze it against real
-upstream fixes. Worse, `.devcontainer/devcontainer.json` and `CLAUDE.md` wire
-those subsystems in, and ignore-listing *those* would sever the channel that
-carries devcontainer security fixes downstream — the main reason to keep the
-sync at all. Subsystem switches let a derivative decline a subsystem without
-giving up anything it still wants.
+The validator's required-file list used to be flat, so deleting a subsystem you
+never used turned CI red. Subsystem switches let you decline a subsystem and keep
+the validator, `devcontainer.json`, and `CLAUDE.md` coherent.
 
 ### Deciding whether you actually use one
 
@@ -406,13 +398,6 @@ giving up anything it still wants.
   cost is not disk: its skill descriptions load into the system prompt of
   every session in the repo.
 - **Board** — cheap to keep; it costs nothing per session unless invoked.
-
-### Existing derivatives
-
-`template.conf` reaches an existing derivative through a normal sync PR. Add
-`template.conf` to that repo's own `.templatesyncignore` in the same PR,
-otherwise a later sync will reset the choices to the template's all-on
-defaults.
 
 ## BMAD Workflow
 
@@ -545,9 +530,9 @@ See [docs/AI_ROUTING_POLICY.md](AI_ROUTING_POLICY.md) and `scripts/route-model.s
 ## What Propagates vs Manual Setup
 
 Propagates from template files:
-- workflows, scripts, docs, pre-commit config — kept up to date after repo
-  creation by the template-sync workflow (see
-  [Template Updates](#template-updates-downstream-sync))
+- workflows, scripts, docs, pre-commit config — a one-time snapshot; this repo
+  no longer syncs with the template (see
+  [Template Updates — detached](#template-updates--detached))
 
 Automatic per new repository (on container start, via `scripts/setup-day0.sh`):
 - copy `.env` + `.claude/settings.json` from the shipped examples
@@ -575,87 +560,38 @@ Manual per new repository:
 - Keep tool pins explicit in scripts and workflows.
 - Accept upgrades through reviewed pull requests (Dependabot or manual).
 
-## Template Updates (Downstream Sync)
+## Template Updates — detached
 
-GitHub templates are one-time snapshots: a fix landing in this repo does not
-reach repos already created from it. The `template-sync` workflow
-(`.github/workflows/template-sync.yml`) closes that gap. It ships with the
-template, so every derived repo carries it from day one; weekly (and on manual
-`workflow_dispatch`) it pulls the template's `main` and opens a PR labeled
-`template-sync` containing the diff — reviewed and merged like any other PR.
-The template repo itself skips the job via a repository guard.
+This repository was created from `Moon-Knight13/claude_template_repo` and is
+**no longer synced with it** (detached 2026-10-16). The weekly `template-sync`
+workflow, `.templatesyncignore`, and `scripts/adopt-template-sync.sh` are
+removed. Every file here is owned by this repository; nothing upstream can
+overwrite it.
 
-What syncs and what doesn't:
-- Files listed in `.templatesyncignore` (README.md, CODEOWNERS, .env.example,
-  LICENSE) are never overwritten; extend that file with any project paths that
-  should stay divergent. Each repo owns its copy — the ignore file itself is
-  not synced.
-- Files that exist only in the derived repo (your source tree) are never
-  touched.
+Why: this repo diverged too far (local orchestrator, SP1a) for a sync to be
+reviewable, and the sync merged with `-X theirs`, so on any line both repos had
+changed it proposed the template's version — a standing risk to this repo's
+security rules.
 
-### Conflict behavior — read before merging a sync PR
+To take a specific template fix, copy it by hand in a reviewed PR:
 
-The sync merges with `-X theirs`: when you and the template edited the **same
-lines** of a synced file, the sync PR arrives with the **template's version —
-silently proposing to revert your local edit**. Nothing blocks and there are no
-conflict markers; the only signal is the PR diff itself. So review sync PRs
-specifically for unexpected reverts of local customizations. Edits to
-*different* lines or files merge cleanly and both survive.
-
-This default is deliberate: the sync uses squash merges, so git records no
-merge base, and without `-X theirs` every previously resolved divergence would
-re-conflict on every future sync. Handle divergence by kind:
-- **Transient** (you fixed something the template later fixed differently):
-  accept the template version, or edit the sync PR branch before merging.
-- **Permanent** (intentional per-project customization of a template file):
-  add the path to `.templatesyncignore` so it stops being proposed at all.
-- **Conflict-heavy sync** (too tangled to review as a diff): close the sync PR
-  and do a real merge locally with full conflict markers —
-  `git remote add template https://github.com/Moon-Knight13/claude_template_repo`
-  (once), then `git fetch template && git merge template/main` (add
-  `--allow-unrelated-histories` the first time). After that first merge, git
-  has a recorded base and future manual merges are incremental.
-
-Setup per derived repo (one-time):
-- Enable Settings > Actions > General > Workflow permissions >
-  "Allow GitHub Actions to create and approve pull requests".
-- The default `GITHUB_TOKEN` is sufficient until a sync PR needs to change
-  files under `.github/workflows/`. `GITHUB_TOKEN` can **never** push workflow
-  files — this is a GitHub platform restriction: there is no `workflows:` key
-  for the workflow `permissions:` block, and the repository "Read and write
-  permissions" setting does not lift it either. For that case, add a
-  fine-grained PAT (contents: write, pull requests: write, workflows: write,
-  scoped to the repo) as the `TEMPLATE_SYNC_TOKEN` secret; the workflow falls
-  back to `GITHUB_TOKEN` when the secret is absent. A preflight step in the
-  workflow detects this case and fails fast with these instructions before
-  attempting the sync. If you mint tokens through your own GitHub App instead,
-  the app needs Workflows: Read and write, then reinstall/approve the updated
-  app permissions on the repo.
-
-Repos created before the workflow existed can retrofit it by copying
-`.github/workflows/template-sync.yml` and `.templatesyncignore` from this
-template, then following the token setup above.
+```bash
+git remote add template https://github.com/Moon-Knight13/claude_template_repo  # once
+git fetch template
+git diff HEAD template/main -- <path>     # inspect, then apply what you want
+```
 
 ### Project-specific container setup — `scripts/project-setup.sh`
 
-Every entry in `devcontainer.json`'s `postStartCommand` is template-owned, so a
-derivative that needs its own start-time setup used to face a bad choice: edit
-`devcontainer.json` downstream and watch the next sync revert it, or add
-`devcontainer.json` to `.templatesyncignore` and sever the channel that carries
-devcontainer **security** fixes. Neither is acceptable, so the chain ends with a
-hook the derivative owns:
+The `postStartCommand` chain ends with a project hook, so start-time setup has
+one obvious home instead of growing `devcontainer.json`:
 
 ```
 … && bash scripts/setup-day0.sh && bash scripts/project-setup.sh
 ```
 
-The template ships `scripts/project-setup.sh` as a no-op. To use it:
-
-1. Replace its body with what your project needs at container start.
-2. Add `scripts/project-setup.sh` to `.templatesyncignore`, so sync stops
-   proposing the no-op back. **Only after the file exists locally** — listing a
-   path sync has not yet delivered means it never arrives, and the hook then
-   fails with exit 127.
+`scripts/project-setup.sh` ships as a no-op. To use it, replace its body with
+what your project needs at container start.
 
 It runs **last** deliberately: a non-zero exit marks the whole
 `postStartCommand` failed, and putting it last means a broken project hook
@@ -666,22 +602,15 @@ Remember egress is deny-by-default (`.devcontainer/init-firewall.sh`).
 `registry.npmjs.org`, `pypi.org` and `files.pythonhosted.org` are reachable;
 anything else has to be added to the allowlist there first.
 
-Worked example — a derivative whose tooling needs Pillow, where putting
-`python3-pil` in the template-owned `Dockerfile` would be reverted by the next
-sync:
+Worked example — tooling that needs Pillow:
 
 ```bash
-# scripts/project-setup.sh (downstream copy)
+# scripts/project-setup.sh
 set -euo pipefail
 if ! python3 -c "import PIL" 2>/dev/null; then
   pip install --break-system-packages --user Pillow
 fi
 ```
-
-Possible future refinements (not implemented): converting the security
-workflows to reusable `workflow_call` workflows referenced by tag, and
-publishing a prebuilt devcontainer image — both would shrink the file surface
-that needs syncing at all.
 
 ## Troubleshooting
 
@@ -692,7 +621,6 @@ that needs syncing at all.
 - CI missing script failure: add matching scripts under `scripts/ci` for detected stack.
 - Gitleaks false positive on a test file: add the file path to the rule's `paths` allowlist in `.gitleaks.toml`.
 - Semgrep PII false positive: add the file pattern to the rule's `paths.exclude` list in `.semgrep.yml`.
-- template-sync push rejected with `refusing to allow a GitHub App to create or update workflow '.github/workflows/…' without 'workflows' permission`: the sync includes workflow-file changes and the run used the default `GITHUB_TOKEN`, which can never push those (platform restriction — no `permissions:` entry or repo setting fixes it; beware that `workflows:` is not a valid `permissions:` key and adding it invalidates the workflow file). Add the `TEMPLATE_SYNC_TOKEN` fine-grained PAT secret (Contents, Pull requests, Workflows — read and write) and re-run; see [Template Updates](#template-updates-downstream-sync).
 
 ## FAQ
 

@@ -245,7 +245,7 @@ quarantine.
 | AD-11 | Gate mode (`full` or `floor-only`) is declared per session by the operator. |
 | AD-12 | The Claude Code integration policy is hub-owned and read-only in the container. |
 | AD-13 | One Claude login token, injected per container at start, never stored in it. |
-| AD-14 | Hub code lives under `scripts/hub/`, shared libs under `scripts/lib/`, protected from template sync. |
+| AD-14 | Hub code lives under `scripts/hub/`, shared libs under `scripts/lib/`. (The template-sync clause is retired: the repository detached from its template on 2026-10-16.) |
 | AD-15 | Host-executed files are mounted read-only into the container. |
 | AD-16 | The hub mints the session identity; the container cannot assert it. |
 | AD-17 | The gate latches a breached session before answering and signals the supervisor. |

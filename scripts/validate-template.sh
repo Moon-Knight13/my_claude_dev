@@ -9,8 +9,7 @@
 # want; each is skipped when it is switched off in template.conf.
 #
 # Before this was tiered, the required-file list was flat, so a derivative that
-# deleted a subsystem it never used went red in CI and could not fix it locally
-# (this validator is template-owned, so the next sync reverted the edit). See
+# deleted a subsystem it never used went red in CI. See
 # docs/TEMPLATE_GUIDE.md, "Optional subsystems".
 set -euo pipefail
 
@@ -72,8 +71,6 @@ require_files core \
     .github/workflows/semgrep.yml \
     .github/workflows/container-scan.yml \
     .github/workflows/repository-audit.yml \
-    .github/workflows/template-sync.yml \
-    .templatesyncignore \
     template.conf \
     .github/dependabot.yml \
     .github/pull_request_template.md \

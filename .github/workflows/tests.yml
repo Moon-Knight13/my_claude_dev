@@ -3,9 +3,6 @@ name: tests
 # Runs every scripts/tests/test-*.sh suite (issue #88) through
 # scripts/tests/run-all.sh. Suites use local mocks (fake curl on PATH, Python HTTP
 # mocks), so no live model or network endpoint is needed.
-#
-# Kept in its own workflow, not ci.yml: ci.yml is template-owned and template sync
-# would overwrite a job added there.
 
 on:
   pull_request:

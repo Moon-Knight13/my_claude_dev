@@ -24,7 +24,7 @@ Rules:
 --------------------------------------------------------------------------------
 Owner note — privacy of THIS file:
 
-This shipped default is **committed and public** (and template-synced). Keep it
+This shipped default is **committed and public**. Keep it
 **generic** — never put real organisation-specific identifiers or examples here.
 
 Tune your real sanitiser prompt in a PRIVATE on-box copy:

@@ -1,8 +1,8 @@
 # Project instructions
 
-Repository-specific context, per the pointer in `CLAUDE.md`. That file is
-template-owned and gets overwritten by template-sync; this one only exists
-downstream, so project rules belong here and nowhere else.
+Repository-specific context, per the pointer in `CLAUDE.md`. `CLAUDE.md` holds
+the workflow contract; project rules belong here. The repository is detached
+from its template (2026-10-16), so no sync overwrites either file.
 
 ## What this repository is
 
@@ -145,10 +145,8 @@ provisioning failure in "Provisioning must not lie". It now fails when
 `route-model.sh` does not source the loader, and warns when local routing is
 switched off, so the reported state matches the routed state.
 
-Note that these are template-owned scripts. If a template sync reverts the
-loader, `check-day0.sh` fails on "`.env` values reach the routing scripts"
-rather than going quiet — but the fix belongs upstream in the template, since
-the template ships both the `.env.example` and the scripts that ignored it.
+If a later change drops the loader, `check-day0.sh` fails on "`.env` values
+reach the routing scripts" rather than going quiet.
 
 ### sudo is for one step, not for the whole run
 
