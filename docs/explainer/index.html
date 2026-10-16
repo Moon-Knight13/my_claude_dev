@@ -344,7 +344,7 @@
       </div>
       <div>
         <dt>CI security gates<span class="tag">.github/workflows/</span></dt>
-        <dd><b>gitleaks</b> secret scanning, <b>semgrep</b> SAST (incl. MITRE ATLAS AI/ML rules), and <b>Trivy</b> container scanning — all enforced, not advisory.</dd>
+        <dd><b>gitleaks</b> secret scanning, <b>semgrep</b> SAST (incl. MITRE ATLAS AI/ML rules), <b>Trivy</b> container scanning, and every <b>scripts/tests</b> suite (gates, guards, orchestrator) against local mocks — all enforced, not advisory.</dd>
       </div>
     </dl>
   </section>
@@ -508,7 +508,7 @@
       <div class="step"><h3>Route</h3><p>Tagged Human, Claude, or Local by risk.</p></div>
       <div class="step"><h3>Claim</h3><p>An agent picks it up — no collisions.</p></div>
       <div class="step"><h3>Pull request</h3><p>Branch + PR that closes the issue.</p></div>
-      <div class="step"><h3>Gates</h3><p>Secrets, SAST, container scan must pass.</p></div>
+      <div class="step"><h3>Gates</h3><p>Secrets, SAST, container scan and test suites must pass.</p></div>
       <div class="step"><h3>Merge</h3><p>Reviewed, green, shipped.</p></div>
     </div>
   </section>

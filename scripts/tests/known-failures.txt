@@ -1,0 +1,5 @@
+# Suites that fail for a tracked reason. Format: <suite> <issue-ref> <reason>
+# run-all.sh still runs and reports them, but they do not fail the run.
+# Remove an entry as soon as its issue is fixed (run-all.sh warns when a listed
+# suite starts passing). Never add an entry without an open issue.
+test-day0.sh #78 all-green assertion cannot hold off a provisioned box (commit guard is box-only)
