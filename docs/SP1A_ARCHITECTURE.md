@@ -6,7 +6,8 @@
 > [SAFETY_HARNESS.md](SAFETY_HARNESS.md). Each part of this page will be
 > replaced by operator docs as the matching story lands.
 >
-> Landed so far: the eval set and held-out freeze — [SP1A_EVAL_SET.md](SP1A_EVAL_SET.md).
+> Landed so far: the eval set and held-out freeze — [SP1A_EVAL_SET.md](SP1A_EVAL_SET.md);
+> the hardware check and model recommendation — [SP1A_HARDWARE_CHECK.md](SP1A_HARDWARE_CHECK.md).
 
 ## Why
 
@@ -270,7 +271,8 @@ quarantine.
   on block: verified at build, proven by the end-to-end leak test.
 - Tuned values: probe budget, rate limit, acknowledgement timeout, rescan
   interval, bulk-op budgets, request size limit, log retention.
-- Hardware floor values and the model recommendation table (need benchmarks).
+- Measured hardware floor values and model recommendation table (need
+  benchmarks; provisional values in [SP1A_HARDWARE_CHECK.md](SP1A_HARDWARE_CHECK.md)).
 - Model choices and runtime build (decided by bake-off and the eval selection
   rule).
 - Whole-conversation classifier scans, hub transcript retention, backup tool,

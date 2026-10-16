@@ -26,3 +26,11 @@ scripts/tests/fixtures/sensitivity-eval.jsonl
 scripts/orchestrator/eval-classifier.sh
 docs/SP1A_EVAL_SET.md
 docs/ORCHESTRATOR.md
+scripts/hub/hw-check.sh
+scripts/hub/hw-floor.json
+scripts/lib/hw.sh
+scripts/tests/test-hw-check.sh
+scripts/setup-day0.sh
+docs/SP1A_HARDWARE_CHECK.md
+docs/SP1A_ARCHITECTURE.md
+docs/explainer/index.html
