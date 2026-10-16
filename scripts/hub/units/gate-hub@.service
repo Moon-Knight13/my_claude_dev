@@ -12,6 +12,8 @@ RuntimeDirectory=lane2-gate/%i
 RuntimeDirectoryMode=0700
 NoNewPrivileges=yes
 ProtectSystem=strict
+# The only paths the gate writes: its store and the operator log (AD-7).
+ReadWritePaths=@LANE2_STATE@/gate-store @LANE2_STATE@/operator-log
 ProtectHome=yes
 PrivateTmp=yes
 LimitCORE=0

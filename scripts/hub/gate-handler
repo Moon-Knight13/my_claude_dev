@@ -33,6 +33,8 @@ GATE_HERE="$(dirname "$GATE_HANDLER")"
 source "$GATE_HERE/../lib/lane2.sh"
 # shellcheck source=scripts/lib/gate.sh
 source "$GATE_HERE/../lib/gate.sh"
+# shellcheck source=scripts/lib/gate-store.sh
+source "$GATE_HERE/../lib/gate-store.sh"
 
 GATE_HEADER_MAX=4096
 GATE_CONTAINER_OPS=(prompt expansion tool_input tool_result)
@@ -52,9 +54,18 @@ gate_load() { # gate_load <confdir> — rc 4 on any unusable value
     GATE_DEADLINE="$(lane2_conf_file_get "$d/gate.conf" GATE_DEADLINE)"; GATE_DEADLINE="${GATE_DEADLINE:-25}"
     GATE_SHIM_TIMEOUT="$(lane2_conf_file_get "$d/gate.conf" GATE_SHIM_TIMEOUT)"; GATE_SHIM_TIMEOUT="${GATE_SHIM_TIMEOUT:-28}"
     GATE_HOOK_TIMEOUT="$(lane2_conf_file_get "$d/gate.conf" GATE_HOOK_TIMEOUT)"; GATE_HOOK_TIMEOUT="${GATE_HOOK_TIMEOUT:-30}"
+    GATE_RETAIN_DAYS="$(lane2_conf_file_get "$d/gate.conf" GATE_RETAIN_DAYS)"; GATE_RETAIN_DAYS="${GATE_RETAIN_DAYS:-7}"
+    GATE_STORE_MAX_BYTES="$(lane2_conf_file_get "$d/gate.conf" GATE_STORE_MAX_BYTES)"; GATE_STORE_MAX_BYTES="${GATE_STORE_MAX_BYTES:-268435456}"
+    GATE_QUOTA_OPERATOR_BYTES="$(lane2_conf_file_get "$d/gate.conf" GATE_QUOTA_OPERATOR_BYTES)"; GATE_QUOTA_OPERATOR_BYTES="${GATE_QUOTA_OPERATOR_BYTES:-67108864}"
+    GATE_QUOTA_CONTAINER_BYTES="$(lane2_conf_file_get "$d/gate.conf" GATE_QUOTA_CONTAINER_BYTES)"; GATE_QUOTA_CONTAINER_BYTES="${GATE_QUOTA_CONTAINER_BYTES:-201326592}"
     [[ -n "$GATE_OPERATOR" ]] || return 4
     [[ "$GATE_MAX_REQUEST" =~ ^[1-9][0-9]{0,9}$ ]] || return 4
     gate_check_deadlines "$GATE_DEADLINE" "$GATE_SHIM_TIMEOUT" "$GATE_HOOK_TIMEOUT" || return 4
+    # Retention: 1..30 whole days and positive byte bounds, or the gate does not
+    # start. Never clamped.
+    gate_store_check_config "$GATE_RETAIN_DAYS" "$GATE_STORE_MAX_BYTES" \
+        "$GATE_QUOTA_OPERATOR_BYTES" "$GATE_QUOTA_CONTAINER_BYTES" || return 4
+    gate_store_init "$GATE_STATE"
 }
 
 # --- peer --------------------------------------------------------------------
@@ -81,32 +92,72 @@ gate_peer_allowed() { # gate_peer_allowed <uid>
 
 # --- answer ------------------------------------------------------------------
 
-gate_ref() { printf 'gr-%s' "$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"; }
+gate_ref() { gate_new_ref 2>/dev/null || printf 'gr-%s' "$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"; }
 
 GATE_ANSWERED=""
-gate_answer() { # gate_answer <allow|block> <reason> [detail json]
+# gate_answer allow [detail]                     an allow
+# gate_answer block <reason> [detail] [ref]      an eval/health block: detail has
+#                                                the reason and per-layer results
+# gate_answer opaque <reason category> <ref>     any other block: the hub-socket
+#                                                detail holds only reason_category
+gate_answer() {
     [[ -z "$GATE_ANSWERED" ]] || return 0
     GATE_ANSWERED=1
-    local d="${3:-}"; [[ -n "$d" ]] || d='{}'
-    if [[ "$1" == allow ]]; then
-        jq -nc --argjson d "$d" '{v: 1, verdict: "allow"} + (if $d == {} then {} else {detail: $d} end)'
-    else
-        jq -nc --arg ref "$(gate_ref)" --arg r "$2" --argjson d "$d" \
-            '{v: 1, verdict: "block", ref: $ref, detail: ({reason: $r} + $d)}'
+    case "$1" in
+        allow)
+            local d="${2:-}"; [[ -n "$d" ]] || d='{}'
+            jq -nc --argjson d "$d" '{v: 1, verdict: "allow"} + (if $d == {} then {} else {detail: $d} end)' ;;
+        opaque)
+            jq -nc --arg ref "$3" --arg c "$2" '{v: 1, verdict: "block", ref: $ref, detail: {reason_category: $c}}' ;;
+        *)
+            local d="${3:-}" ref="${4:-}"; [[ -n "$d" ]] || d='{}'; [[ -n "$ref" ]] || ref="$(gate_ref)"
+            jq -nc --arg ref "$ref" --arg r "$2" --argjson d "$d" \
+                '{v: 1, verdict: "block", ref: $ref, detail: ({reason: $r} + $d)}' ;;
+    esac
+}
+
+# What a container caller receives for a block (the per-session sockets, Epic 4):
+# v, verdict, and the ref — nothing else.
+gate_container_answer() { jq -nc --arg ref "$1" '{v: 1, verdict: "block", ref: $ref}'; }
+
+# A block on any op but eval or health: a fresh ref, the payload retained when
+# one was read, one operator log line, and an opaque answer.
+gate_block_record() { # gate_block_record <op> <reason> <payload file or "">
+    local op="$1" cat="$2" payload="$3" origin ref
+    op="$(gate_op_name "$op")"; origin="$(gate_op_origin "$op")"
+    ref="$(gate_ref)"
+    if [[ -n "$payload" && -f "$payload" ]]; then
+        gate_retain "$ref" "$payload" "$origin" 2>/dev/null || cat="fault:store"
     fi
+    gate_oplog "$op" "$origin" "$cat" "$ref" 2>/dev/null || true
+    gate_answer opaque "$cat" "$ref"
 }
 
 # --- the work (child, bounded by the deadline) -------------------------------
 
+# The work's result: verdict, reason, detail, the op (a known name or "unknown",
+# never the caller's string), and whether $t/payload holds a payload to retain.
+GATE_R_OP=unknown
+GATE_R_PAYLOAD=0
 gate_result() { # gate_result <dir> <allow|block> <reason> [detail json]
     local d="${4:-}"; [[ -n "$d" ]] || d='{}'
-    jq -nc --arg v "$2" --arg r "$3" --argjson d "$d" '{verdict: $v, reason: $r, detail: $d}' > "$1/result.tmp" \
+    jq -nc --arg v "$2" --arg r "$3" --argjson d "$d" --arg op "$GATE_R_OP" --argjson p "$GATE_R_PAYLOAD" \
+        '{verdict: $v, reason: $r, detail: $d, op: $op, payload: ($p == 1)}' > "$1/result.tmp" \
         && mv -f "$1/result.tmp" "$1/result"
     exit 0
 }
 
+# Payload until half-close, bounded; over the limit is a block, never truncated.
+gate_read_payload() { # gate_read_payload <dir>
+    local size
+    head -c "$(( GATE_MAX_REQUEST + 1 ))" > "$1/payload"
+    size="$(wc -c < "$1/payload" | tr -d ' ')"
+    (( size <= GATE_MAX_REQUEST )) || { rm -f -- "$1/payload"; gate_result "$1" block fault:oversize; }
+    GATE_R_PAYLOAD=1
+}
+
 gate_work() { # gate_work <confdir> <tmpdir> — reads the request from stdin
-    local conf="$1" t="$2" line op layers size rc
+    local conf="$1" t="$2" line op layers rc
     gate_load "$conf" || gate_result "$t" block fault:config
     export LC_ALL=C
 
@@ -117,9 +168,14 @@ gate_work() { # gate_work <confdir> <tmpdir> — reads the request from stdin
     jq -e 'type == "object" and (.v | type) == "number" and .v == 1 and (.op | type) == "string"' \
         "$t/header" >/dev/null 2>&1 || gate_result "$t" block fault:protocol
     op="$(jq -r .op "$t/header")"
+    GATE_R_OP="$(gate_op_name "$op")"
     local o
     for o in "${GATE_CONTAINER_OPS[@]}" "${GATE_PENDING_OPS[@]}"; do
-        [[ "$op" == "$o" ]] && gate_result "$t" block fault:protocol
+        if [[ "$op" == "$o" ]]; then
+            # Known op not served here (yet): keep what it carried for review.
+            [[ "$op" == health ]] || gate_read_payload "$t"
+            gate_result "$t" block fault:protocol
+        fi
     done
     [[ "$op" == eval ]] || gate_result "$t" block fault:protocol
     jq -e '(keys - ["v", "op", "layers"]) == []
@@ -129,10 +185,7 @@ gate_work() { # gate_work <confdir> <tmpdir> — reads the request from stdin
         || gate_result "$t" block fault:protocol
     layers="$(jq -r '.layers | join(" ")' "$t/header")"
 
-    # payload until half-close, bounded; over the limit is a block, never truncated
-    head -c "$(( GATE_MAX_REQUEST + 1 ))" > "$t/payload"
-    size="$(wc -c < "$t/payload" | tr -d ' ')"
-    (( size <= GATE_MAX_REQUEST )) || gate_result "$t" block fault:oversize
+    gate_read_payload "$t"
     gate_is_text "$t/payload" || gate_result "$t" block fault:non-text
 
     # the policy, strictly; and policy_version must compute (AD-19)
@@ -170,25 +223,36 @@ gate_work() { # gate_work <confdir> <tmpdir> — reads the request from stdin
 # --- the connection ----------------------------------------------------------
 
 gate_serve() { # gate_serve <confdir>
-    local conf="$1" t uid rc=0
+    local conf="$1" t uid rc=0 verdict op reason payload=""
     if ! gate_load "$conf"; then gate_answer block fault:config; return 0; fi
+    gate_purge 2>/dev/null || true          # gate-owned purge on every connection
     uid="$(gate_peer_uid)" || uid=""
-    if ! gate_peer_allowed "$uid"; then gate_answer block fault:peer; return 0; fi
+    if ! gate_peer_allowed "$uid"; then gate_block_record unknown fault:peer ""; return 0; fi
     t="${RUNTIME_DIRECTORY:-}"
-    [[ -n "$t" && -d "$t" ]] || t="$(mktemp -d)" || { gate_answer block fault:internal; return 0; }
+    [[ -n "$t" && -d "$t" ]] || t="$(mktemp -d)" || { gate_block_record unknown fault:internal ""; return 0; }
     chmod 700 "$t"
-    rm -f "$t/result"
+    rm -f "$t/result" "$t/payload"
     timeout -k 1 "$GATE_DEADLINE" bash "$GATE_HANDLER" --work "$conf" "$t" <&0 || rc=$?
     # Drain what is left of the request (bounded) before answering: closing a
     # socket with unread bytes resets it, and the client would lose the answer.
     timeout 1 head -c "$(( GATE_MAX_REQUEST + GATE_HEADER_MAX + 1 ))" > /dev/null 2>&1 <&0 || true
     if (( rc == 124 || rc == 137 )); then
-        gate_answer block fault:timeout
+        gate_block_record unknown fault:timeout ""
     elif [[ -s "$t/result" ]] && jq -e '.verdict == "allow" or .verdict == "block"' "$t/result" >/dev/null 2>&1; then
-        gate_answer "$(jq -r .verdict "$t/result")" "$(jq -r .reason "$t/result")" "$(jq -c .detail "$t/result")"
+        verdict="$(jq -r .verdict "$t/result")"; reason="$(jq -r .reason "$t/result")"
+        op="$(jq -r '.op // "unknown"' "$t/result")"
+        [[ "$(jq -r '.payload // false' "$t/result")" == true ]] && payload="$t/payload"
+        if [[ "$verdict" == allow ]]; then
+            gate_answer allow "$(jq -c .detail "$t/result")"
+        elif [[ "$op" == eval || "$op" == health ]]; then
+            gate_answer block "$reason" "$(jq -c .detail "$t/result")"
+        else
+            gate_block_record "$op" "$reason" "$payload"
+        fi
     else
-        gate_answer block fault:internal
+        gate_block_record unknown fault:internal ""
     fi
+    rm -f -- "$t/payload" "$t/header"
     [[ -z "${RUNTIME_DIRECTORY:-}" ]] && rm -rf -- "$t"
     return 0
 }
@@ -197,8 +261,10 @@ gate_handler_main() {
     case "${1:-}" in
         --check-config)
             if gate_load "${2:-}"; then echo "  OK  gate config valid"; exit 0; fi
-            echo " FAIL gate config invalid (deadlines must satisfy gate < shim < hook = 30 s, margins >= 2 s)"
+            echo " FAIL gate config invalid (deadlines must satisfy gate < shim < hook = 30 s, margins >= 2 s;"
+            echo "      GATE_RETAIN_DAYS a whole number 1..30; store and quota bounds positive, quotas <= total)"
             exit 4 ;;
+        --purge) gate_load "${2:-}" || exit 4; gate_purge; exit $? ;;
         --work) gate_work "${2:-}" "${3:-}" ;;
         /*) gate_serve "$1" ;;
         *) gate_answer block fault:config ;;

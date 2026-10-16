@@ -46,6 +46,8 @@ source "$LANE2_HERE/../lib/lane2.sh"
 source "$LANE2_HERE/../lib/gate.sh"
 # shellcheck source=scripts/lib/gate-client.sh
 source "$LANE2_HERE/../lib/gate-client.sh"
+# shellcheck source=scripts/lib/gate-store.sh
+source "$LANE2_HERE/../lib/gate-store.sh"
 
 # file:// is refused for git; tests that source this script may relax it to
 # fetch from a local bare fixture. A root run cannot change it.
@@ -89,6 +91,8 @@ install_settings() {
     ORIGIN="$(lane2_conf LANE2_ORIGIN)"
     BRANCH="$(lane2_conf LANE2_DEFAULT_BRANCH main)"
     KEEP="$(lane2_conf LANE2_KEEP_INSTALLS 3)"
+    USER_UNIT_DIR="$(lane2_conf LANE2_USER_UNIT_DIR /etc/systemd/user)"
+    [[ "$USER_UNIT_DIR" == /* && "$USER_UNIT_DIR" != *..* ]] || die 4 "not an absolute path: $USER_UNIT_DIR"
     [[ -n "$ORIGIN" ]] || die 4 "LANE2_ORIGIN not set in hub config"
     [[ "$BRANCH" =~ ^[A-Za-z0-9._/-]+$ && "$BRANCH" != *..* ]] || die 4 "LANE2_DEFAULT_BRANCH is not a branch name"
     [[ "$KEEP" =~ ^[1-9][0-9]*$ ]] || die 4 "LANE2_KEEP_INSTALLS must be a positive integer"
@@ -197,12 +201,53 @@ install_render() {
             [[ -n "$problems" && "$problems" != *$'\n' ]] && problems+=$'\n'
         done
     fi
+    # Operator user units (the notifier): scripts/hub/units/user/*.service.
+    local uout="$STATE/install/user-units.new"
+    rm -rf -- "$uout"; mkdir -m 700 "$uout"
+    if [[ -d "$src/user" ]]; then
+        for f in "$src"/user/*; do
+            [[ -f "$f" ]] || continue
+            name="${f##*/}"
+            [[ "$name" =~ ^[a-z0-9][a-z0-9._-]*\.service$ ]] \
+                || { problems+="user/$name: unit name not allowed"$'\n'; continue; }
+            sed -e "s|@LANE2_CODE@|$PREFIX/$commit|g" \
+                -e "s|@LANE2_STATE@|$STATE|g" \
+                -e "s|@LANE2_CONFIG@|$CONFDIR|g" "$f" > "$uout/$name"
+            problems+="$(lane2_lint_user_unit "$uout/$name")"
+            [[ -n "$problems" && "$problems" != *$'\n' ]] && problems+=$'\n'
+        done
+    fi
     if [[ -n "$problems" ]]; then
         while IFS= read -r f; do [[ -n "$f" ]] && fail "unit lint: $f"; done <<<"$problems"
-        rm -rf -- "$out"
+        rm -rf -- "$out" "$uout"
         exit 4
     fi
-    ok "units rendered and linted: $(find "$out" -type f | wc -l | tr -d ' ')"
+    ok "units rendered and linted: $(find "$out" "$uout" -type f | wc -l | tr -d ' ')"
+}
+
+# install_user_units — operator user units into LANE2_USER_UNIT_DIR, enabled
+# globally (for every user session) only when on the boot allowlist.
+install_user_units() {
+    local new="$STATE/install/user-units.new" list="$STATE/install/user-units.list" f name
+    local -a names=() old=()
+    [[ -d "$new" ]] || return 0
+    for f in "$new"/*; do [[ -f "$f" ]] && names+=("${f##*/}"); done
+    [[ -f "$list" ]] && mapfile -t old < "$list"
+    for name in "${old[@]}"; do
+        printf '%s\n' "${names[@]}" | grep -qxF -- "$name" && continue
+        systemctl --global disable "$name" >/dev/null 2>&1 || true
+        rm -f -- "${USER_UNIT_DIR:?}/$name"
+    done
+    for name in "${names[@]}"; do
+        install -m 644 -o root -g root "$new/$name" "$USER_UNIT_DIR/$name" 2>/dev/null \
+            || cp -f -- "$new/$name" "$USER_UNIT_DIR/$name"
+        if lane2_boot_allowed "$name"; then
+            systemctl --global enable "$name" >/dev/null || { fail "cannot enable user unit $name"; return 4; }
+        fi
+    done
+    printf '%s\n' "${names[@]}" > "$list.tmp" && mv -f "$list.tmp" "$list"
+    rm -rf -- "$new"
+    ok "user units installed: ${#names[@]} (restart your session or: systemctl --user restart <unit>)"
 }
 
 # install_units — copy rendered units into place, drop lane2 units no longer
@@ -469,6 +514,7 @@ cmd_install() {
     install_place "$commit"
     install_swap "$commit"
     install_units || exit 4
+    install_user_units || exit 4
     install_record "$commit"
     install_prune
     ok "install complete; roll back by installing the earlier commit"
@@ -524,6 +570,31 @@ cmd_check() {
     return "$rc"
 }
 
+# --- review (story 2.4) ------------------------------------------------------
+
+# lane2 review show <ref> — the retained payload and its operator log metadata.
+# Root only: payloads are 0600 gate files, readable by the gate and review alone.
+# Exit 0 shown, 2 bad ref, 3 not found or expired. No decision actions yet.
+cmd_review() {
+    [[ "${1:-}" == show && $# == 2 ]] || die 2 "usage: lane2 review show <ref>"
+    local ref="$2" days st
+    [[ "$ref" =~ $GATE_REF_RE ]] || die 2 "not a ref (want gr- and 32 lowercase hex)"
+    days="$(lane2_conf_file_get "$CONFDIR/gate.conf" GATE_RETAIN_DAYS)"; GATE_RETAIN_DAYS="${days:-7}"
+    gate_store_init "$STATE"
+    st="$(gate_review_state "$ref")"
+    case "$st" in
+        unknown) fail "ref not found: $ref"; return 3 ;;
+        expired) fail "ref expired: its payload is past GATE_RETAIN_DAYS and was removed"; return 3 ;;
+    esac
+    echo "== block $ref =="
+    jq -r --arg r "$ref" 'select(.ref == $r)
+        | "time:   \(.time)\nop:     \(.op)\norigin: \(.origin)\nreason: \(.reason_category)"' "$GATE_OPLOG" 2>/dev/null \
+        || printf '  !!  no operator log line for this ref\n'
+    echo "== retained payload =="
+    cat -- "$GATE_STORE_DIR/$ref"
+    printf '\n== end ==\n'
+}
+
 lane2_main() {
     CONFDIR=/etc/lane2
     if [[ "${1:-}" == --config-dir ]]; then
@@ -536,8 +607,9 @@ lane2_main() {
     command -v jq >/dev/null || die 4 "required tool missing: jq"
     case "$cmd" in
         install) lane2_is_root || die 4 "lane2 install must run as root" ;;
+        review) lane2_is_root || die 4 "lane2 review must run as root (sudo): payloads are readable only by the gate and review" ;;
         policy|check) ;;
-        *) die 2 "usage: lane2 [--config-dir DIR] install <commit> | install --verify | policy update | check" ;;
+        *) die 2 "usage: lane2 [--config-dir DIR] install <commit> | install --verify | policy update | check | review show <ref>" ;;
     esac
     lane2_load_config "$CONFDIR/lane2.conf" || die 4 "hub config unreadable: $CONFDIR/lane2.conf"
     common_settings
@@ -548,6 +620,7 @@ lane2_main() {
             lane2_is_operator || die 4 "lane2 policy update must run as the operator ($OPERATOR)"
             cmd_policy "$@" ;;
         check) cmd_check "$@" ;;
+        review) cmd_review "$@" ;;
     esac
 }
 

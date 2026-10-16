@@ -268,6 +268,22 @@ lane2_boot_allowed() {
     esac
 }
 
+# lane2_lint_user_unit <file> — an operator user unit (the notifier): no home or
+# workspace path, no placeholder left, NoNewPrivileges, and the boot rule.
+lane2_lint_user_unit() {
+    local f="$1" name; name="user/${1##*/}"
+    grep -qE '(/home/|/workspace|/root/|~/|\.claude/worktrees)' "$f" \
+        && echo "$name references a workspace or home path"
+    grep -qE '@[A-Z_]+@' "$f" && echo "$name has an unrendered placeholder"
+    grep -qxF 'NoNewPrivileges=yes' "$f" || echo "$name lacks NoNewPrivileges=yes"
+    if lane2_boot_allowed "${f##*/}"; then
+        grep -qxF 'Restart=on-failure' "$f" || echo "$name is boot-enabled but lacks Restart=on-failure"
+    elif grep -q '^\[Install\]' "$f"; then
+        echo "$name has an [Install] section but is not on the boot allowlist"
+    fi
+    return 0
+}
+
 # lane2_lint_unit <file> — prints one problem per line; nothing printed = ok.
 lane2_lint_unit() {
     local f="$1" name; name="${f##*/}"
