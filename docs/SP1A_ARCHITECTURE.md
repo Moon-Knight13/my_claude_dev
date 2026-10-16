@@ -8,7 +8,8 @@
 >
 > Landed so far: the eval set and held-out freeze — [SP1A_EVAL_SET.md](SP1A_EVAL_SET.md);
 > the hardware check and model recommendation — [SP1A_HARDWARE_CHECK.md](SP1A_HARDWARE_CHECK.md);
-> the one model-call client `fleet_call` — [SP1A_FLEET.md](SP1A_FLEET.md).
+> the one model-call client `fleet_call` — [SP1A_FLEET.md](SP1A_FLEET.md);
+> the eval harness with honest reporting — [SP1A_EVAL_HARNESS.md](SP1A_EVAL_HARNESS.md).
 
 ## Why
 

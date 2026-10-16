@@ -21,6 +21,10 @@ switch modes without restarting the mock:
              timeout       completion sleeps 5 s
   content  the assistant message content (default {"verdict":"nonsensitive"})
   nctx     n_ctx reported by /props (default 4096)
+  rules    optional, one "<marker>\t<content>" per line: a completion whose
+           last message contains <marker> returns that content instead (the
+           first matching rule wins); content MALFORMED returns a non-JSON body
+           (eval harness tests score cases differently in one run)
 Every request is appended to MOCK_STATE_DIR/requests.jsonl as
 {"method", "path", "body"}.
 
@@ -135,6 +139,16 @@ class Handler(BaseHTTPRequestHandler):
                 self._raw(200, "{not json")
                 return
             content = state("content", '{"verdict":"nonsensitive"}')
+            msgs = req.get("messages") or [{}]
+            user = str(msgs[-1].get("content", ""))
+            for rule in state("rules", "").splitlines():
+                marker, _, out = rule.partition("\t")
+                if marker and marker in user:
+                    if out == "MALFORMED":
+                        self._raw(200, "{not json")
+                        return
+                    content = out
+                    break
             finish = "stop"
             if mode == "truncated":
                 content, finish = '{"verdict":"sens', "length"

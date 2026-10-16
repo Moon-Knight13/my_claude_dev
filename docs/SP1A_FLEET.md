@@ -83,7 +83,11 @@ checks that `fleet_call` ignores them.
 | `FLEET_STATE_DIR` | `/var/lib/lane2/fleet` | Where parallel-verify records go (mode 0700, files 0600). |
 
 Members are lowercase names: `classifier`, `orchestrator` (Story 1.2), and
-`draft` (the eval drafting model). `<MEMBER>` in a key is the uppercase name.
+`draft` (the eval drafting model), and `evalnp1` (an optional `-np 1`
+classifier instance for the eval harness). `<MEMBER>` in a key is the uppercase
+name. The eval harness also reads `FLEET_RUNTIME_BUILD` and
+`FLEET_RUNTIME_BINARY` for its record
+([SP1A_EVAL_HARNESS.md](SP1A_EVAL_HARNESS.md#configuration)).
 
 An endpoint must be a loopback IP address with a port, or a socket in
 `FLEET_SOCKET_DIR`. Each of these is refused, with no network call:
@@ -115,7 +119,10 @@ false`, so the reply can be checked exactly.
 
 `scripts/hub/fleet/classifier.settings.json` is the one settings file for every
 classifier call. The classifier script uses it, and through it eval
-parallel-verify does too. The gate and the eval harness will use the same file.
+parallel-verify does too. The eval harness (`scripts/hub/eval-harness.sh`,
+[SP1A_EVAL_HARNESS.md](SP1A_EVAL_HARNESS.md)) uses it with one setting forced,
+`cache_prompt: false`, or unchanged against a `-np 1` instance. The gate will
+use the same file.
 It sets:
 
 | Setting | Value | Why |
@@ -206,7 +213,8 @@ calls `fleet_call draft`.
 - `scripts/tests/mock-llama-server.py`. A Python HTTP mock of the five
   endpoints, on loopback or a unix socket. It can simulate a model that is
   loading, a prompt that is too big, a malformed or truncated reply, and a
-  timeout.
+  timeout. Optional rules pick the reply by a marker in the input, so the eval
+  harness test can score cases differently in one run.
 
 CI runs every suite twice: `LOCAL_MODEL_API=ollama` and `openai`.
 

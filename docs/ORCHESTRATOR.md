@@ -87,6 +87,8 @@ reasoning-only local call; see *Doing the work locally* below.
 | `scripts/tests/fixtures/sensitivity-eval.jsonl` | Synthetic eval cases in the SP1a case format — the format reference ([SP1A_EVAL_SET.md](SP1A_EVAL_SET.md)). |
 | `scripts/hub/eval-set.sh` | SP1a eval set: validate, freeze the held-out split, draft with a local model, encrypted export ([SP1A_EVAL_SET.md](SP1A_EVAL_SET.md)). |
 | `scripts/tests/test-eval-set.sh` | Eval-set rules, held-out sizing, freeze, drafting refusal, tracked-file hygiene. |
+| `scripts/hub/eval-harness.sh` | SP1a eval harness: floor, classifier, and combined miss rates per category with 95% upper bounds, an errors bucket, complete hub-only records, scrubbed publishing ([SP1A_EVAL_HARNESS.md](SP1A_EVAL_HARNESS.md)). |
+| `scripts/tests/test-eval-harness.sh` | Eval harness: Clopper-Pearson points, three rows, errors bucket, held-out refusal, record completeness, request body vs production, publish scrub. |
 | `scripts/tests/test-orchestrator.sh` | Routing/invariant unit tests (22). |
 | `scripts/tests/test-classifier.sh` | Classifier contract tests — strict parse, fail-closed, never-egress, stdin only, parallel-verify; per transport leg (`LOCAL_MODEL_API`). |
 | `scripts/lib/fleet.sh` | `fleet_call`, the one model-call client: health, context fit, pinned settings, fail closed ([SP1A_FLEET.md](SP1A_FLEET.md)). |
@@ -520,8 +522,10 @@ the fixed behaviour is covered by `test-classifier.sh`.
 SP1a replaces this with an operator-owned eval set kept on the hub, with a
 held-out split frozen before tuning. Its rubric, case format, and commands are in
 [SP1A_EVAL_SET.md](SP1A_EVAL_SET.md). `eval-classifier.sh` reads the new case
-format (multi-block cases are scored as their blocks joined) until the SP1a eval
-harness replaces it.
+format (multi-block cases are scored as their blocks joined). The SP1a eval
+harness (`scripts/hub/eval-harness.sh`, [SP1A_EVAL_HARNESS.md](SP1A_EVAL_HARNESS.md))
+is the hub replacement: it scores the floor, the classifier, and both combined,
+with honest bounds and a complete record.
 
 `eval-classifier.sh --parallel-verify` runs every case under both transports
 and records, on the hub only, whether each verdict matched. With no
