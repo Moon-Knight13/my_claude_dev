@@ -257,6 +257,11 @@ quarantine.
 
 - Swapping the gate runtime and load testing it (the protocol isolates this).
 - SP1b outbound gateway, SP4 local front end and delegation, SP3 remote spokes.
+- Spokes (deploy boxes, workstations) in SP3: Claude stays on the hub and drives
+  each spoke over hub-initiated SSH through a gated relay the operator confirms.
+  Spoke output comes back as untrusted, gated content. No Claude, forwarded SSH
+  agent, or reverse tunnel runs on a spoke. Until then, Claude sessions on a
+  spoke are outside the harness.
 - VS Code attach to a Lane 2 container: refused until proven not to open an
   egress path.
 - How client prompt history and persisted tool output are disabled or purged
