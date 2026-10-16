@@ -4,6 +4,7 @@
 #
 #   lane2 [--config-dir DIR] install <40-hex commit>
 #   lane2 [--config-dir DIR] install --verify
+#   lane2 [--config-dir DIR] health [--ack-removals]   (story 2.6; scripts/lib/lane2-health.sh)
 #
 # `lane2 install` deploys hub code from a MERGED commit (AD-18, FR-22, FR-52):
 #   1. refuses inside a container, as non-root, for anything but a full commit
@@ -46,6 +47,8 @@ source "$LANE2_HERE/../lib/lane2.sh"
 source "$LANE2_HERE/../lib/gate.sh"
 # shellcheck source=scripts/lib/gate-client.sh
 source "$LANE2_HERE/../lib/gate-client.sh"
+# shellcheck source=scripts/lib/lane2-health.sh
+source "$LANE2_HERE/../lib/lane2-health.sh"
 # shellcheck source=scripts/lib/gate-store.sh
 source "$LANE2_HERE/../lib/gate-store.sh"
 
@@ -362,6 +365,7 @@ policy_validate() {
         rel="${f#"$tree"/}"
         case "$rel" in
             term-list.txt|classifier-prompt.md|README|README.md|.gitignore|.gitattributes) ;;
+            health-probe-sensitive.txt|health-probe-negative.txt) ;;   # lane2 health (story 2.6)
             fixtures/*.gpg|fixtures/*.age) ;;
             fixtures/*|*.jsonl|*.json|*.csv) plain=$((plain + 1)) ;;
             *) unknown=$((unknown + 1)) ;;
@@ -570,6 +574,15 @@ cmd_check() {
     return "$rc"
 }
 
+# --- health (story 2.6) ------------------------------------------------------
+
+# lane2 health [--ack-removals] — health check v1 (scripts/lib/lane2-health.sh).
+# Exit 0 healthy, 2 usage, 3 any part failing.
+cmd_health() {
+    (( $# <= 1 )) || die 2 "usage: lane2 health [--ack-removals]"
+    lane2_health_run "$@"
+}
+
 # --- review (story 2.4) ------------------------------------------------------
 
 # lane2 review show <ref> — the retained payload and its operator log metadata.
@@ -608,8 +621,8 @@ lane2_main() {
     case "$cmd" in
         install) lane2_is_root || die 4 "lane2 install must run as root" ;;
         review) lane2_is_root || die 4 "lane2 review must run as root (sudo): payloads are readable only by the gate and review" ;;
-        policy|check) ;;
-        *) die 2 "usage: lane2 [--config-dir DIR] install <commit> | install --verify | policy update | check | review show <ref>" ;;
+        policy|check|health) ;;
+        *) die 2 "usage: lane2 [--config-dir DIR] install <commit> | install --verify | policy update | check | health [--ack-removals] | review show <ref>" ;;
     esac
     lane2_load_config "$CONFDIR/lane2.conf" || die 4 "hub config unreadable: $CONFDIR/lane2.conf"
     common_settings
@@ -620,6 +633,9 @@ lane2_main() {
             lane2_is_operator || die 4 "lane2 policy update must run as the operator ($OPERATOR)"
             cmd_policy "$@" ;;
         check) cmd_check "$@" ;;
+        health)
+            lane2_is_operator || die 4 "lane2 health must run as the operator ($OPERATOR)"
+            cmd_health "$@" ;;
         review) cmd_review "$@" ;;
     esac
 }

@@ -13,7 +13,9 @@
 > hub deployment from a merged commit, `lane2 install` — [SP1A_HUB_SETUP.md](SP1A_HUB_SETUP.md);
 > the private policy repository, strict policy loading, and `policy_version`;
 > the gate service and protocol v1 on the hub socket, with `lane2 check`;
-> opaque refs, retained payloads, the operator log, notifications, and `lane2 review show` — [SP1A_GATE.md](SP1A_GATE.md), [SP1A_RUNBOOK.md](SP1A_RUNBOOK.md).
+> opaque refs, retained payloads, the operator log, notifications, and `lane2 review show` — [SP1A_GATE.md](SP1A_GATE.md), [SP1A_RUNBOOK.md](SP1A_RUNBOOK.md);
+> health check v1, `lane2 health` — [SP1A_HUB_SETUP.md](SP1A_HUB_SETUP.md#health), and the eval
+> harness through the gate's `eval` op — [SP1A_EVAL_HARNESS.md](SP1A_EVAL_HARNESS.md).
 
 ## Why
 

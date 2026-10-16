@@ -3,6 +3,9 @@
 # shellcheck disable=SC2015,SC2016
 # test-eval-harness.sh — the eval harness and its honest reporting (SP1a story
 # 1.4, #100; FR-35, FR-36, FR-38, FR-18, SM-2, SM-8, SM-C1; AD-1, AD-10, AD-19).
+# Since story 2.6 the harness scores through the gate (test-eval-via-gate.sh);
+# runs here use the Epic 1 direct path, eval-direct.sh, which shares the
+# harness's report, record, and publish code and is kept until the switch.
 # tier: ci — the classifier is scripts/tests/mock-llama-server.py reached
 # through fleet_call; the eval set, term list, hardware tree, and records are
 # synthetic. No real model, GPU, or case.
@@ -18,6 +21,7 @@ set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 EH="$ROOT/scripts/hub/eval-harness.sh"
+ED="$ROOT/scripts/hub/eval-direct.sh"
 ES="$ROOT/scripts/hub/eval-set.sh"
 CLS="$ROOT/scripts/orchestrator/classify-sensitivity.sh"
 SETTINGS="$ROOT/scripts/hub/fleet/classifier.settings.json"
@@ -103,7 +107,7 @@ eh() {
         evalset_in_container() { return 1; }
         HW_SYSFS="$h/sys"; HW_PROC="$h/proc"; HW_DEV="$h/dev"; HW_VULKANINFO="$h/bin/vulkaninfo"
         if [[ -n "${SEAM_SETTINGS:-}" ]]; then EVALH_SETTINGS="$SEAM_SETTINGS"; fi
-        evalh_main "$@"' _ "$EH" "$HW" --config-dir "$CONF" "$@"
+        evalh_main "$@"' _ "$ED" "$HW" --config-dir "$CONF" "$@"
 }
 run() { OUT="$(eh "$@" 2>&1)"; RC=$?; }
 
@@ -229,7 +233,7 @@ check "GPU, driver, Mesa, kernel" "$(A '"\(.gpu.model)|\(.driver.name)|\(.mesa_v
     "AMD Radeon Graphics (RADV TEST)|amdgpu|25.3.1|6.8.0-41-zzhostname"
 check "in-tree driver version is the kernel's" "$(A .driver.version)" "in-tree 6.8.0-41-zzhostname"
 check "cache mode cache_prompt_false by default" "$(A .cache_mode)" cache_prompt_false
-has "record says the gate path is Story 2.6" "$(A .path)" "Story 2.6"
+has "record names the direct path" "$(A .path)" "direct (Epic 1)"
 
 echo "== held-out run log =="
 check "one held-out run logged" "$(wc -l < "$STORE/heldout-runs.jsonl" | tr -d ' ')" 1
@@ -396,11 +400,12 @@ run publish "$TMP/missing.json"; fault "missing record" "$RC"
 
 # =============================================================================
 echo "== hub only, no verdict cache =="
-for c in "run --split heldout" "publish $TMP/planted.json"; do
-    # shellcheck disable=SC2086
-    OUT="$(DEVCONTAINER=true bash "$EH" --config-dir "$CONF" $c 2>&1 </dev/null)"; RC=$?
+for c in "$ED run --split heldout" "$EH publish $TMP/planted.json"; do
+    # shellcheck disable=SC2086  # the pair is split into script and arguments on purpose
+    set -- $c
+    OUT="$(DEVCONTAINER=true bash "$1" --config-dir "$CONF" "${@:2}" 2>&1 </dev/null)"; RC=$?
     (( RC >= 4 )) && [[ "$OUT" == *" FAIL run on the hub"* ]] \
-        && ok "${c%% *}: run on the hub" || bad "${c%% *} ran in a container (exit $RC: $OUT)"
+        && ok "$2: run on the hub" || bad "$2 ran in a container (exit $RC: $OUT)"
 done
 mkdir -p "$STATE/gate/cache"; printf 'x' > "$STATE/gate/cache/entry"
 touch -d '2020-01-01' "$STATE/gate/cache/entry" "$STATE/gate/cache" "$STATE/gate"
@@ -409,8 +414,8 @@ run run --split heldout
 check "run exits 0 beside a verdict cache" "$RC" 0
 check "nothing outside the eval store written" \
     "$(find "$STATE" -newer "$TMP/marker" -not -path "$STORE" -not -path "$STORE/*" | wc -l | tr -d ' ')" 0
-grep -nE 'gate/|cache/' "$EH" | grep -vE '^[0-9]+:[[:space:]]*#' >/dev/null \
-    && bad "harness references a gate or cache path" || ok "harness references no gate or cache path"
+cat "$EH" "$ED" | grep -nE 'gate-store|cache/' | grep -vE '^[0-9]+:[[:space:]]*#' >/dev/null \
+    && bad "harness references the gate store or a cache path" || ok "harness references no gate store or cache path"
 
 echo "== usage =="
 run run; check "run without --split: exit 2" "$RC" 2

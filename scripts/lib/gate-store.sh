@@ -109,6 +109,8 @@ _gate_purge_locked() {
 }
 
 gate_purge() {
+    # Nothing retained yet: nothing to purge, and no lock file to create.
+    [[ -f "$GATE_STORE_INDEX" ]] || return 0
     (
         exec 8>>"$GATE_STORE_LOCK" || exit 4
         flock -w "$GATE_STORE_LOCK_WAIT" 8 || exit 4

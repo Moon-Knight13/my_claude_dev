@@ -161,7 +161,7 @@ echo "== stores (AD-7) =="
 while read -r name _ _ mode; do
     check "store $name mode" "$(stat -c %a "$STATE/$name" 2>/dev/null)" "${mode#0}"
 done < <(bash -c 'source "$1"; lane2_stores' _ "$LIB")
-check "11 stores" "$(find "$STATE" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')" 11
+check "12 stores" "$(find "$STATE" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')" 12
 check "policy checkout readable by the gate's group, setgid (2750)" "$(stat -c %a "$STATE/gate-policy")" 2750
 check "gate store private to the gate (0700)" "$(stat -c %a "$STATE/gate-store")" 700
 

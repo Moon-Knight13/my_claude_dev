@@ -10,7 +10,10 @@ false-block rate. It reports what the numbers can support and no more:
 - Every run writes a complete record, so you can repeat it. The record stays on
   the hub. You can publish a scrubbed copy.
 
-The tool is `scripts/hub/eval-harness.sh`. It runs on the hub only.
+The tool is `scripts/hub/eval-harness.sh`. It runs on the hub only, as the
+operator, and scores **through the gate**: it asks the gate's `eval` op, the
+same decision core production uses, and never calls the floor or the model
+itself (AD-1).
 
 ## Commands
 
@@ -18,6 +21,8 @@ The tool is `scripts/hub/eval-harness.sh`. It runs on the hub only.
 scripts/hub/eval-harness.sh run --split tuning     # score the tuning split
 scripts/hub/eval-harness.sh run --split heldout    # score the held-out split
 scripts/hub/eval-harness.sh publish <record>       # print a scrubbed copy of a record
+scripts/hub/eval-harness.sh compare <direct> <gate> # per-case differences, direct path vs gate
+scripts/hub/eval-harness.sh latency [--runs N] [--cold]  # gate latency at 1k, 5k, 20k tokens
 ```
 
 Pass `--config-dir DIR` before the command to use a config directory other
@@ -81,14 +86,16 @@ A case goes into `errors` for a row when that row could not score it:
 
 | Cause | Rows with an error |
 |---|---|
-| The classifier call faulted: `fleet_call` exited with any non-zero code (endpoint unhealthy, context does not fit, malformed reply, timeout). | `classifier-only`, `combined` |
-| The term list is missing, empty, unreadable, or has no usable term (3 characters or more). | `floor-only`, `combined` |
-| The case has no text. | all three |
+| The gate's classifier layer faulted on the case (endpoint unhealthy, context does not fit, malformed reply, timeout). | `classifier-only`, `combined` |
+| The gate did not answer a batch, or answered it malformed. | all three, for every case in the batch |
+| The case has no text, is over `GATE_MAX_REQUEST`, or is not UTF-8 text. | all three |
 
-A missing term list is an error, never "no hit". The Lane 1 floor treats a
-missing list as "floor off". The eval and the gate do not (AD-1). When the term
-list is unusable, the report also prints `  !!  term list missing, empty, or
-unreadable`.
+If the gate cannot load its policy (missing or empty term list or prompt) or
+does not answer at all before the first case, the run stops with exit 4 and
+writes no record: the record would have no `policy_version`.
+
+A missing term list is never "no hit". The Lane 1 floor treats a missing list
+as "floor off". The gate does not (AD-1).
 
 `combined` is an error when either layer is an error, even when the other layer
 blocked. Errors are never counted as a catch or a miss, so they never make a
@@ -110,10 +117,12 @@ mode 0600. The eval store is hub-only and never mounted into a container
 
 | Field | What it is |
 |---|---|
+| `path` | `gate: hub-socket eval op, …`, or `direct (Epic 1): …` for an `eval-direct.sh` record. |
+| `policy_version` | The gate's own `policy_version` for the run, from the gate's answer (AD-19). Every batch must report the same one, or the run stops. Hub only: `publish` drops it. |
 | `model_sha256` | The classifier model file checksum (`FLEET_CLASSIFIER_SHA256`). |
-| `prompt_sha256` | Checksum of the classifier system prompt used. |
-| `settings_sha256` | Checksum of the production classifier settings file. |
-| `effective_settings_sha256` | Checksum of the settings actually sent (see cache mode below). |
+| `prompt_sha256` | Checksum of the classifier prompt the gate used (the policy checkout's), reported by the gate. |
+| `settings_sha256` | Checksum of the production classifier settings file, reported by the gate. |
+| `effective_settings_sha256` | Checksum of the settings actually sent. Through the gate, the production file. |
 | `fixture_digest` | Digest of the scored split, computed the way `eval-set.sh freeze` computes it. For the held-out split, it equals the freeze digest. |
 | `runtime.build`, `runtime.binary_sha256` | The `llama-server` build tag and the checksum of its binary. |
 | `gpu.model`, `gpu.pci_id` | The RADV device name and PCI id. |
@@ -132,22 +141,16 @@ it.
 ### Cache mode
 
 The eval must call the classifier the way production does, or it measures
-something else (AD-10). The harness uses `fleet_call` with the production
-settings file, `scripts/hub/fleet/classifier.settings.json`. It changes one
-thing, chosen by `LANE2_EVAL_CACHE_MODE`:
+something else (AD-10). Through the gate it does: the gate calls `fleet_call`
+with the production settings file, `scripts/hub/fleet/classifier.settings.json`,
+which sets `cache_prompt: false`. The record's `cache_mode` is
+`cache_prompt_false`. If production ever turns prompt caching on, a gate run
+stops with exit 4 rather than record a cached run as uncached.
 
-| Mode | What the harness does |
-|---|---|
-| `cache_prompt_false` (default) | Calls fleet member `classifier` with the production settings and `cache_prompt` forced to `false`. No other field changes. |
-| `np1` | Calls fleet member `evalnp1`, a `llama-server` instance you started with `-np 1` (one slot), with the production settings unchanged. Its alias must equal `FLEET_CLASSIFIER_MODEL`. |
+`LANE2_EVAL_CACHE_MODE=np1` (a `-np 1` instance) belongs to the Epic 1 direct
+path only; a gate run refuses it with exit 4.
 
-The record says which mode was used. A test proves that the request body is
-the same as the production classifier's body, field for field, apart from that
-one setting. The production file currently sets `cache_prompt: false` already,
-so in the default mode the bodies are identical today. The forced setting
-keeps the eval uncached if production turns prompt caching on later.
-
-## Publishing a record
+## Publishing a record## Publishing a record
 
 ```bash
 scripts/hub/eval-harness.sh publish /var/lib/lane2/eval/record-<...>.json > published.json
@@ -159,8 +162,9 @@ checks each against its format:
 - **Kept:** checksums, the runtime build tag, versions (numbers only; a kernel
   suffix such as `-generic` is dropped), the GPU model class and PCI id, the
   driver name, the cache mode, the split, the time, and every aggregate.
-- **Dropped:** per-case rows, case ids, host fields, paths, and any field it
-  does not know.
+- **Dropped:** per-case rows, case ids, host fields, paths, `policy_version`
+  (a term-list derivative that never leaves the hub), and any field it does
+  not know.
 - **Scrubbed from the GPU model name**, the only free text kept: the hostname,
   user name, and home directory (from the record and from the host running
   `publish`), home paths, IPv4, IPv6, and MAC addresses, and serial-like tokens
@@ -172,26 +176,31 @@ fields, and checks that none survives.
 
 ## Configuration
 
-`run` reads `<config dir>/lane2.conf` and `<config dir>/fleet.conf`. Both are
+`run` reads `<config dir>/lane2.conf`, `fleet.conf`, and `gate.conf`. All are
 parsed, never sourced, and the last assignment of a key wins. Nothing is read
-from the environment: an `ORCH_TERM_LIST` in your shell is ignored.
+from the environment.
 
 | Key (in `lane2.conf`) | Default | Meaning |
 |---|---|---|
-| `LANE2_STATE_ROOT` | `/var/lib/lane2` | Hub state root; the eval store is its `eval/` subdirectory. |
-| `LANE2_EVAL_TERM_LIST` | — | Path to the term list the floor uses. Missing or unusable: every floor result is an error. |
-| `LANE2_EVAL_CLASSIFIER_PROMPT` | — (required) | Path to the classifier system prompt. Missing: the run stops with exit 4. |
+| `LANE2_STATE_ROOT` | `/var/lib/lane2` | Hub state root; the eval store is its `eval/` subdirectory and manifests go to `manifests/`. |
 | `LANE2_EVAL_FALSE_BLOCK_CEILING` | not set | Your false-block ceiling in percent, shown beside each false-block rate. |
 | `LANE2_EVAL_MISS_BOUND` | `10` | The target for the combined upper bound (shared with `eval-set.sh`). |
-| `LANE2_EVAL_CACHE_MODE` | `cache_prompt_false` | `cache_prompt_false` or `np1`. |
+| `LANE2_EVAL_CACHE_MODE` | `cache_prompt_false` | Through the gate, only `cache_prompt_false`. |
+| `LANE2_EVAL_COLD_UNITS` | `fleet-classifier.service` | Units `latency --cold` restarts before each cold run. |
+| `LANE2_EVAL_TERM_LIST`, `LANE2_EVAL_CLASSIFIER_PROMPT` | — | The direct path (`eval-direct.sh`) only. |
+
+| Key (in `gate.conf`) | Default | Meaning |
+|---|---|---|
+| `GATE_HUB_SOCKET` | `/run/lane2/gate/hub.sock` | The gate's hub socket. |
+| `GATE_EVAL_BUDGET` | `600` | Seconds one bulk eval request may take, at most 9000 ([SP1A_GATE.md](SP1A_GATE.md)). |
+| `GATE_DEADLINE`, `GATE_SHIM_TIMEOUT` | `25`, `28` | Used by `latency`: the deadline it reports against, and the client timeout. |
 
 | Key (in `fleet.conf`) | Meaning |
 |---|---|
-| `FLEET_CLASSIFIER_ENDPOINT`, `FLEET_CLASSIFIER_MODEL` | The classifier member ([SP1A_FLEET.md](SP1A_FLEET.md)). |
+| `FLEET_CLASSIFIER_MODEL` | The classifier alias, for the record ([SP1A_FLEET.md](SP1A_FLEET.md)). |
 | `FLEET_CLASSIFIER_SHA256` | The classifier model file sha256. Required for the record. |
 | `FLEET_RUNTIME_BUILD` | The `llama-server` build tag: `vX.Y.Z` or `bNNNN`. Required for the record. |
 | `FLEET_RUNTIME_BINARY` | Absolute path to the `llama-server` binary; the harness records its sha256. Required for the record. |
-| `FLEET_EVALNP1_ENDPOINT`, `FLEET_EVALNP1_MODEL` | The `-np 1` instance, for `np1` mode only. |
 
 The GPU model, driver, Mesa version, and kernel version come from the same
 probes as the hardware check ([SP1A_HARDWARE_CHECK.md](SP1A_HARDWARE_CHECK.md)).
@@ -200,19 +209,63 @@ would be incomplete.
 
 ## How it reaches the floor and the classifier
 
-In Epic 1, the harness calls the floor (`orch_floor_match`) and the classifier
-(`fleet_call`) directly, on the hub. It copies the term list and the prompt
-into a private temporary directory first, so a file that changes during a run
-cannot change half of it.
+Only through the gate (AD-1, AD-20). For each batch of up to 1000 cases, the
+harness writes the case texts into a fresh manifest directory under
+`<state root>/manifests/` (group-readable by the gate), sends one bulk `eval`
+request with layers `floor` and `classifier` on the hub socket through
+`gate_client`, and builds the three rows from the per-layer result of each case.
+The request is bounded by `GATE_EVAL_BUDGET`. Manifest directories are removed
+when the batch is done. Before any case, it sends an empty manifest to learn the
+gate's `policy_version` and input checksums for the record.
 
-Epic 2 adds the gate. Story 2.6 then routes the harness through the hub-socket
-gate `eval` op (AD-1, AD-20), so the eval measures the same decision core that
-production uses. The report and the record format do not change. Until then,
-the harness and the gate share the floor function, the settings file, and
-`fleet_call`, but not the rest of the gate's code path.
+The harness never loads the term list or the classifier prompt, and never calls
+a model. `scripts/tests/test-eval-via-gate.sh` lints it: a direct floor or model
+call, a reference to the sensitivity libs, or the term list or prompt path
+fails the test. It never reads or writes a verdict cache (AD-19); it writes
+only the eval store and its own manifests.
 
-The harness never reads or writes a verdict cache (AD-19). It writes only to
-the eval store.
+### Switching from the direct path
+
+The Epic 1 direct path is kept, as `scripts/hub/eval-direct.sh`, only until the
+switch is proven on the hub (FR-18, NFR-3):
+
+1. Point `LANE2_EVAL_TERM_LIST` and `LANE2_EVAL_CLASSIFIER_PROMPT` at the policy
+   checkout's `term-list.txt` and `classifier-prompt.md`.
+2. Score the same frozen tuning split both ways:
+
+   ```bash
+   scripts/hub/eval-direct.sh run --split tuning
+   scripts/hub/eval-harness.sh run --split tuning
+   scripts/hub/eval-harness.sh compare <direct record> <gate record>
+   ```
+
+`compare` refuses records that differ in split, fixture digest, model, prompt,
+settings, runtime, cache mode, or `policy_version`. The direct record takes
+the `policy_version` that `lane2 policy update` recorded, and only when its term
+list and prompt are byte-identical to the policy checkout's (else null). Equal
+values with the gate's therefore prove the same term list, prompt, model,
+runtime, and gate code. It then counts per-case differences for every row,
+writes `compare-<time>.json` (0600, hub only), and exits 0 when there are none.
+Any difference is reported as a count, exits 3, and blocks the switch.
+`eval-direct.sh` is deleted in the PR that cites a compare record with zero
+differences.
+
+### Latency through the gate
+
+```bash
+scripts/hub/eval-harness.sh latency --runs 20 --cold
+```
+
+Re-runs the bake-off latency step end to end through the hub socket: synthetic
+plain text of about 1k, 5k, and 20k tokens (three words per four tokens), each
+sent `--runs` times as an `eval` request with both layers. Warm runs follow one
+uncounted request; with `--cold`, each run follows a restart of
+`LANE2_EVAL_COLD_UNITS` and waits for the classifier's `/health`. It writes
+`latency-<time>.json` (0600, hub only) with p50, p95, and max per size and mode
+(nearest rank), the fault count, and three checks: NFR-1 p50 under 5 s at 1k,
+NFR-1 p95 under 30 s at 20k, and p95 at 20k within `GATE_DEADLINE`. A check that
+fails, or any fault in its runs, is ` FAIL ` in the record and on stdout. Cold
+runs need permission to restart the units (root, or a sudo or polkit rule).
 
 ## Exit codes
 
@@ -220,30 +273,39 @@ the eval store.
 |---|---|
 | 0 | Run completed and the record was written, or `publish` printed the scrubbed record. |
 | 2 | Usage error. |
-| 3 | Refused: no freeze record, or the held-out split changed since it was frozen. Nothing reported. |
+| 3 | Refused: no freeze record, or the held-out split changed since it was frozen. Nothing reported. Or `compare` found a difference. |
 | ≥ 4 | Fault: inside a container, store missing or loose, bad config, incomplete record, unreadable record. |
 
 ## Tests
 
-`scripts/tests/test-eval-harness.sh` (tier `ci`) runs the harness against the
-`llama-server` mock with a synthetic eval set, term list, and hardware tree. It
-checks the Clopper-Pearson bound at known points (0/29 at or below 10%, 0/59 at
-or below 5%) and against the sizing table in `eval-set.sh`, the three rows and
-per-category counts, the errors bucket, held-out digest refusal and the run
-log, record completeness and mode, the request body against production, the
-publish scrub, refusal inside a container, and that nothing outside the eval
-store is written.
+`scripts/tests/test-eval-via-gate.sh` (tier `ci`) runs the harness against the
+real gate handler behind a real unix socket, with the `llama-server` mock as the
+classifier: the three rows from the gate's per-layer results, the record format
+(unchanged apart from `policy_version`, which must be the gate's), the
+`publish` scrub of `policy_version`, batches, the bulk budget, the gate's
+manifest checks, a gate that does not answer reaching no layer, the lint,
+`compare` (identical, a difference count, not comparable), and the latency
+record with its ` FAIL ` on a 20k p95 over the gate deadline.
+
+`scripts/tests/test-eval-harness.sh` (tier `ci`) covers what both paths share,
+through `eval-direct.sh`: the Clopper-Pearson bound at known points and against
+the sizing table, per-category counts, the errors bucket, held-out digest
+refusal and the run log, record completeness, the request body against
+production, the publish scrub, and refusal inside a container.
+
+`scripts/tests/test-lane2-health-hub.sh` (tier `hub`) runs the latency step on
+the real hub.
 
 ## Limits
 
-- **Epic 1 does not go through the gate.** Until Story 2.6, a difference
-  between the gate's code path and the harness's direct calls would not show
-  in the eval. The shared floor function, settings file, and `fleet_call`
-  narrow this, but do not close it.
-- **The record has no `policy_version` yet.** AD-19 adds it to eval records
-  when the gate computes it (Epic 2).
-- **The `-np 1` instance is trusted as configured.** In `np1` mode, the harness
-  checks the alias but does not ask the server how many slots it has.
+- **The direct path still exists.** Until a hub compare record shows zero
+  differences, `eval-direct.sh` remains and reaches the floor and the model
+  directly. Nothing else uses it.
+- **Token sizes are approximate.** The latency inputs are sized by words, not by
+  the model's tokenizer.
+- **The `-np 1` instance is trusted as configured.** In `np1` mode (direct path
+  only), the harness checks the alias but does not ask the server how many
+  slots it has.
 - **The scrub handles known identifier types.** It cannot recognise every
   possible identifier in free text, so only one free-text field (the GPU model
   name) is kept, and everything else is an allowlist of checked formats. Read a
