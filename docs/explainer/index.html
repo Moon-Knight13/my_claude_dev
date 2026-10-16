@@ -413,7 +413,7 @@
         </div>
       </div>
       <p class="d-note">A task is classified by type and risk; any hard trigger — auth, networking, 8+ files — always escalates to Claude. The same decision shows up as the <b>Route</b> field on the board card.</p>
-      <p class="d-note">The local endpoint <b>differs by surface</b>. In the devcontainer the model runs on the host; on a remote box it runs on the developer's own machine and arrives over a reverse SSH tunnel. When nothing answers, routing falls back to Claude and the work still completes — local is an optimisation, never a dependency.</p>
+      <p class="d-note">The local endpoint <b>differs by surface</b>. In the devcontainer the model runs on the host; on a remote box it runs on the developer's own machine and arrives over a reverse SSH tunnel only if the developer opts in (the tunnel is unauthenticated to other users of the shared box). When nothing answers, routing falls back to Claude and the work still completes — local is an optimisation, never a dependency.</p>
     </div>
 
     <div class="dgram">
@@ -431,7 +431,7 @@
       <div class="dgram-h"><h3>Getting onto a shared dev box</h3><span class="path">scripts/local/ · scripts/host/</span></div>
       <div class="pipe">
         <div class="check"><div class="cn">identity</div><div class="cw">Reuses a key the git server already accepts rather than generating a rival one, then checks which account the server actually returns.</div><div class="cs">bootstrap-devbox.sh</div></div>
-        <div class="check"><div class="cn">connection</div><div class="cw">Writes the SSH Host block, forwards the agent, and tunnels the local model endpoint through to the box.</div><div class="cs">~/.ssh/config</div></div>
+        <div class="check"><div class="cn">connection</div><div class="cw">Writes the SSH Host block with agent forwarding off. Forwarding (scoped keys, or all keys to deploy) and the local-model tunnel are explicit opt-ins, because the box account is shared.</div><div class="cs">~/.ssh/config</div></div>
         <div class="check"><div class="cn">provision</div><div class="cw">Extensions, lint config, plugins, killswitch and git identity — as the developer, never as root.</div><div class="cs">provision-remote-box.sh</div></div>
         <div class="check"><div class="cn">verify</div><div class="cw">Runs a command that proves the build tooling works. A failure withholds the completion marker, so a re-run retries.</div><div class="cs">--verify-cmd</div></div>
         <div class="check"><div class="cn">diagnose</div><div class="cw">Reads the whole auth chain and names the stale-agent case by name instead of reporting a generic failure.</div><div class="cs">diagnose-git-auth.sh</div></div>

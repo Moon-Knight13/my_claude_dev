@@ -16,10 +16,12 @@
     PUBLIC key and an ssh_config ALIAS block. Never private key material, and
     never a default `Host` entry: the box account is shared.
 
-    KNOWN GAP vs the .sh sibling: Windows OpenSSH uses named pipes, not socket
-    paths, so `ForwardAgent <path>` (the scoped-agent containment fix) has no
-    equivalent here. This script forwards the whole agent and says so. Do not
-    read a scoped forward into it.
+    AGENT FORWARDING is OFF by default (issue #86): the Host block gets
+    `ForwardAgent no` and VSCode agent forwarding is disabled. Windows OpenSSH
+    uses named pipes, not socket paths, so the scoped-agent option of the .sh
+    sibling has no equivalent here; the only opt-in is FORWARD_AGENT=all, which
+    forwards the whole agent and says so. LOCAL_MODEL_TUNNEL=true opts in to the
+    local-model reverse tunnel.
 .NOTES
     Requires the latest OpenSSH for Windows so SSH agent forwarding works:
     https://github.com/PowerShell/Win32-OpenSSH/releases/
@@ -260,20 +262,21 @@ $remoteCmd = "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_ke
 $pub | ssh "$BoxUser@$BoxHost" $remoteCmd
 if ($LASTEXITCODE -eq 0) { Info "public key installed on $BoxHost" } else { Warn "key copy failed — add $Key.pub to authorized_keys manually" }
 
-# 6. Reverse tunnel for the local model endpoint.
-#    The models run on THIS machine. The box has no endpoint of its own, so every
-#    routing decision there falls through to Claude — silently, because the
-#    fallback is indistinguishable from a deliberate choice in the log.
+# 6. Reverse tunnel for the local model endpoint (OPT-IN; issue #86).
+#    Optional: carries THIS machine's model endpoint to the box. Under the
+#    hub-and-spoke design the models stay on the hub and the hub drives the box,
+#    so the tunnel is not needed by default.
 #
 #    Exposure: the forwarded port is bound on the box's LOOPBACK only (sshd's
 #    GatewayPorts defaults to no). It is still reachable by anyone with a shell on
 #    that box while your session is open — the account is shared, so that is every
-#    colleague. Nothing authenticates to it. Set LOCAL_MODEL_TUNNEL=false to skip.
+#    colleague. Nothing authenticates to it. Set LOCAL_MODEL_TUNNEL=true to opt in.
 Step "Local model tunnel"
 $TunnelLine = ""
-if ($env:LOCAL_MODEL_TUNNEL -and $env:LOCAL_MODEL_TUNNEL -ne "true") {
-    Note "LOCAL_MODEL_TUNNEL is not 'true' — skipping (local routing stays off on the box)"
+if ($env:LOCAL_MODEL_TUNNEL -ne "true") {
+    Note "no local-model tunnel (opt in with LOCAL_MODEL_TUNNEL=true; unauthenticated to box co-users)"
 } else {
+    Warn "LOCAL_MODEL_TUNNEL=true — every user on the box can reach your local model while connected"
     if (-not $LocalModelPort) {
         $d = Read-Host "  ??  Local model port on THIS machine [11434]"
         $LocalModelPort = if ($d) { $d } else { "11434" }
@@ -327,6 +330,11 @@ $cfg = Join-Path $sshDir "config"
 if (-not (Test-Path $cfg)) { New-Item -ItemType File -Path $cfg | Out-Null }
 if (Select-String -Path $cfg -Pattern "^\s*Host\s+.*\b$Alias\b" -Quiet) {
     Info "Host '$Alias' already in config — leaving your block as-is"
+    # Defaults changed (issue #86): flag what an older run may have written.
+    if (Select-String -Path $cfg -Pattern "^\s*ForwardAgent\s+yes\b|^\s*RemoteForward\s" -Quiet) {
+        Warn "your config still has 'ForwardAgent yes' and/or a RemoteForward line"
+        Note "this script no longer writes them by default; edit them out of $cfg unless you need them"
+    }
     # A re-run must still pick up directives your original block predates
     # (IdentityFile, RemoteForward) without touching what you wrote. Any gaps go
     # into a separate, clearly-marked block that SSH merges in additively (#38).
@@ -346,12 +354,21 @@ if (Select-String -Path $cfg -Pattern "^\s*Host\s+.*\b$Alias\b" -Quiet) {
         Info "removed a now-redundant devbox-managed block for '$Alias'"
     }
 } else {
-    # ForwardAgent yes forwards EVERY key in the agent. Windows OpenSSH has no
-    # socket-path form to scope it — stated, not papered over.
-    Add-Content $cfg "`nHost $Alias $BoxHost`n    HostName $BoxHost`n    User $BoxUser`n    IdentityFile $Key`n    ForwardAgent yes$TunnelLine"
-    Info "added Host '$Alias' -> $BoxUser@$BoxHost (ForwardAgent yes)"
-    Note "ForwardAgent yes exposes ALL agent keys to the box for the session. The box"
-    Note "account is shared with sudo for all; scoping is not available on Windows."
+    # Agent forwarding is OFF by default (issue #86). Windows OpenSSH has no
+    # socket-path form to scope it, so the only opt-in is all keys, made explicit.
+    # Deploying from the box needs a forwarded agent; for onward hops from this
+    # machine prefer ProxyJump (`ssh -J <alias> <next-host>`).
+    $Forward = "no"
+    if ($env:FORWARD_AGENT -eq "all") { $Forward = "yes" }
+    Add-Content $cfg "`nHost $Alias $BoxHost`n    HostName $BoxHost`n    User $BoxUser`n    IdentityFile $Key`n    ForwardAgent $Forward$TunnelLine"
+    Info "added Host '$Alias' -> $BoxUser@$BoxHost (ForwardAgent $Forward)"
+    if ($Forward -eq "yes") {
+        Warn "FORWARD_AGENT=all — ALL agent keys are usable from the box for the session."
+        Note "The box account is shared with sudo for all; scoping is not available on Windows."
+    } else {
+        Note "no agent forwarded. To deploy from the box, re-run with FORWARD_AGENT=all"
+        Note "(exposes ALL agent keys to box co-users) or bootstrap from macOS/Linux with SCOPE_AGENT=true."
+    }
 }
 
 # 8. Local VSCode
@@ -366,9 +383,11 @@ if ($code) {
         $json = Get-Content $us -Raw | ConvertFrom-Json
         if (-not $json) { $json = [pscustomobject]@{} }
         $json | Add-Member -NotePropertyName "remote.SSH.useExecServer" -NotePropertyValue $false -Force
-        $json | Add-Member -NotePropertyName "remote.SSH.enableAgentForwarding" -NotePropertyValue $true -Force
+        # VSCode's agent forwarding follows the Host block decision (issue #86).
+        $fwdOn = ($env:FORWARD_AGENT -eq "all")
+        $json | Add-Member -NotePropertyName "remote.SSH.enableAgentForwarding" -NotePropertyValue $fwdOn -Force
         ($json | ConvertTo-Json -Depth 20) | Set-Content $us
-        Info "set remote.SSH.useExecServer=false + remote.SSH.enableAgentForwarding=true"
+        Info "set remote.SSH.useExecServer=false + remote.SSH.enableAgentForwarding=$($fwdOn.ToString().ToLower())"
     } catch {
         Note "could not edit settings.json automatically — set remote.SSH.useExecServer=false by hand"
     }

@@ -203,20 +203,32 @@ else
     fi
 fi
 
-# --- 5. Scoped forwarding agent (OPT-IN) -------------------------------------
+# --- 5. Agent forwarding (OFF by default; issue #86) ---------------------------
 # `ForwardAgent yes` exposes EVERY key in your agent to the box for the life of
 # the session. The box account is shared and everyone on it has sudo, so that is
-# every colleague. OpenSSH >= 8.9 accepts an explicit socket path, letting us
-# forward an agent that holds only what the box needs.
+# every colleague. The Host block therefore gets `ForwardAgent no` unless you ask
+# for forwarding, and an opt-in that cannot be honoured degrades to `no` — never
+# silently to `yes`.
 #
-# OFF BY DEFAULT, deliberately. The build tooling on the box authenticates to the
-# hosts it configures through this same forwarded agent, and which identities
-# those hosts accept is not recorded anywhere in this repository. Scoping to the
-# git key alone would break deploys. Turn it on only once you know which keys the
-# tooling needs, and list them:
-#   SCOPE_AGENT=true SCOPE_AGENT_KEYS="$HOME/.ssh/k1 $HOME/.ssh/k2" bash …
-FORWARD_VALUE="yes"
-if [[ "${SCOPE_AGENT:-false}" == "true" ]]; then
+# The build tooling on the box authenticates to the hosts it configures through a
+# forwarded agent, and which identities those hosts accept is not recorded in this
+# repository. If you deploy from this box you need one of the opt-ins:
+#   SCOPE_AGENT=true SCOPE_AGENT_KEYS="$HOME/.ssh/k1 …" bash …   # preferred: only listed keys
+#       (OpenSSH >= 8.9; on older clients this falls back to NO forwarding)
+#   FORWARD_AGENT=all bash …                                      # every agent key — last resort
+# For onward hops from your own machine, prefer ProxyJump over forwarding:
+#   ssh -J <alias> <next-host>      or  `ProxyJump <alias>` in that host's block
+FORWARD_MODE="no"
+[[ "${FORWARD_AGENT:-}" == "all" ]] && FORWARD_MODE="all"
+[[ "${SCOPE_AGENT:-false}" == "true" ]] && FORWARD_MODE="scoped"
+SCOPED_SOCK=""
+ssh_major=0; ssh_minor=0
+if [[ "$FORWARD_MODE" == "all" ]]; then
+    step "Agent forwarding"
+    warn "FORWARD_AGENT=all — EVERY key in your agent is usable from the box for the session"
+    note "the box account is shared with sudo for all; prefer SCOPE_AGENT=true with SCOPE_AGENT_KEYS"
+fi
+if [[ "$FORWARD_MODE" == "scoped" ]]; then
     step "Scoped forwarding agent"
     ssh_ver="$(ssh -V 2>&1 | sed -n 's/^OpenSSH_\([0-9]*\)\.\([0-9]*\).*/\1 \2/p')"
     read -r ssh_major ssh_minor <<<"${ssh_ver:-0 0}"
@@ -233,14 +245,15 @@ if [[ "${SCOPE_AGENT:-false}" == "true" ]]; then
             [[ -f "$k" ]] || { warn "scoped agent: no key at $k"; continue; }
             SSH_AUTH_SOCK="$SCOPED_SOCK" ssh-add "$k" || warn "could not add $k to scoped agent"
         done
-        FORWARD_VALUE="$SCOPED_SOCK"
         warn "a socket-bound agent does NOT survive a reboot. Recreate it with:"
         note "    ssh-agent -a ${SCOPED_SOCK} && SSH_AUTH_SOCK=${SCOPED_SOCK} ssh-add ${KEY}"
     else
         warn "OpenSSH $(ssh -V 2>&1) does not accept a socket path for ForwardAgent (needs >= 8.9)"
-        note "falling back to 'ForwardAgent yes' — ALL agent keys stay reachable from the box"
+        note "NOT forwarding any agent ('ForwardAgent no'). Upgrade OpenSSH, or opt in to"
+        note "all keys explicitly with FORWARD_AGENT=all if you accept that exposure."
     fi
 fi
+FORWARD_VALUE="$(ssh_forward_value "$FORWARD_MODE" "$SCOPED_SOCK" "$ssh_major" "$ssh_minor")"
 
 # --- 6. Copy public key for passwordless login (prompts for password once) ---
 # Runs BEFORE the Host block is written, addressing the box directly, so the
@@ -255,22 +268,21 @@ else
     cat "${KEY}.pub"
 fi
 
-# --- 7. Reverse tunnel for the local model endpoint --------------------------
-# The models run on THIS machine. The box has no endpoint of its own, so every
-# routing decision there falls through to Claude — silently, because the
-# fallback is indistinguishable from a deliberate choice in the log. A reverse
-# tunnel in the Host block carries the endpoint to the box and costs nothing at
-# connect time: VSCode Remote-SSH reads this same config.
+# --- 7. Reverse tunnel for the local model endpoint (OPT-IN; issue #86) ------
+# Optional: carries THIS machine's model endpoint to the box so local routing
+# there has something to call. Under the hub-and-spoke design the models stay on
+# the hub and the hub drives the box, so the tunnel is not needed by default.
 #
 # Exposure: the forwarded port is bound on the box's LOOPBACK only (sshd's
 # GatewayPorts defaults to no). It is still reachable by anyone with a shell on
 # that box while your session is open — the account is shared, so that is every
-# colleague. Nothing authenticates to it. Set LOCAL_MODEL_TUNNEL=false to skip.
+# colleague. Nothing authenticates to it. Set LOCAL_MODEL_TUNNEL=true to opt in.
 step "Local model tunnel"
 TUNNEL_LINE=""
-if [[ "${LOCAL_MODEL_TUNNEL:-true}" != "true" ]]; then
-    note "LOCAL_MODEL_TUNNEL is not 'true' — skipping (local routing stays off on the box)"
+if [[ "${LOCAL_MODEL_TUNNEL:-false}" != "true" ]]; then
+    note "no local-model tunnel (opt in with LOCAL_MODEL_TUNNEL=true; unauthenticated to box co-users)"
 else
+    warn "LOCAL_MODEL_TUNNEL=true — every user on the box can reach your local model while connected"
     ask LOCAL_MODEL_PORT "Local model port on THIS machine" "11434"
     if ! curl --silent --fail --connect-timeout 2 "http://127.0.0.1:${LOCAL_MODEL_PORT}" >/dev/null 2>&1; then
         warn "nothing answers on http://127.0.0.1:${LOCAL_MODEL_PORT} on this machine"
@@ -315,6 +327,13 @@ touch "$CFG"; chmod 600 "$CFG"
 esc_host="${HOST//./\\.}"
 if grep -qiE "^[[:space:]]*Host[[:space:]]([^#]*[[:space:]])?(${ALIAS}|${esc_host})([[:space:]]|$)" "$CFG"; then
     info "Host entry for ${HOST} already in $CFG — leaving your block as-is"
+    # Defaults changed (issue #86): flag what an older run may have written.
+    RISKY="$(ssh_risky_directives "$ALIAS" "$HOST" <"$CFG")"
+    if [[ -n "$RISKY" ]]; then
+        warn "your existing block still has directives this script no longer writes by default:"
+        printf '%s\n' "$RISKY" | while IFS= read -r d; do note "    $d"; done
+        note "edit them out of $CFG (ForwardAgent no; drop RemoteForward) unless you need them"
+    fi
     # A re-run must still pick up directives your original block predates
     # (IdentityFile for the box key, RemoteForward for the local-model tunnel)
     # without touching what you wrote. Any gaps go into a separate, clearly-
@@ -336,15 +355,7 @@ if grep -qiE "^[[:space:]]*Host[[:space:]]([^#]*[[:space:]])?(${ALIAS}|${esc_hos
         info "removed a now-redundant devbox-managed block for '${ALIAS}'"
     fi
 else
-    {
-        echo ""
-        echo "Host ${ALIAS} ${HOST}"
-        echo "  HostName ${HOSTNAME_VALUE}"
-        echo "  User ${BOX_USER}"
-        echo "  IdentityFile ${KEY}"
-        echo "  ForwardAgent ${FORWARD_VALUE}"
-        [[ -n "$TUNNEL_LINE" ]] && echo "$TUNNEL_LINE"
-    } >> "$CFG"
+    ssh_host_block "$ALIAS" "$HOST" "$HOSTNAME_VALUE" "$BOX_USER" "$KEY" "$FORWARD_VALUE" "$TUNNEL_LINE" >> "$CFG"
     info "added Host '${ALIAS} ${HOST}' -> ${BOX_USER}@${HOSTNAME_VALUE} (ForwardAgent ${FORWARD_VALUE})"
 fi
 
@@ -362,18 +373,23 @@ if command -v code >/dev/null 2>&1; then
     US="$US_DIR/settings.json"
     if command -v python3 >/dev/null 2>&1; then
         mkdir -p "$US_DIR"; [[ -f "$US" ]] || echo '{}' > "$US"
-        US_PATH="$US" python3 - <<'PY'
+        # VSCode's agent forwarding follows the same decision as the Host block
+        # (issue #86): on only when the developer opted in to forwarding.
+        FWD_ON="false"; [[ "$FORWARD_VALUE" != "no" ]] && FWD_ON="true"
+        US_PATH="$US" FWD_ON="$FWD_ON" python3 - <<'PY'
 import json, os, sys
 p = os.environ["US_PATH"]
+fwd = os.environ.get("FWD_ON") == "true"
 try:
     d = json.load(open(p))
     assert isinstance(d, dict)
 except Exception:
     print(f"  !!  {p} not valid JSON; set remote.SSH.useExecServer=false + "
-          "remote.SSH.enableAgentForwarding=true by hand", file=sys.stderr); sys.exit(0)
+          f"remote.SSH.enableAgentForwarding={'true' if fwd else 'false'} by hand",
+          file=sys.stderr); sys.exit(0)
 desired = {
     "remote.SSH.useExecServer": False,       # guide-mandated
-    "remote.SSH.enableAgentForwarding": True, # forward the agent to the box (-A)
+    "remote.SSH.enableAgentForwarding": fwd, # matches the Host block's ForwardAgent
 }
 changed = [k for k, v in desired.items() if d.get(k) is not v]
 for k, v in desired.items():
@@ -500,6 +516,18 @@ step "Next: connect and provision the box"
 cat <<EOF
   Connect with VSCode Remote-SSH (F1 -> "Remote-SSH: Connect to Host" -> ${ALIAS})
   or from a shell:  ssh ${ALIAS}
+EOF
+if [[ "$FORWARD_VALUE" == "no" ]]; then
+cat <<EOF
+
+  Agent forwarding is OFF (ForwardAgent no). The build tooling on the box needs a
+  forwarded key to deploy; if you deploy from this box, re-run with ONE of:
+    SCOPE_AGENT=true SCOPE_AGENT_KEYS="<keys the tooling needs>" bash $0   (preferred)
+    FORWARD_AGENT=all bash $0                                              (every agent key)
+  For onward hops from your own machine, use ProxyJump instead:  ssh -J ${ALIAS} <next-host>
+EOF
+else
+cat <<EOF
 
   IMPORTANT — agent forwarding (the downstream build tooling needs your
   FORWARDED key):
@@ -516,6 +544,9 @@ cat <<EOF
     3) If it says "Error connecting to agent: No such file or directory" AFTER a
        reconnect, the agent socket is stale, not missing. On the box:
                 eval "\$(bash scripts/host/fix-agent-sock.sh)"
+EOF
+fi
+cat <<EOF
 
   Then ON THE BOX, clone this repo (if not already) and run:
       git clone https://github.com/Moon-Knight13/my_claude_dev
