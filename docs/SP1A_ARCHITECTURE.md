@@ -220,7 +220,7 @@ quarantine.
    everything new and pushes to an allowlisted repository. A change to a
    host-executed file needs approval at the hub terminal, with the diff shown.
 4. **Review.** After a breach, `lane2 review` as above.
-5. **Down.** Ending the session stops the supervisor's unit. That removes the
+5. **Down.** `lane2 down <workspace>` (or ending the Claude session) stops the supervisor's unit. That removes the
    container and the session's sockets. Nothing auto-starts at boot.
    Quarantine, scan state, and workspace marks persist.
 
