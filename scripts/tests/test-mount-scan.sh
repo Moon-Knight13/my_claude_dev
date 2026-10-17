@@ -171,7 +171,7 @@ WANT="$(printf '%s\n' "tree:other.md" "object:.git:$(G -C "$R" rev-parse HEAD:ot
 check "  tree:notes.md no longer reported; other items still are" "$(jq -r '[.hits[].item] | unique | join(",")' "$P")" "$WANT"
 run review exclude "$OUT" --path 'tree:other.md'
 for o in other.md notes.md; do
-    run review exclude "$(cat "$STATE/operator-log/gate.jsonl" | tail -1 | jq -r .ref)" --path "object:.git:$(G -C "$R" rev-parse "HEAD:$o"):blob" >/dev/null 2>&1
+    run review exclude "$(tail -1 "$STATE/operator-log/gate.jsonl" | jq -r .ref)" --path "object:.git:$(G -C "$R" rev-parse "HEAD:$o"):blob" >/dev/null 2>&1
 done
 run scan "$R"; check "every hit excluded: clean" "$RC" 0
 check "  state clean" "$(state "$R")" clean
