@@ -37,7 +37,8 @@ results. Container sockets (later) never carry `detail`.
 |---|---|
 | `eval` | Implemented: runs each requested layer, reports each; no cache, no log. With a `manifest`, a bulk eval (below) |
 | `health` | Implemented: runs the operator's two probes (below); no cache, no retained payload, no log |
-| `push`, `git_text`, `mount_scan`, `rescan` | `block` (`fault:protocol`) until their stories add them |
+| `mount_scan` | Implemented (Story 3.2): the floor over every item of a hub-produced workspace manifest; a hit is a block with the hit detail retained ([SP1A_WORKSPACE_SEPARATION.md](SP1A_WORKSPACE_SEPARATION.md#the-mount-scan)) |
+| `push`, `git_text`, `rescan` | `block` (`fault:protocol`) until their stories add them |
 | `prompt`, `expansion`, `tool_input`, `tool_result` | `block` (`fault:protocol`): container ops, never on the hub socket |
 
 A malformed header, a missing or unknown `v`, an unknown op, an extra header

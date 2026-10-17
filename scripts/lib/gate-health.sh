@@ -77,9 +77,13 @@ gate_load_budget() {
     b="$(lane2_conf_file_get "$conf" GATE_EVAL_BUDGET)"; b="${b:-$GATE_EVAL_BUDGET_DEFAULT}"
     [[ "$b" =~ ^[1-9][0-9]{0,3}$ ]] && (( b >= dl && b <= 9000 )) || return 4
     GATE_EVAL_BUDGET="$b"
+    # The mount scan (Story 3.2) has its own bulk budget.
+    b="$(lane2_conf_file_get "$conf" GATE_SCAN_BUDGET)"; b="${b:-900}"
+    [[ "$b" =~ ^[1-9][0-9]{0,3}$ ]] && (( b >= dl && b <= 9000 )) || return 4
+    GATE_SCAN_BUDGET="$b"
     # The outer limit covers the longest op; the watchdog enforces GATE_DEADLINE
-    # on every request that is not a bulk eval.
-    GATE_WORK_LIMIT="$b"
+    # on every request, re-armed with its own budget by a bulk op.
+    GATE_WORK_LIMIT=$(( GATE_EVAL_BUDGET > GATE_SCAN_BUDGET ? GATE_EVAL_BUDGET : GATE_SCAN_BUDGET ))
 }
 
 # The watchdog runs in the work process's group (timeout(1) made it a group

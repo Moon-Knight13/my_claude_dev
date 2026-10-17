@@ -117,52 +117,76 @@ GATE_FLOOR_SEP='[][:space:]._/|:*+~'"'"'"`,;=()<>{}#@!?&$%^-]'
 GATE_FLOOR_SEPCHARS=' ._/|:*+~'"'"'"`,;=()<>{}#@!?&$%^-[]'
 GATE_FLOOR_SEP_MAX=3
 
-# One ERE per valid term (same parsing as gate_terms_check).
-gate_floor_patterns() {
-    local LC_ALL=C.UTF-8 line term i c p sep="${GATE_FLOOR_SEP}{0,$GATE_FLOOR_SEP_MAX}" first
+# _gate_floor_term_pattern <term> — the ERE for one term; empty if the term has
+# no letter or digit left once separators are optional.
+_gate_floor_term_pattern() {
+    local LC_ALL=C.UTF-8 term="$1" i c p="" sep="${GATE_FLOOR_SEP}{0,$GATE_FLOOR_SEP_MAX}" first=1
+    for (( i = 0; i < ${#term}; i++ )); do
+        c="${term:i:1}"
+        # The term's own separators are as optional as inserted ones.
+        [[ "$c" == [[:space:]] || "$GATE_FLOOR_SEPCHARS" == *"$c"* ]] && continue
+        (( first )) || p+="$sep"
+        first=0
+        if [[ "$c" == "\\" ]]; then p+='[\]'
+        elif [[ "$c" == [A-Za-z0-9] ]]; then p+="$c"
+        else p+="[$c]"; fi
+    done
+    printf '%s' "$p"
+}
+
+# gate_floor_terms — every valid term (same parsing as gate_terms_check) that
+# has a pattern, one per line.
+gate_floor_terms() {
+    local line term
     [[ -r "$GATE_TERM_FILE" ]] || return 4
     while IFS= read -r line || [[ -n "$line" ]]; do
         term="${line#"${line%%[![:space:]]*}"}"; term="${term%"${term##*[![:space:]]}"}"
         [[ -n "$term" && "$term" != \#* && ${#term} -ge $GATE_TERM_MIN_LEN ]] || continue
-        p=""; first=1
-        for (( i = 0; i < ${#term}; i++ )); do
-            c="${term:i:1}"
-            # The term's own separators are as optional as inserted ones.
-            [[ "$c" == [[:space:]] || "$GATE_FLOOR_SEPCHARS" == *"$c"* ]] && continue
-            (( first )) || p+="$sep"
-            first=0
-            if [[ "$c" == "\\" ]]; then p+='[\]'
-            elif [[ "$c" == [A-Za-z0-9] ]]; then p+="$c"
-            else p+="[$c]"; fi
-        done
-        [[ -n "$p" ]] && printf '%s\n' "$p"
+        [[ -n "$(_gate_floor_term_pattern "$term")" ]] && printf '%s\n' "$term"
     done < "$GATE_TERM_FILE"
 }
 
-# Perl builtins only (perl-base): no modules. Reads the text on stdin, prints the
-# decoded variants, one level after another, bounded to 4x the input + 64 KiB.
+# One ERE per term of gate_floor_terms, in the same order.
+gate_floor_patterns() {
+    local term
+    gate_floor_terms > /dev/null || return 4
+    while IFS= read -r term; do
+        printf '%s\n' "$(_gate_floor_term_pattern "$term")"
+    done < <(gate_floor_terms)
+}
+
+# Perl builtins only (perl-base): no modules. decode_all($text) returns the
+# decoded variants, one level after another, two levels deep, bounded to 4x the
+# input + 64 KiB. Shared by the floor (one text) and the mount scan (every item).
 # shellcheck disable=SC2016  # perl code
-GATE_FLOOR_DECODE='
+GATE_FLOOR_DECODE_LIB='
 sub b64 { my $s = shift; $s =~ tr{-_}{+/}; $s =~ s/=+$//; return undef if length($s) % 4 == 1;
           $s =~ tr|A-Za-z0-9+/| -_|; my $r = "";
           while ($s =~ /(.{1,60})/gs) { $r .= unpack("u", chr(32 + int(length($1) * 3 / 4)) . $1); }
           return $r; }
+sub decode_all {
+    my $in = shift; my $budget = 4 * length($in) + 65536; my %seen; my @queue = ($in); my @out;
+    for my $depth (1 .. 2) {
+        my @next;
+        for my $s (@queue) {
+            if ($s =~ /%[0-9A-Fa-f]{2}/) { (my $u = $s) =~ s/\+/ /g; $u =~ s/%([0-9A-Fa-f]{2})/chr(hex $1)/ge; push @next, $u; }
+            while ($s =~ /([A-Za-z0-9+\/_-]{8,}={0,2})/g) { my $d = b64($1); push @next, $d if defined $d && length $d; }
+            while ($s =~ /(?:0[xX])?((?:[0-9A-Fa-f]{2}){4,})/g) { push @next, pack("H*", $1); }
+            while ($s =~ /((?:\\x[0-9A-Fa-f]{2}){4,})/g) { (my $h = $1) =~ s/\\x//g; push @next, pack("H*", $h); }
+        }
+        my @kept;
+        for (@next) { next if $seen{$_}++; $budget -= length; last if $budget < 0; push @out, $_; push @kept, $_; }
+        @queue = @kept;
+        last if $budget < 0;
+    }
+    return @out;
+}
+'
+# shellcheck disable=SC2016  # perl code
+GATE_FLOOR_DECODE="${GATE_FLOOR_DECODE_LIB}"'
 binmode STDIN; binmode STDOUT;
 my $in = do { local $/; <STDIN> }; $in = "" unless defined $in;
-my $budget = 4 * length($in) + 65536; my %seen; my @queue = ($in);
-for my $depth (1 .. 2) {
-    my @next;
-    for my $s (@queue) {
-        if ($s =~ /%[0-9A-Fa-f]{2}/) { (my $u = $s) =~ s/\+/ /g; $u =~ s/%([0-9A-Fa-f]{2})/chr(hex $1)/ge; push @next, $u; }
-        while ($s =~ /([A-Za-z0-9+\/_-]{8,}={0,2})/g) { my $d = b64($1); push @next, $d if defined $d && length $d; }
-        while ($s =~ /(?:0[xX])?((?:[0-9A-Fa-f]{2}){4,})/g) { push @next, pack("H*", $1); }
-        while ($s =~ /((?:\\x[0-9A-Fa-f]{2}){4,})/g) { (my $h = $1) =~ s/\\x//g; push @next, pack("H*", $h); }
-    }
-    my @kept;
-    for (@next) { next if $seen{$_}++; $budget -= length; last if $budget < 0; print $_, "\n"; push @kept, $_; }
-    @queue = @kept;
-    last if $budget < 0;
-}
+print $_, "\n" for decode_all($in);
 '
 
 gate_floor_normalised() { # gate_floor_normalised <text> — rc 0 hit, 1 none, 4 fault

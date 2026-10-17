@@ -38,10 +38,12 @@ source "$GATE_HERE/../lib/gate.sh"
 source "$GATE_HERE/../lib/gate-health.sh"
 # shellcheck source=scripts/lib/gate-store.sh
 source "$GATE_HERE/../lib/gate-store.sh"
+# shellcheck source=scripts/lib/gate-scan.sh
+source "$GATE_HERE/../lib/gate-scan.sh"
 
 GATE_HEADER_MAX=4096
 GATE_CONTAINER_OPS=(prompt expansion tool_input tool_result)
-GATE_PENDING_OPS=(push git_text mount_scan rescan)   # later stories
+GATE_PENDING_OPS=(push git_text rescan)   # later stories
 
 # --- config ------------------------------------------------------------------
 
@@ -203,8 +205,15 @@ gate_work() { # gate_work <confdir> <tmpdir> — reads the request from stdin
             gate_result "$t" block fault:protocol
         fi
     done
-    [[ "$op" == eval || "$op" == health ]] || gate_result "$t" block fault:protocol
-    gate_header_ok "$t/header" "$op" || gate_result "$t" block fault:protocol
+    [[ "$op" == eval || "$op" == health || "$op" == mount_scan ]] || gate_result "$t" block fault:protocol
+    if [[ "$op" == mount_scan ]]; then
+        jq -e '(keys - ["v", "op", "workspace", "manifest"]) == [] and (keys | length) == 4
+               and (.workspace | type) == "string" and (.workspace | test("^[0-9a-f]{32}$"))
+               and (.manifest | type) == "string"' "$t/header" >/dev/null 2>&1 \
+            || gate_result "$t" block fault:protocol
+    else
+        gate_header_ok "$t/header" "$op" || gate_result "$t" block fault:protocol
+    fi
     layers="$(jq -r '.layers // [] | join(" ")' "$t/header")"
     # eval and health measure the classifier itself: never from or into the cache.
     GATE_CACHE_BYPASS=1
@@ -224,6 +233,27 @@ gate_work() { # gate_work <confdir> <tmpdir> — reads the request from stdin
     pv="$(gate_policy_version "$GATE_TERM_FILE" "$GATE_PROMPT_FILE" "$model" "$sha" "$build" "$digest")" \
         || gate_result "$t" block fault:policy
 
+    # --- mount_scan (story 3.2; scripts/lib/gate-scan.sh) -----------------------
+    # The floor over every item of a hub-produced workspace manifest. A hit is a
+    # block whose retained payload is the hit detail (item and term identity).
+    if [[ "$op" == mount_scan ]]; then
+        (( size == 0 )) || gate_result "$t" block fault:protocol
+        GATE_R_PAYLOAD=0
+        gate_watchdog_disarm; gate_watchdog_arm "$GATE_SCAN_BUDGET" "$t"
+        local mdir; mdir="$(jq -r .manifest "$t/header")"
+        gate_scan_manifest_ok "$mdir" "$GATE_STATE" || gate_result "$t" block fault:protocol
+        mkdir -m 700 "$t/scan" || gate_result "$t" block fault:internal
+        rc=0; gate_scan "$mdir" "$(jq -r .workspace "$t/header")" "$GATE_STATE" "$t/scan" || rc=$?
+        case "$rc" in
+            0) gate_result "$t" allow "" "$(jq -nc --argjson n "$GATE_SCAN_N" '{items: $n}')" ;;
+            3) jq -nc --arg ws "$(jq -r .workspace "$t/header")" --argjson h "$GATE_SCAN_HITS" \
+                   '{workspace: $ws, hits: $h}' > "$t/payload" || gate_result "$t" block fault:internal
+               GATE_R_PAYLOAD=1
+               gate_result "$t" block hit:floor ;;
+            *) gate_result "$t" block "${GATE_SCAN_FAULT:-fault:internal}" ;;
+        esac
+    fi
+
     # --- health op and bulk eval (story 2.6; scripts/lib/gate-health.sh) ------
     # Neither writes a cache entry, a retained payload, or an operator log line.
     if [[ "$op" == health ]]; then
@@ -236,7 +266,7 @@ gate_work() { # gate_work <confdir> <tmpdir> — reads the request from stdin
         # The caller states the policy_version it expects; a mismatch is a block,
         # and the gate's own value is never sent back.
         [[ "$(jq -r .policy_version "$t/header")" == "$pv" ]] || gate_result "$t" block fault:policy
-        gate_watchdog_disarm      # a bulk eval runs to GATE_EVAL_BUDGET instead
+        gate_watchdog_disarm; gate_watchdog_arm "$GATE_EVAL_BUDGET" "$t"   # a bulk eval runs to its budget
         gate_eval_manifest "$(jq -r .manifest "$t/header")" "$GATE_STATE" "$layers" "$GATE_FLEET_CONF" \
             || gate_result "$t" block fault:protocol
         gate_result "$t" "$GATE_EVAL_VERDICT" "$GATE_EVAL_REASON" \

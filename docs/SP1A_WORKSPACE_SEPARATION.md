@@ -4,8 +4,110 @@ The main control in SP1a is that sensitive material is not where Claude can read
 it (P5). Claude runs in a Lane 2 container that holds nothing sensitive, built so
 that no workspace can change what the container is, and container root is never
 hub root. This page covers what has landed: the **image** and the **container
-definition** (Story 3.1). Starting sessions, marking workspaces, and network
-isolation follow in Stories 3.2–3.4.
+definition** (Story 3.1), and **marking workspaces** with the **mount scan**
+(Story 3.2). Starting sessions and network isolation follow in Stories 3.3–3.4.
+
+## Marking workspaces
+
+Only a workspace you mark `mountable` can ever be mounted into Lane 2:
+
+```bash
+scripts/hub/lane2 mark <workspace> mountable     # as the operator, on the hub
+scripts/hub/lane2 mark <workspace> sensitive
+```
+
+- **Unmarked means sensitive.** A workspace with no mark, a corrupt entry, or an
+  unreadable store is never mountable; a corrupt or unreadable store is a fault.
+  While any entry is corrupt, nothing can be marked `mountable` (the sensitive-path
+  check cannot be trusted), until you fix or remove that entry.
+- **Marking `sensitive` always succeeds:** it only reduces exposure.
+- The mark is recorded against the workspace's canonical real path in the
+  `workspaces` store, under a per-workspace lock, with one metadata-only event
+  (workspace id and mark, no path) in `events/lane2.jsonl`.
+- **Refused paths** (exit 2): missing, not a directory, a symlink, or inside the
+  hub state root, the install prefix, or the policy checkout.
+
+`mountable` is also refused (exit 3) when the workspace:
+
+- lies under a work repository root (`LANE2_WORK_REPO_ROOTS`);
+- has a remote, nested repository, submodule, or `url.<…>.insteadOf` rewrite
+  naming a work git host or a subdomain of one (`LANE2_WORK_GIT_HOSTS`). Git
+  config is read as text; no git command runs in the workspace;
+- contains, or is contained by, a path marked `sensitive`.
+
+```bash
+# /etc/lane2/lane2.conf
+LANE2_WORK_GIT_HOSTS=<work git host>[, <another>]
+LANE2_WORK_REPO_ROOTS=<path>[, <path>]
+```
+
+Every scan repeats these checks, so a work remote or nested repository added after
+marking blocks the mount.
+
+## The mount scan
+
+```bash
+scripts/hub/lane2 scan <workspace>              # exit 0 clean, 3 blocked (prints the ref), >=4 fault
+```
+
+Before any mount, the floor runs over the workspace's **full content and history**:
+
+- every working-tree file — tracked, untracked, and ignored;
+- every git object, loose and packed, reachable or not (so deleted files and
+  rewritten history are scanned too);
+- every ref, packed ref, branch and tag name, the stash, every reflog;
+- every commit and tag message (they are objects);
+- every instruction file (`CLAUDE.md` at any depth, `.claude/`), and imports they
+  name must stay inside the workspace;
+- LFS objects, and the workspace's own git config and hooks — as text to scan,
+  never used.
+
+**No git command runs inside the workspace.** `.git` is copied as plain files into
+a hub-owned scan directory; its config and hooks are scanned and then replaced
+with a minimal config; objects are listed there with no system or global config,
+an empty `HOME`, and hooks and fsmonitor off. Alternates inside the workspace are
+copied too. These are faults (exit 4, never a partial scan):
+
+- a symlink, gitfile, `commondir`, or `objects/info/alternates` that points
+  outside the workspace;
+- an instruction-file import outside the workspace;
+- more files than `LANE2_SCAN_MAX_FILES` (default 50000) or bytes than
+  `LANE2_SCAN_MAX_BYTES` (default 512 MiB).
+
+The manifest goes to the gate's `mount_scan` op on the hub socket; the gate reads
+it under its own identity, never the workspace, within `GATE_SCAN_BUDGET` seconds
+(default 900, in `gate.conf`). Results:
+
+| Result | State | Exit |
+|---|---|---|
+| clean, every item | `clean` (logged) | 0 |
+| a floor hit | `scan-blocked <ref>`; the hit detail (which item, which term as a hash) is a retained payload; an operator log line and notification | 3, prints only the ref |
+| a gate fault, budget overrun, or escape | `unscanned` (blocks the mount too) | ≥ 4 |
+
+Only a full clean scan writes `clean`. The mount (Story 3.3) needs `mountable`
+and `clean`.
+
+**The scan is floor-only (FR-28).** It catches your listed terms, disguised or
+not; it does not judge meaning. Content that is sensitive only by inference is
+kept out by marking, not by the scan: leave such a workspace unmarked.
+
+### Exclusions
+
+When a scan hit is not sensitive after all, record an exclusion instead of
+deleting the content:
+
+```bash
+sudo scripts/hub/lane2 review show gr-…                         # see what hit
+sudo scripts/hub/lane2 review exclude gr-… --path tree:docs/a.md [--term <sha256>]
+```
+
+An exclusion covers **exactly one item and one term** (give `--term` from the
+retained payload when several terms hit that item). It never hides a hit on
+another item or another term — the same text in a git object is another item.
+Directories, globs, and empty paths are refused. Exclusions are hub-only
+(`exclusions/exclusions.jsonl`), written only by `lane2 review`, and apply to
+later scans; `lane2 health` lists each by id and item with the count, never the
+term. A corrupt exclusion store makes every scan a fault.
 
 ## The image
 
