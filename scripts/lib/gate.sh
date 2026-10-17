@@ -128,10 +128,12 @@ gate_policy_version() {
 #                                    rc 0 nonsensitive, 3 sensitive, 4 fault;
 #                                    on a fault sets GATE_FAULT (fault:oversize
 #                                    or fault:classifier)
-#   gate_decide <file> <fleet-conf>  floor, then the classifier only on a clear
-#                                    floor; sets GATE_VERDICT (allow|block) and
-#                                    GATE_REASON (hit:floor | hit:classifier |
-#                                    fault:...). Policy must be loaded first.
+#   gate_decide <file> <fleet-conf> [policy_version]
+#                                    floor, then the cache and the classifier only
+#                                    on a clear floor; sets GATE_VERDICT
+#                                    (allow|block), GATE_REASON (hit:floor |
+#                                    hit:classifier | fault:...), GATE_CACHE_HIT.
+#                                    Policy must be loaded first.
 #
 # The gate returns allow or block only; it never edits content and never calls
 # the sanitiser (FR-11). The classifier is reached only through fleet_call, at
@@ -185,13 +187,24 @@ gate_classify() {
     esac
 }
 
-# Floor OR classifier: a floor hit blocks without calling the classifier; a
-# clear floor never turns a classifier "sensitive" into allow. Results are read
-# by callers from GATE_VERDICT and GATE_REASON.
+# shellcheck source=/dev/null
+source "$GATE_LIB_DIR/gate-cache.sh"
+GATE_LAYER_SET=full
+
+# gate_decide <file> <fleet-conf> [policy_version] — floor OR classifier: a floor
+# hit blocks without calling the classifier; a clear floor never turns a
+# classifier "sensitive" into allow. Results are read by callers from
+# GATE_VERDICT, GATE_REASON, and GATE_CACHE_HIT.
+#
+# Cache (Story 2.5; AD-19): with a policy_version, under the full layer set and
+# without GATE_CACHE_BYPASS, an allow is looked up and stored under
+# sha256(normalised content) ‖ policy_version ‖ layer set. Only allow is cached.
+# A floor-only session (GATE_LAYER_SET=floor-only) never reads or writes it. A
+# corrupt or locked cache is fault:store, never a miss that could allow.
 # shellcheck disable=SC2034
 gate_decide() {
-    local in="$1" conf="$2" rc=0
-    GATE_VERDICT=block; GATE_REASON=""
+    local in="$1" conf="$2" pv="${3:-}" rc=0 key="" use_cache=0
+    GATE_VERDICT=block; GATE_REASON=""; GATE_CACHE_HIT=0
     gate_is_text "$in" || { GATE_REASON="fault:non-text"; return 3; }
     gate_floor_match "$(cat -- "$in")" || rc=$?
     case "$rc" in
@@ -199,9 +212,25 @@ gate_decide() {
         1) ;;
         *) GATE_REASON="fault:policy"; return 3 ;;
     esac
+    if [[ "$GATE_LAYER_SET" == floor-only ]]; then GATE_VERDICT=allow; return 0; fi
+    [[ "$GATE_LAYER_SET" == full ]] || { GATE_REASON="fault:config"; return 3; }
+    if [[ -n "$pv" && "$GATE_CACHE_BYPASS" != 1 ]]; then
+        use_cache=1
+        key="$(gate_cache_key "$in" "$pv" full)" || { GATE_REASON="fault:store"; return 3; }
+        rc=0; gate_cache_lookup "$key" "$pv" || rc=$?
+        case "$rc" in
+            0) GATE_VERDICT=allow; GATE_CACHE_HIT=1; return 0 ;;
+            1) ;;
+            *) GATE_REASON="fault:store"; return 3 ;;
+        esac
+    fi
     rc=0; gate_classify "$in" "$conf" || rc=$?
     case "$rc" in
-        0) GATE_VERDICT=allow; return 0 ;;
+        0)
+            if (( use_cache )) && ! gate_cache_store "$key" "$pv"; then
+                GATE_REASON="fault:store"; return 3
+            fi
+            GATE_VERDICT=allow; return 0 ;;
         3) GATE_REASON="hit:classifier"; return 3 ;;
         *) GATE_REASON="$GATE_FAULT"; return 3 ;;
     esac

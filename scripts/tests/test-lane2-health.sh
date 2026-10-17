@@ -117,7 +117,10 @@ hop '{"v":1,"op":"health"}' "some payload"
 check "a payload on the health op: block" "$(jq -r .detail.reason <<<"$RESP")" fault:protocol
 
 echo "== probes: no cache entry, retained payload, or operator log line =="
-check "gate store untouched" "$(find "$STATE/gate-store" -mindepth 1 | wc -l | tr -d ' ')" 0
+# Only the query log and per-peer counters (Story 2.5, metadata) are written.
+GSX() { find "$STATE/gate-store" "$STATE/operator-log" -mindepth 1 -not -name query.jsonl -not -name '.counters.lock' \
+          -not -path "$STATE/gate-store/counters" -not -path "$STATE/gate-store/counters/*" | wc -l | tr -d ' '; }
+check "gate store: no cache entry, retained payload, or operator log line" "$(GSX)" 0
 check "operator log untouched" "$(find "$STATE/operator-log" -mindepth 1 | wc -l | tr -d ' ')" 0
 
 # =============================================================================
@@ -153,8 +156,7 @@ gf_mode ok
 gf_mode malformed
 gate_fail "classifier malformed answer" "classifier fault" classifier
 gf_mode ok
-check "no cache, retained payload, or log after failing probes" \
-    "$(find "$STATE/gate-store" "$STATE/operator-log" -mindepth 1 | wc -l | tr -d ' ')" 0
+check "no cache, retained payload, or log after failing probes" "$(GSX)" 0
 
 hconf "GATE_HUB_SOCKET=$TMP/no-such.sock"
 gate_fail "socket missing: callers block" "no answer on the hub socket"

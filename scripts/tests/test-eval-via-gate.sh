@@ -102,7 +102,8 @@ PV="$(bash -c 'source "$1"; lane2_load_config "$2/lane2.conf"; CONFDIR="$2"; STA
     _ "$ROOT/scripts/hub/lane2" "$CONF" "$STATE" "$PREFIX")"
 [[ "$PV" =~ ^[0-9a-f]{64}$ ]] || { echo " FAIL fixture policy_version did not compute"; exit 1; }
 # As `lane2 policy update` leaves it; the direct path reads it from here.
-jq -nc --arg pv "$PV" '{commit: "p1", policy_version: $pv}' > "$STATE/gate-policy/state.json"
+jq -nc --arg pv "$PV" --arg ps "$(sha256sum < "$POL/classifier-prompt.md" | cut -d' ' -f1)" \
+    '{commit: "p1", policy_version: $pv, prompt_sha256: $ps}' > "$STATE/gate-policy/state.json"
 touch -d '2020-01-01' "$STATE/gate-policy/state.json"
 
 # =============================================================================
@@ -141,8 +142,13 @@ check "cache mode" "$(A .cache_mode)" cache_prompt_false
 check "record mode 0600" "$(stat -c %a "$(REC)")" 600
 grep -q ZZCASETEXT "$(REC)" && bad "case text in the record" || ok "no case text in the record"
 check "manifest directories removed" "$(find "$MAN" -mindepth 1 | wc -l | tr -d ' ')" 0
-check "nothing written outside the eval and manifests stores" \
-    "$(find "$STATE" -newer "$STORE/freeze.jsonl" -type f -not -path "$STORE/*" | wc -l | tr -d ' ')" 0
+# The gate's query log and per-peer counters (Story 2.5) are the only gate-store
+# writes an eval makes: metadata, no cache entry, no retained payload.
+check "nothing written outside the eval and manifests stores (but the gate's query log and counters)" \
+    "$(find "$STATE" -newer "$STORE/freeze.jsonl" -type f -not -path "$STORE/*" \
+        -not -path "$STATE/gate-store/query.jsonl" -not -path "$STATE/gate-store/counters/*" \
+        -not -name '.counters.lock' | wc -l | tr -d ' ')" 0
+check "no cache entry from an eval" "$(find "$STATE/gate-store" -name cache.jsonl | wc -l | tr -d ' ')" 0
 
 echo "== publish scrubs policy_version =="
 run publish "$(REC)"
@@ -178,7 +184,8 @@ econf
 echo "== the bulk budget, not the per-request deadline, bounds a bulk eval =="
 mkm() { rm -rf "$MAN/t"; mkdir -m 2750 "$MAN/t"; }
 ask() { RC=0; gate_client "$SOCK" 40 "$1" < <(printf '%s' "${2:-}") || RC=$?; RESP="$GATE_CLIENT_RESPONSE"; }
-H='{"v":1,"op":"eval","layers":["floor","classifier"],"manifest":"'"$MAN"'/t"}'
+H='{"v":1,"op":"eval","layers":["floor","classifier"],"manifest":"'"$MAN"'/t","policy_version":"'"$PV"'"}'
+HM() { printf '{"v":1,"op":"eval","layers":["floor"],"manifest":%s,"policy_version":"%s"}' "$1" "$PV"; }
 mkm; printf 'slow case' > "$MAN/t/000001"
 econf "GATE_DEADLINE=2" "GATE_EVAL_BUDGET=30"; gf_mode timeout
 ask "$H"
@@ -194,11 +201,18 @@ echo "== manifest checks in the gate =="
 mreason() { ask "$1" "${2:-}"; jq -r '.detail.reason // ""' <<<"$RESP"; }
 mkm; printf 'a' > "$MAN/t/000001"; printf 'b' > "$MAN/t/000002"
 ask "$H"; check "well-formed manifest: two cases" "$(jq -r .detail.cases <<<"$RESP")" "cccc"
-check "inputs reported" "$(jq -r '.detail.inputs | keys | join(",")' <<<"$RESP")" "cache_prompt,policy_version,prompt_sha256,settings_sha256"
+check "inputs reported: public settings only" "$(jq -r '.detail.inputs | keys | join(",")' <<<"$RESP")" "cache_prompt,settings_sha256"
+case "$RESP" in *"$PV"*) bad "the gate sent its policy_version back" ;; *) ok "no policy_version in the answer" ;; esac
+check "bulk eval without a policy_version: block" \
+    "$(mreason '{"v":1,"op":"eval","layers":["floor"],"manifest":"'"$MAN"'/t"}')" fault:protocol
+check "bulk eval with another policy_version: block" \
+    "$(mreason '{"v":1,"op":"eval","layers":["floor"],"manifest":"'"$MAN"'/t","policy_version":"'"$(printf 'f%.0s' {1..64})"'"}')" fault:policy
+check "a policy_version on a single payload: block" \
+    "$(mreason '{"v":1,"op":"eval","layers":["floor"],"policy_version":"'"$PV"'"}' "x")" fault:protocol
 check "payload with a manifest: block" "$(mreason "$H" "x")" fault:protocol
 mkdir -p "$TMP/elsewhere"
-check "manifest outside the store: block" "$(mreason '{"v":1,"op":"eval","layers":["floor"],"manifest":"'"$TMP"'/elsewhere"}')" fault:protocol
-check "manifest with ..: block" "$(mreason '{"v":1,"op":"eval","layers":["floor"],"manifest":"'"$MAN"'/../eval"}')" fault:protocol
+check "manifest outside the store: block" "$(mreason "$(HM "\"$TMP/elsewhere\"")")" fault:protocol
+check "manifest with ..: block" "$(mreason "$(HM "\"$MAN/../eval\"")")" fault:protocol
 mkm; printf 'a' > "$MAN/t/000002"
 check "non-contiguous cases: block" "$(mreason "$H")" fault:protocol
 mkm; ln -s "$POL/term-list.txt" "$MAN/t/000001"
@@ -206,8 +220,8 @@ check "a symlinked case: block" "$(mreason "$H")" fault:protocol
 mkm; printf 'a' > "$MAN/t/notes.txt"
 check "a foreign file: block" "$(mreason "$H")" fault:protocol
 ln -s t "$MAN/link"
-check "a symlinked manifest: block" "$(mreason '{"v":1,"op":"eval","layers":["floor"],"manifest":"'"$MAN"'/link"}')" fault:protocol
-check "manifest not a string: block" "$(mreason '{"v":1,"op":"eval","layers":["floor"],"manifest":1}')" fault:protocol
+check "a symlinked manifest: block" "$(mreason "$(HM "\"$MAN/link\"")")" fault:protocol
+check "manifest not a string: block" "$(mreason "$(HM 1)")" fault:protocol
 rm -rf "$MAN/t" "$MAN/link"
 
 # =============================================================================

@@ -306,6 +306,15 @@ install_record() { # install_record <commit>
     ok "recorded installed-code and gate-code digests in the pin manifest record"
     if [[ -n "$pv" ]]; then
         ok "policy_version computed (kept on the hub only)"
+        # The policy store's record follows the install too (new gate code is a
+        # new policy_version); the eval harness states it to the gate (AD-19).
+        local ps="$STATE/gate-policy/state.json"
+        if [[ -f "$ps" ]] && jq --arg pv "$pv" '.policy_version = $pv' "$ps" > "$ps.tmp" 2>/dev/null; then
+            lane2_chown "$(lane2_uid operator):$(lane2_gid gate)" "$ps.tmp" 2>/dev/null || true
+            chmod 640 "$ps.tmp"; mv -f "$ps.tmp" "$ps"
+        else
+            rm -f -- "$ps.tmp"
+        fi
     else
         printf '  !!  policy_version not computed: %s\n' "${POLICY_MISSING:-an input is missing}"
     fi
@@ -451,8 +460,10 @@ cmd_policy() {
     pv="$(policy_version_now "$(lane2_tree_digest "$PREFIX/current" "${LANE2_GATE_CODE[@]}" 2>/dev/null)" 2>/dev/null)" || pv=""
     [[ -d "$PREFIX/current" ]] || pv=""
     jq -n --arg commit "$commit" --arg pv "$pv" --arg time "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+          --arg psha "$(sha256sum < "$store/current/classifier-prompt.md" | cut -d' ' -f1)" \
           --argjson terms "$GATE_TERMS_VALID" --argjson rejected "$GATE_TERMS_REJECTED" --argjson removed "$removed" \
           '{commit: $commit, updated_at: $time, policy_version: (if $pv == "" then null else $pv end),
+            prompt_sha256: $psha,
             terms: $terms, rejected_short: $rejected, removed_since_previous: $removed}' > "$store/state.json.tmp"
     mv -f "$store/state.json.tmp" "$store/state.json"
 

@@ -39,13 +39,13 @@ notify_send() { # notify_send <urgency> <body>
 
 # Coalesce: at most one notification per key per interval; the rest are counted
 # and summarised in the next one.
-notify_coalesced() { # notify_coalesced <key> <body>
-    local key="$1" body="$2" now last
+notify_coalesced() { # notify_coalesced <key> <body> [urgency]
+    local key="$1" body="$2" urg="${3:-normal}" now last
     now="$(notify_now)"; last="${N_LAST[$key]:-0}"
     if (( now - last >= N_INTERVAL )); then
         local more="${N_PENDING[$key]:-0}"
         (( more > 0 )) && body="$body (+$more more)"
-        notify_send normal "$body"
+        notify_send "$urg" "$body"
         N_LAST[$key]="$now"; N_PENDING[$key]=0; N_LATEST[$key]=""
     else
         N_PENDING[$key]=$(( ${N_PENDING[$key]:-0} + 1 )); N_LATEST[$key]="$body"
@@ -70,12 +70,16 @@ notify_line() {
         if ! jq -e 'type == "object"' <<<"$line" >/dev/null 2>&1; then N_MALFORMED=$((N_MALFORMED + 1)); return; fi
         cat="$(jq -r '.reason_category // ""' <<<"$line")"; ref="$(jq -r '.ref // ""' <<<"$line")"
         origin="$(jq -r '.origin // ""' <<<"$line")"; session="$(jq -r '.session // "hub"' <<<"$line")"
-        if ! [[ "$cat" =~ ^(hit|fault):[a-z-]+$ && "$ref" =~ $N_REF_RE && "$origin" =~ ^(operator|container|hub)$ \
-               && "$session" =~ ^[A-Za-z0-9_-]{1,64}$ ]]; then
+        if ! [[ ( "$cat" =~ ^(hit|fault):[a-z-]+$ || "$cat" == probe ) && "$ref" =~ $N_REF_RE \
+               && "$origin" =~ ^(operator|container|hub)$ && "$session" =~ ^[A-Za-z0-9_-]{1,64}$ ]]; then
             N_MALFORMED=$((N_MALFORMED + 1)); return
         fi
         if [[ "$cat" == hit:* && "$origin" == container ]]; then
             notify_send critical "blocked ($cat) · ref $ref"
+        elif [[ "$cat" == probe ]]; then
+            # A peer over its rate or block budget: critical, coalesced so a
+            # probing peer cannot flood the desktop.
+            notify_coalesced "probe" "probe: a hub caller is over its rate or block budget · ref $ref" critical
         else
             notify_coalesced "session:$session" "blocked ($cat) · ref $ref"
         fi

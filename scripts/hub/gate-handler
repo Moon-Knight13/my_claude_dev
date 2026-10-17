@@ -70,6 +70,13 @@ gate_load() { # gate_load <confdir> — rc 4 on any unusable value
     gate_store_check_config "$GATE_RETAIN_DAYS" "$GATE_STORE_MAX_BYTES" \
         "$GATE_QUOTA_OPERATOR_BYTES" "$GATE_QUOTA_CONTAINER_BYTES" || return 4
     gate_store_init "$GATE_STATE"
+    # Per-peer rate limit and probe budget (Story 2.5): requests and blocks per
+    # window. Invalid values stop the gate.
+    GATE_RATE_LIMIT="$(lane2_conf_file_get "$d/gate.conf" GATE_RATE_LIMIT)"; GATE_RATE_LIMIT="${GATE_RATE_LIMIT:-600}"
+    GATE_RATE_WINDOW="$(lane2_conf_file_get "$d/gate.conf" GATE_RATE_WINDOW)"; GATE_RATE_WINDOW="${GATE_RATE_WINDOW:-60}"
+    GATE_PROBE_BUDGET="$(lane2_conf_file_get "$d/gate.conf" GATE_PROBE_BUDGET)"; GATE_PROBE_BUDGET="${GATE_PROBE_BUDGET:-100}"
+    gate_rate_check_config "$GATE_RATE_LIMIT" "$GATE_RATE_WINDOW" "$GATE_PROBE_BUDGET" || return 4
+    gate_cache_init "$GATE_STATE"
 }
 
 # --- peer --------------------------------------------------------------------
@@ -104,17 +111,22 @@ GATE_ANSWERED=""
 #                                                the reason and per-layer results
 # gate_answer opaque <reason category> <ref>     any other block: the hub-socket
 #                                                detail holds only reason_category
+# The answer's verdict and ref, for the query log and the probe budget.
+GATE_LAST_VERDICT=""; GATE_LAST_REF=""
 gate_answer() {
     [[ -z "$GATE_ANSWERED" ]] || return 0
     GATE_ANSWERED=1
     case "$1" in
         allow)
             local d="${2:-}"; [[ -n "$d" ]] || d='{}'
+            GATE_LAST_VERDICT=allow
             jq -nc --argjson d "$d" '{v: 1, verdict: "allow"} + (if $d == {} then {} else {detail: $d} end)' ;;
         opaque)
+            GATE_LAST_VERDICT=block; GATE_LAST_REF="$3"
             jq -nc --arg ref "$3" --arg c "$2" '{v: 1, verdict: "block", ref: $ref, detail: {reason_category: $c}}' ;;
         *)
             local d="${3:-}" ref="${4:-}"; [[ -n "$d" ]] || d='{}'; [[ -n "$ref" ]] || ref="$(gate_ref)"
+            GATE_LAST_VERDICT=block; GATE_LAST_REF="$ref"
             jq -nc --arg ref "$ref" --arg r "$2" --argjson d "$d" \
                 '{v: 1, verdict: "block", ref: $ref, detail: ({reason: $r} + $d)}' ;;
     esac
@@ -185,6 +197,8 @@ gate_work() { # gate_work <confdir> <tmpdir> — reads the request from stdin
     [[ "$op" == eval || "$op" == health ]] || gate_result "$t" block fault:protocol
     gate_header_ok "$t/header" "$op" || gate_result "$t" block fault:protocol
     layers="$(jq -r '.layers // [] | join(" ")' "$t/header")"
+    # eval and health measure the classifier itself: never from or into the cache.
+    GATE_CACHE_BYPASS=1
 
     gate_read_payload "$t"
     local size; size="$(wc -c < "$t/payload" | tr -d ' ')"
@@ -210,11 +224,14 @@ gate_work() { # gate_work <confdir> <tmpdir> — reads the request from stdin
     fi
     if jq -e 'has("manifest")' "$t/header" >/dev/null 2>&1; then
         (( size == 0 )) || gate_result "$t" block fault:protocol
+        # The caller states the policy_version it expects; a mismatch is a block,
+        # and the gate's own value is never sent back.
+        [[ "$(jq -r .policy_version "$t/header")" == "$pv" ]] || gate_result "$t" block fault:policy
         gate_watchdog_disarm      # a bulk eval runs to GATE_EVAL_BUDGET instead
         gate_eval_manifest "$(jq -r .manifest "$t/header")" "$GATE_STATE" "$layers" "$GATE_FLEET_CONF" \
             || gate_result "$t" block fault:protocol
         gate_result "$t" "$GATE_EVAL_VERDICT" "$GATE_EVAL_REASON" \
-            "$(jq -nc --arg c "$GATE_EVAL_CODES" --argjson i "$(gate_eval_inputs "$pv")" '{cases: $c, inputs: $i}')"
+            "$(jq -nc --arg c "$GATE_EVAL_CODES" --argjson i "$(gate_eval_inputs)" '{cases: $c, inputs: $i}')"
     fi
 
     # eval: each requested layer, reported on its own; no cache, no log
@@ -241,11 +258,25 @@ gate_work() { # gate_work <confdir> <tmpdir> — reads the request from stdin
 # --- the connection ----------------------------------------------------------
 
 gate_serve() { # gate_serve <confdir>
-    local conf="$1" t uid rc=0 verdict op reason payload=""
+    local conf="$1" uid
     if ! gate_load "$conf"; then gate_answer block fault:config; return 0; fi
     gate_purge 2>/dev/null || true          # gate-owned purge on every connection
     uid="$(gate_peer_uid)" || uid=""
+    GATE_Q_OP=unknown
+    _gate_serve "$conf" "$uid"
+    # One metadata-only query log line per hub-socket request; every block
+    # counts toward the peer's probe budget.
+    gate_query_log "$GATE_Q_OP" "$uid" "$GATE_LAST_VERDICT" "$GATE_LAST_REF"
+    [[ "$GATE_LAST_VERDICT" == block && "$uid" =~ ^[0-9]+$ ]] && gate_rate_count_block "$uid"
+    return 0
+}
+
+_gate_serve() { # _gate_serve <confdir> <peer uid>
+    local conf="$1" uid="$2" t rc=0 verdict op reason payload=""
     if ! gate_peer_allowed "$uid"; then gate_block_record unknown fault:peer ""; return 0; fi
+    # A peer over its request rate or block budget is a probe: blocked until its
+    # window ends, logged for the operator, and notified (FR-14).
+    if ! gate_rate_check "$uid"; then gate_block_record unknown probe ""; return 0; fi
     t="${RUNTIME_DIRECTORY:-}"
     [[ -n "$t" && -d "$t" ]] || t="$(mktemp -d)" || { gate_block_record unknown fault:internal ""; return 0; }
     chmod 700 "$t"
@@ -283,6 +314,7 @@ gate_serve() { # gate_serve <confdir>
             gate_block_record unknown fault:internal ""
         fi
     fi
+    GATE_Q_OP="$(gate_op_name "${op:-unknown}")"
     rm -f -- "$t/payload" "$t/header"
     [[ -z "${RUNTIME_DIRECTORY:-}" ]] && rm -rf -- "$t"
     return 0
