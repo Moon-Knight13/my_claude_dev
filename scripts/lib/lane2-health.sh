@@ -223,6 +223,20 @@ lane2_health_install() {
     lane2_health_ok "install: installed-code digest matches the pin manifest record"
 }
 
+# Mount-scan exclusions (Story 3.2; FR-47): each by id and item, with the total.
+# Never the term or its hash. Listing only: exclusions are not a failure.
+lane2_health_exclusions() {
+    local f="$STATE/exclusions/exclusions.jsonl" n
+    if [[ ! -e "$f" || ! -s "$f" ]]; then lane2_health_ok "exclusions: none"; return 0; fi
+    if [[ ! -r "$f" ]] || ! jq -e -s 'all(.[]; (.id | type) == "string" and (.item | type) == "string")' "$f" >/dev/null 2>&1; then
+        lane2_health_fail exclusions "exclusion store unreadable or corrupt (every mount scan faults until fixed)"
+        return 0
+    fi
+    n="$(jq -s length "$f")"
+    lane2_health_warn "exclusions: $n"
+    jq -r '"        \(.id)  \(.item)"' "$f"
+}
+
 # The Lane 2 image (Story 3.1). Docker needs root and health runs as the
 # operator, so this reads what the last `lane2 install` or `install --verify`
 # (root) found: <state>/events/image-status.json.
@@ -317,6 +331,7 @@ lane2_health_run() {
     lane2_health_notifier
     lane2_health_install
     lane2_health_image
+    lane2_health_exclusions
     lane2_health_selection
     lane2_health_swap
     if (( ${#LANE2_HEALTH_FAILED[@]} > 0 )); then

@@ -53,6 +53,8 @@ source "$LANE2_HERE/../lib/lane2-image.sh"
 source "$LANE2_HERE/../lib/lane2-health.sh"
 # shellcheck source=scripts/lib/gate-store.sh
 source "$LANE2_HERE/../lib/gate-store.sh"
+# shellcheck source=scripts/lib/lane2-ws.sh
+source "$LANE2_HERE/../lib/lane2-ws.sh"
 
 # file:// is refused for git; tests that source this script may relax it to
 # fetch from a local bare fixture. A root run cannot change it.
@@ -653,7 +655,8 @@ cmd_health() {
 # Root only: payloads are 0600 gate files, readable by the gate and review alone.
 # Exit 0 shown, 2 bad ref, 3 not found or expired. No decision actions yet.
 cmd_review() {
-    [[ "${1:-}" == show && $# == 2 ]] || die 2 "usage: lane2 review show <ref>"
+    [[ "${1:-}" == exclude ]] && { shift; cmd_review_exclude "$@"; return; }
+    [[ "${1:-}" == show && $# == 2 ]] || die 2 "usage: lane2 review show <ref> | review exclude <ref> --path <item> [--term <sha256>]"
     local ref="$2" days st
     [[ "$ref" =~ $GATE_REF_RE ]] || die 2 "not a ref (want gr- and 32 lowercase hex)"
     days="$(lane2_conf_file_get "$CONFDIR/gate.conf" GATE_RETAIN_DAYS)"; GATE_RETAIN_DAYS="${days:-7}"
@@ -672,6 +675,142 @@ cmd_review() {
     printf '\n== end ==\n'
 }
 
+# lane2 review exclude <ref> --path <item> [--term <sha256>] (story 3.2; FR-47)
+# — one exclusion for one mount-scan hit: exactly one item (as the scan names
+# it, e.g. tree:docs/notes.md) and one term. Hub-only; written only here.
+cmd_review_exclude() {
+    local ref="${1:-}" item="" term="" days st pay ws n t id ex
+    shift || true
+    while (( $# )); do
+        case "$1" in
+            --path) item="${2:-}"; shift 2 || die 2 "usage: lane2 review exclude <ref> --path <item> [--term <sha256>]" ;;
+            --term) term="${2:-}"; shift 2 || die 2 "usage: lane2 review exclude <ref> --path <item> [--term <sha256>]" ;;
+            *) die 2 "usage: lane2 review exclude <ref> --path <item> [--term <sha256>]" ;;
+        esac
+    done
+    [[ "$ref" =~ $GATE_REF_RE ]] || die 2 "not a ref (want gr- and 32 lowercase hex)"
+    [[ -n "$item" ]] || die 2 "--path is required: one item exactly as the scan names it"
+    [[ "$item" != */ && "$item" != *[\*\?\[]* ]] || die 2 "an exclusion covers one path: no directory, no glob"
+    [[ -z "$term" || "$term" =~ ^[0-9a-f]{64}$ ]] || die 2 "--term takes the term's sha256 from the retained payload"
+    days="$(lane2_conf_file_get "$CONFDIR/gate.conf" GATE_RETAIN_DAYS)"; GATE_RETAIN_DAYS="${days:-7}"
+    gate_store_init "$STATE"
+    st="$(gate_review_state "$ref")"
+    [[ "$st" == kept ]] || { fail "ref $st: an exclusion needs the retained scan hit"; return 3; }
+    pay="$GATE_STORE_DIR/$ref"
+    jq -e '(.workspace | type) == "string" and (.hits | type) == "array"' "$pay" >/dev/null 2>&1 \
+        || { fail "ref $ref is not a mount-scan hit"; return 3; }
+    ws="$(jq -r .workspace "$pay")"
+    n="$(jq -r --arg i "$item" '[.hits[] | select(.item == $i)] | length' "$pay")"
+    (( n > 0 )) || { fail "the hit has no item $item (the exclusion would cover nothing)"; return 3; }
+    if [[ -z "$term" ]]; then
+        (( n == 1 )) || { fail "$n terms hit $item: give --term <sha256> from the retained payload"; return 2; }
+        term="$(jq -r --arg i "$item" '.hits[] | select(.item == $i) | .term_sha256' "$pay")"
+    else
+        t="$(jq -r --arg i "$item" --arg t "$term" '[.hits[] | select(.item == $i and .term_sha256 == $t)] | length' "$pay")"
+        (( t == 1 )) || { fail "that term did not hit $item"; return 3; }
+    fi
+    id="ex-$(od -An -N6 -tx1 /dev/urandom | tr -d ' \n')"
+    ex="$STATE/exclusions/exclusions.jsonl"
+    (
+        exec 8>>"$STATE/exclusions/.lock"; flock -w 10 8 || exit 4
+        ( umask 027
+          jq -nc --arg id "$id" --arg ws "$ws" --arg i "$item" --arg t "$term" --arg r "$ref" \
+              --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              '{id: $id, ws: $ws, item: $i, term_sha256: $t, ref: $r, at: $at}' >> "$ex" ) || exit 4
+        lane2_chown "$(lane2_uid operator):$(lane2_gid gate)" "$ex" 2>/dev/null || true
+        chmod 640 "$ex"
+    ) || die 4 "cannot write the exclusion"
+    ( umask 077
+      jq -nc --arg t "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg id "$id" --arg w "$ws" \
+          '{time: $t, event: "exclusion", id: $id, workspace: $w}' >> "$STATE/events/lane2.jsonl" ) 2>/dev/null || true
+    ok "exclusion $id recorded: one item, one term; rescan to clear the block"
+}
+
+# --- mark and scan (story 3.2) -----------------------------------------------
+
+# lane2 mark <workspace> mountable|sensitive — unmarked means sensitive.
+cmd_mark() {
+    if (( $# != 2 )) || [[ "$2" != mountable && "$2" != sensitive ]]; then
+        die 2 "usage: lane2 mark <workspace> mountable|sensitive"
+    fi
+    local ws rc=0
+    ws="$(lane2_ws_real "$1")" || die 2 "not a workspace: missing, not a directory, a symlink, or inside the hub's own state, install, or policy"
+    if [[ "$2" == mountable ]]; then
+        lane2_ws_work_check "$ws" || rc=$?
+        if (( rc != 0 )); then fail "not mountable: $LANE2_WS_REASON"; return "$rc"; fi
+    fi
+    lane2_ws_set_mark "$ws" "$2" || die 4 "cannot write the workspace-state store"
+    lane2_ws_event mark "$ws" "$(jq -nc --arg m "$2" '{mark: $m}')" || true
+    ok "marked $2 (workspace $(lane2_ws_id "$ws"))"
+    [[ "$2" == mountable ]] && printf '  !!  not yet scanned: run lane2 scan before any mount\n'
+    return 0
+}
+
+# lane2 scan <workspace> — the full-history floor scan before any mount.
+# Exit 0 clean, 3 blocked (prints only the ref), >=4 fault (state unscanned).
+cmd_scan() {
+    (( $# == 1 )) || die 2 "usage: lane2 scan <workspace>"
+    SCAN_MDIR=""; SCAN_SCR=""
+    local rc=0
+    _cmd_scan "$1" || rc=$?
+    # The manifest and the git copy never outlive the scan.
+    [[ -n "$SCAN_MDIR" ]] && rm -rf -- "$SCAN_MDIR"
+    [[ -n "$SCAN_SCR" ]] && rm -rf -- "$SCAN_SCR"
+    return "$rc"
+}
+
+_cmd_scan() {
+    local ws id rc=0 mdir scr sock budget hdr ref cat
+    ws="$(lane2_ws_real "$1")" || die 2 "not a workspace: missing, not a directory, a symlink, or inside the hub's own state, install, or policy"
+    id="$(lane2_ws_id "$ws")"
+    lane2_ws_mountable "$ws" || rc=$?
+    case "$rc" in
+        0) ;;
+        3) fail "not marked mountable (unmarked means sensitive): lane2 mark it first"; return 3 ;;
+        *) fail "workspace-state store unreadable or corrupt"; return 4 ;;
+    esac
+    # The work-repo checks again: a remote or nested repository added since.
+    rc=0; lane2_ws_work_check "$ws" || rc=$?
+    if (( rc != 0 )); then
+        lane2_ws_set_scan "$ws" unscanned || true
+        fail "not mountable: $LANE2_WS_REASON"; return "$rc"
+    fi
+    mdir="$STATE/manifests/scan-$id-$(od -An -N6 -tx1 /dev/urandom | tr -d ' \n')"
+    scr="$(mktemp -d "$STATE/workspaces/.scan-$id.XXXXXX")" || die 4 "cannot create a scan directory"
+    SCAN_SCR="$scr"
+    ( umask 027; mkdir "$mdir" ) || die 4 "cannot create the manifest directory"
+    SCAN_MDIR="$mdir"
+    local um; um="$(umask)"; umask 027          # manifest group-readable by the gate
+    rc=0; lane2_ws_manifest "$ws" "$mdir" "$scr" || rc=$?
+    umask "$um"
+    if (( rc != 0 )); then
+        lane2_ws_set_scan "$ws" unscanned || true
+        fail "scan fault: ${LANE2_WS_REASON:-cannot build the manifest}; the workspace stays unscanned"
+        return 4
+    fi
+    sock="$(lane2_conf_file_get "$CONFDIR/gate.conf" GATE_HUB_SOCKET)"; sock="${sock:-/run/lane2/gate/hub.sock}"
+    budget="$(lane2_conf_file_get "$CONFDIR/gate.conf" GATE_SCAN_BUDGET)"; budget="${budget:-900}"
+    hdr="$(jq -nc --arg w "$id" --arg m "$mdir" '{v: 1, op: "mount_scan", workspace: $w, manifest: $m}')"
+    rc=0; gate_client "$sock" "$((budget + 3))" "$hdr" < /dev/null || rc=$?
+    if (( rc == 0 )); then
+        lane2_ws_set_scan "$ws" clean || die 4 "cannot write the workspace-state store"
+        lane2_ws_event scan_clean "$ws" || true
+        ok "clean"
+        return 0
+    fi
+    ref="$(jq -r '.ref // ""' <<<"${GATE_CLIENT_RESPONSE:-null}" 2>/dev/null)" || ref=""
+    cat="$(jq -r '.detail.reason_category // ""' <<<"${GATE_CLIENT_RESPONSE:-null}" 2>/dev/null)" || cat=""
+    if (( rc == 3 )) && [[ "$cat" == hit:floor && "$ref" =~ $GATE_REF_RE ]]; then
+        lane2_ws_set_scan "$ws" scan-blocked "$ref" || die 4 "cannot write the workspace-state store"
+        lane2_ws_event scan_blocked "$ws" "$(jq -nc --arg r "$ref" '{ref: $r}')" || true
+        printf '%s\n' "$ref"
+        return 3
+    fi
+    lane2_ws_set_scan "$ws" unscanned || true
+    fail "scan fault: the gate gave no clean answer (${cat:-no answer}${ref:+, ref $ref}); the workspace stays unscanned"
+    return 4
+}
+
 lane2_main() {
     CONFDIR=/etc/lane2
     if [[ "${1:-}" == --config-dir ]]; then
@@ -685,8 +824,8 @@ lane2_main() {
     case "$cmd" in
         install) lane2_is_root || die 4 "lane2 install must run as root" ;;
         review) lane2_is_root || die 4 "lane2 review must run as root (sudo): payloads are readable only by the gate and review" ;;
-        policy|check|health) ;;
-        *) die 2 "usage: lane2 [--config-dir DIR] install <commit> | install --verify | policy update | check | health [--ack-removals] | review show <ref>" ;;
+        policy|check|health|mark|scan) ;;
+        *) die 2 "usage: lane2 [--config-dir DIR] install <commit> | install --verify | policy update | check | health [--ack-removals] | mark <ws> mountable|sensitive | scan <ws> | review show|exclude …" ;;
     esac
     lane2_load_config "$CONFDIR/lane2.conf" || die 4 "hub config unreadable: $CONFDIR/lane2.conf"
     common_settings
@@ -701,6 +840,9 @@ lane2_main() {
             lane2_is_operator || die 4 "lane2 health must run as the operator ($OPERATOR)"
             cmd_health "$@" ;;
         review) cmd_review "$@" ;;
+        mark|scan)
+            lane2_is_operator || die 4 "lane2 $cmd must run as the operator ($OPERATOR)"
+            "cmd_$cmd" "$@" ;;
     esac
 }
 

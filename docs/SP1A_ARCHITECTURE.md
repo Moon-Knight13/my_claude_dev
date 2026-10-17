@@ -18,7 +18,8 @@
 > harness through the gate's `eval` op — [SP1A_EVAL_HARNESS.md](SP1A_EVAL_HARNESS.md);
 > the Lane 2 image and container definition, with userns-remap — [SP1A_WORKSPACE_SEPARATION.md](SP1A_WORKSPACE_SEPARATION.md);
 > the verdict cache, per-caller rate limit and probe budget, and the query log — [SP1A_GATE.md](SP1A_GATE.md#verdict-cache);
-> the obfuscation-resistant floor and chunked classification — [SP1A_GATE.md](SP1A_GATE.md#chunked-classification).
+> the obfuscation-resistant floor and chunked classification — [SP1A_GATE.md](SP1A_GATE.md#chunked-classification);
+> workspace marking and the full-history mount scan — [SP1A_WORKSPACE_SEPARATION.md](SP1A_WORKSPACE_SEPARATION.md#marking-workspaces).
 
 ## Why
 

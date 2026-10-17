@@ -2,6 +2,25 @@
 
 Short procedures for the hub operator. Each section grows as SP1a stories land.
 
+## Resolve a scan-blocked workspace
+
+`lane2 scan` printed a ref and exited 3, so the workspace cannot be mounted.
+
+1. **See what hit**, on the hub: `sudo scripts/hub/lane2 review show gr-…`. The
+   retained payload lists each hit item (`tree:<path>`, `object:<git dir>:<sha>:<type>`,
+   `git:<git dir>/<file>`, `ref-names:…`) with the term's hash.
+2. **If it is sensitive:** remove it from the workspace — and from git history if
+   it is in an object (rewrite the history and expire the reflog and stash; a
+   deleted file is still in its blob). Then `lane2 scan` again. A clean scan
+   clears the state and is logged.
+3. **If it is not sensitive:** `sudo scripts/hub/lane2 review exclude gr-… --path <item>`
+   for each item (one item and one term per exclusion), then `lane2 scan` again.
+4. **If you cannot tell:** leave it unmounted, or mark the workspace `sensitive`.
+
+A scan that ends `unscanned` (exit ≥ 4) was a fault, not a finding: the message
+says which (a symlink or git pointer outside the workspace, an import outside it,
+the scan budget, or the gate). Fix that and scan again.
+
 ## Read a block
 
 You get a desktop notification: `blocked (<category>) · ref gr-…`. Inside
