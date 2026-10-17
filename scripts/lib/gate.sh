@@ -94,6 +94,86 @@ gate_floor_match() {
     local rc=0
     ORCH_TERM_LIST="$GATE_TERM_FILE" ORCH_TERM_MIN_LEN="$GATE_TERM_MIN_LEN" \
         orch_floor_match "$1" 2>/dev/null || rc=$?
+    case "$rc" in 0) return 0 ;; 1) ;; *) return 4 ;; esac
+    gate_floor_normalised "$1"
+}
+
+# --- obfuscation-resistant floor (story 2.7) ---------------------------------
+#
+# A term is also a hit when it is disguised:
+#   - case and separators: each term becomes a word-bounded pattern that allows
+#     up to three whitespace or separator characters between its letters, so
+#     "Z z-A.l p h a" matches "zzalpha"; separators in the term itself are
+#     optional the same way;
+#   - encodings: base64 (standard and URL-safe), URL percent-encoding, and hex
+#     (plain, 0x…, \x…) are decoded, two levels deep, and the decoded text is
+#     checked too.
+# The undecoded text is always checked: a decode error never turns into an
+# allow. Nothing reports which term matched.
+
+# Separator characters (plus whitespace) as an ERE bracket expression and as a
+# plain list for the term parser.
+GATE_FLOOR_SEP='[][:space:]._/|:*+~'"'"'"`,;=()<>{}#@!?&$%^-]'
+GATE_FLOOR_SEPCHARS=' ._/|:*+~'"'"'"`,;=()<>{}#@!?&$%^-[]'
+GATE_FLOOR_SEP_MAX=3
+
+# One ERE per valid term (same parsing as gate_terms_check).
+gate_floor_patterns() {
+    local LC_ALL=C.UTF-8 line term i c p sep="${GATE_FLOOR_SEP}{0,$GATE_FLOOR_SEP_MAX}" first
+    [[ -r "$GATE_TERM_FILE" ]] || return 4
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        term="${line#"${line%%[![:space:]]*}"}"; term="${term%"${term##*[![:space:]]}"}"
+        [[ -n "$term" && "$term" != \#* && ${#term} -ge $GATE_TERM_MIN_LEN ]] || continue
+        p=""; first=1
+        for (( i = 0; i < ${#term}; i++ )); do
+            c="${term:i:1}"
+            # The term's own separators are as optional as inserted ones.
+            [[ "$c" == [[:space:]] || "$GATE_FLOOR_SEPCHARS" == *"$c"* ]] && continue
+            (( first )) || p+="$sep"
+            first=0
+            if [[ "$c" == "\\" ]]; then p+='[\]'
+            elif [[ "$c" == [A-Za-z0-9] ]]; then p+="$c"
+            else p+="[$c]"; fi
+        done
+        [[ -n "$p" ]] && printf '%s\n' "$p"
+    done < "$GATE_TERM_FILE"
+}
+
+# Perl builtins only (perl-base): no modules. Reads the text on stdin, prints the
+# decoded variants, one level after another, bounded to 4x the input + 64 KiB.
+# shellcheck disable=SC2016  # perl code
+GATE_FLOOR_DECODE='
+sub b64 { my $s = shift; $s =~ tr{-_}{+/}; $s =~ s/=+$//; return undef if length($s) % 4 == 1;
+          $s =~ tr|A-Za-z0-9+/| -_|; my $r = "";
+          while ($s =~ /(.{1,60})/gs) { $r .= unpack("u", chr(32 + int(length($1) * 3 / 4)) . $1); }
+          return $r; }
+binmode STDIN; binmode STDOUT;
+my $in = do { local $/; <STDIN> }; $in = "" unless defined $in;
+my $budget = 4 * length($in) + 65536; my %seen; my @queue = ($in);
+for my $depth (1 .. 2) {
+    my @next;
+    for my $s (@queue) {
+        if ($s =~ /%[0-9A-Fa-f]{2}/) { (my $u = $s) =~ s/\+/ /g; $u =~ s/%([0-9A-Fa-f]{2})/chr(hex $1)/ge; push @next, $u; }
+        while ($s =~ /([A-Za-z0-9+\/_-]{8,}={0,2})/g) { my $d = b64($1); push @next, $d if defined $d && length $d; }
+        while ($s =~ /(?:0[xX])?((?:[0-9A-Fa-f]{2}){4,})/g) { push @next, pack("H*", $1); }
+        while ($s =~ /((?:\\x[0-9A-Fa-f]{2}){4,})/g) { (my $h = $1) =~ s/\\x//g; push @next, pack("H*", $h); }
+    }
+    my @kept;
+    for (@next) { next if $seen{$_}++; $budget -= length; last if $budget < 0; print $_, "\n"; push @kept, $_; }
+    @queue = @kept;
+    last if $budget < 0;
+}
+'
+
+gate_floor_normalised() { # gate_floor_normalised <text> — rc 0 hit, 1 none, 4 fault
+    local pats rc=0
+    pats="$(gate_floor_patterns)" || return 4
+    [[ -n "$pats" ]] || return 4
+    # The text, the text with line breaks as spaces (grep matches per line), and
+    # every decoded variant.
+    { printf '%s\n' "$1"; printf '%s\n' "${1//[$'\n\r']/ }"
+      printf '%s' "$1" | perl -e "$GATE_FLOOR_DECODE" 2>/dev/null || true; } \
+        | LC_ALL=C.UTF-8 grep -qaiwE -f <(printf '%s\n' "$pats") 2>/dev/null || rc=$?
     case "$rc" in 0|1) return "$rc" ;; *) return 4 ;; esac
 }
 
@@ -160,7 +240,51 @@ gate_check_deadlines() {
 # The classifier request is the production one (classify-sensitivity.sh, openai
 # transport): the same fence around the text and the same closing instruction,
 # with the policy's classifier prompt as the system prompt.
+# gate_classify <file> <fleet-conf> — rc 0 nonsensitive, 3 sensitive, 4 fault.
+# Content too long for the classifier's context is split into chunks here, in
+# the decision core only (Story 2.7): every chunk is classified, any sensitive
+# chunk blocks, any faulted chunk is that fault. More chunks than
+# GATE_CHUNK_BUDGET is fault:timeout before any call, so the caller's deadline
+# is never reached waiting.
+GATE_CHUNK_CHARS=24000      # ~6k tokens at ~4 characters a token
+GATE_CHUNK_OVERLAP=400      # so a phrase on a boundary is seen whole in one chunk
+GATE_CHUNK_BUDGET=8
 gate_classify() {
+    local in="$1" conf="$2" rc=0
+    _gate_classify_one "$in" "$conf" || rc=$?
+    [[ "$rc" == 4 && "$GATE_FAULT" == fault:oversize ]] || return "$rc"
+    _gate_classify_chunks "$in" "$conf"
+}
+
+gate_chunk_count() { # gate_chunk_count <characters> — how many chunks it takes
+    local n="$1" step=$(( GATE_CHUNK_CHARS - GATE_CHUNK_OVERLAP ))
+    (( n <= GATE_CHUNK_CHARS )) && { echo 1; return; }
+    echo $(( (n - GATE_CHUNK_OVERLAP + step - 1) / step ))
+}
+
+_gate_classify_chunks() {
+    local LC_ALL=C.UTF-8 in="$1" conf="$2" s n count i start step tmp rc
+    s="$(cat -- "$in"; printf x)"; s="${s%x}"
+    n=${#s}
+    count="$(gate_chunk_count "$n")"
+    if (( count > GATE_CHUNK_BUDGET )); then GATE_FAULT="fault:timeout"; return 4; fi
+    step=$(( GATE_CHUNK_CHARS - GATE_CHUNK_OVERLAP ))
+    tmp="$(mktemp)" || { GATE_FAULT="fault:classifier"; return 4; }
+    for (( i = 0; i < count; i++ )); do
+        start=$(( i * step ))
+        printf '%s' "${s:start:GATE_CHUNK_CHARS}" > "$tmp"
+        rc=0; _gate_classify_one "$tmp" "$conf" || rc=$?
+        case "$rc" in
+            0) ;;
+            3) rm -f -- "$tmp"; return 3 ;;
+            *) rm -f -- "$tmp"; return 4 ;;
+        esac
+    done
+    rm -f -- "$tmp"
+    return 0
+}
+
+_gate_classify_one() {
     local in="$1" conf="$2" tmp out v rc=0
     GATE_FAULT=""
     [[ "$GATE_POLICY_LOADED" == 1 && -r "$GATE_PROMPT_FILE" ]] || { GATE_FAULT="fault:policy"; return 4; }

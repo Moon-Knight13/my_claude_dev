@@ -51,6 +51,22 @@ decided by the gate and never transcoded.
 1. **Floor:** the policy's term list, matched case-insensitively at word
    boundaries (`gate_floor_match`). A hit blocks with `hit:floor`; the
    classifier is not called. The answer never says which term matched.
+   The floor also catches a term that is disguised (Story 2.7):
+   - **case, whitespace, separators:** up to three whitespace or separator
+     characters (`. _ - / | : * + ~ , ;` and the like) between a term's letters
+     still match — `Z z-A.l p h a` is `zzalpha`; the term's own separators are
+     optional the same way (`acme corp`, `ACME_CORP`, `acmecorp` all match
+     `acme-corp`); a term broken across lines matches too;
+   - **encodings:** base64 (standard and URL-safe), URL percent-encoding (and `+`
+     as space), and hex (`7a7a…`, `0x7a7a…`, `\x7a\x7a…`) are decoded, two
+     levels deep (so base64 of URL-encoded text is caught), and the decoded text
+     is checked as well.
+
+   The original text is always checked: a decode error never becomes an allow.
+   Matching stays word-bounded, so `zzalphabet` is not `zzalpha`. One known
+   trade-off: spaced letters hide word boundaries, so `z z a l p h a b e t`
+   blocks — a false block, never a leak. Decoding is bounded to four times the
+   request plus 64 KiB of decoded text.
 2. **Classifier:** only on a clear floor. The call goes only through
    `fleet_call` to the classifier member's loopback endpoint with the pinned
    settings file, and its request body is the production one
@@ -58,8 +74,29 @@ decided by the gate and never transcoded.
    classifier input carries nothing from the floor result, and a clear floor
    never turns a `sensitive` into allow.
 
-Content over the classifier's context blocks with `fault:oversize` until Story
-2.7 adds chunking.
+### Chunked classification
+
+Content too long for the classifier's context is classified in pieces, by the
+decision core only (callers never split): chunks of `GATE_CHUNK_CHARS`
+characters (default 24000, about 6k tokens), each overlapping the next by
+`GATE_CHUNK_OVERLAP` (default 400) so a phrase on a boundary is seen whole. Every
+chunk goes through `fleet_call`; any `sensitive` chunk blocks with
+`hit:classifier`, any faulted chunk blocks with that fault (a chunk that still
+does not fit is `fault:oversize`). The floor always runs on the whole text.
+
+More chunks than `GATE_CHUNK_BUDGET` (default 8, about 190k characters) blocks
+with `fault:timeout` before any classifier call, so the caller's deadline is
+never spent waiting. Content over `GATE_MAX_REQUEST` is still `fault:oversize`
+and never chunked. Invalid chunk settings stop the gate. `eval`, bulk `eval`,
+and `health` chunk exactly as production does.
+
+`scripts/tests/test-gate-chunking-hub.sh` (tier `hub`) checks that p95 for a
+~20k-token request stays inside `GATE_DEADLINE` on the real classifier.
+
+To record the obfuscated and buried-in-long-context categories on the hub, run
+the eval set through the gate as usual (`scripts/hub/eval-harness.sh run --split
+tuning`, [SP1A_EVAL_HARNESS.md](SP1A_EVAL_HARNESS.md)); the floor-only row now
+counts obfuscated cases caught by normalisation.
 
 ### The `health` op
 
