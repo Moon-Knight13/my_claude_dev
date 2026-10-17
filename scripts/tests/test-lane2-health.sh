@@ -84,7 +84,13 @@ selection() { # selection [key=value to override]
         '{model_sha256: $m, prompt_sha256: $p, runtime_build: "b1234", driver_version: "in-tree 6.8.0-41-generic"}' \
         | jq -c "${1:-.}" > "$STATE/fleet/selection.json"
 }
-install_record; pstate p1 0; selection
+imgstat() { # imgstat [ok|fail] — what the last root image check (story 3.1) found
+    jq -nc --arg ok "${1:-ok}" '{checked_at: "2026-10-16T00:00:00Z",
+        image_id: ("sha256:" + ("1" * 64)), ok: ($ok == "ok"),
+        reason: (if $ok == "ok" then "" else "userns-remap: userns-remap not in effect" end)}' \
+        > "$STATE/events/image-status.json"
+}
+install_record; pstate p1 0; selection; imgstat
 LINE() { grep -E "^( FAIL |  OK  |  !!  )$1" <<<"$OUT" | head -1; }
 
 # =============================================================================
@@ -94,7 +100,7 @@ check "healthy: exit 0" "$RC" 0
 for p in "gate: hub socket answers the health op" "classifier: /health answers; listens on loopback only" \
          "orchestrator: /health answers" "policy: checkout present, policy_version current" \
          "removals: none unacknowledged" "notifier: lane2-notify.service active" \
-         "install: installed-code digest matches" "selection: record matches" "swap: off" "health: every part passes"; do
+         "install: installed-code digest matches" "image: sha256:" "selection: record matches" "swap: off" "health: every part passes"; do
     has "  OK  $p" "$OUT" "  OK  $p"
 done
 hasnt "no policy_version printed" "$OUT" "$PV"
@@ -221,6 +227,13 @@ install_record
 rm "$PREFIX/c1/.lane2-install.json"; run
 has "no install record" "$(LINE install)" " FAIL install: no installed tree or install record"
 install_record
+
+rm "$STATE/events/image-status.json"; run
+has "image never checked" "$(LINE image)" " FAIL image: not checked yet (run sudo lane2 install --verify)"
+imgstat fail; run
+has "image check failed: FAIL names the image and why" "$(LINE image)" \
+    " FAIL image: sha256:1111111111111111111111111111111111111111111111111111111111111111: userns-remap: userns-remap not in effect"
+imgstat
 
 rm "$STATE/fleet/selection.json"; run
 has "no selection record" "$(LINE selection)" " FAIL selection: no selection record"

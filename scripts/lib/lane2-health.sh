@@ -223,6 +223,23 @@ lane2_health_install() {
     lane2_health_ok "install: installed-code digest matches the pin manifest record"
 }
 
+# The Lane 2 image (Story 3.1). Docker needs root and health runs as the
+# operator, so this reads what the last `lane2 install` or `install --verify`
+# (root) found: <state>/events/image-status.json.
+lane2_health_image() {
+    local f="$STATE/events/image-status.json" st img why
+    if [[ ! -r "$f" ]] || ! st="$(jq -c . "$f" 2>/dev/null)"; then
+        lane2_health_fail image "not checked yet (run sudo lane2 install --verify)"
+        return 0
+    fi
+    img="$(jq -r '.image_id // ""' <<<"$st")"; why="$(jq -r '.reason // ""' <<<"$st")"
+    if [[ "$(jq -r .ok <<<"$st")" == true && -n "$img" ]]; then
+        lane2_health_ok "image: $img pinned, claude at or above the floor, userns-remap in effect (checked $(jq -r .checked_at <<<"$st"))"
+    else
+        lane2_health_fail image "${img:-Lane 2 image}: ${why:-check failed}"
+    fi
+}
+
 # The selection record (Story 1.5 bake-off) is keyed to the classifier model
 # checksum, the prompt checksum, the runtime build, and the GPU driver version:
 # <state>/fleet/selection.json {model_sha256, prompt_sha256, runtime_build,
@@ -299,6 +316,7 @@ lane2_health_run() {
     (( ack )) || lane2_health_removals
     lane2_health_notifier
     lane2_health_install
+    lane2_health_image
     lane2_health_selection
     lane2_health_swap
     if (( ${#LANE2_HEALTH_FAILED[@]} > 0 )); then
