@@ -83,8 +83,10 @@ Nothing in the answer names a term or quotes a probe. `lane2 health` asks this o
 ### Bulk `eval` with a manifest
 
 The eval harness sends its cases as one bulk request (AD-20):
-`{"v":1,"op":"eval","layers":["floor","classifier"],"manifest":"<dir>"}` with no
-payload. The manifest directory must be directly under
+`{"v":1,"op":"eval","layers":["floor","classifier"],"manifest":"<dir>","policy_version":"<hex>"}`
+with no payload. The caller states the `policy_version` it expects (the one
+`lane2 policy update` / `lane2 install` recorded); a different or missing one is
+a block (`fault:policy` or `fault:protocol`). The gate never sends its own back. The manifest directory must be directly under
 `<state root>/manifests/` (store `manifests`, operator-owned, group
 `lane2-gate`, 2750), a real directory, and hold only regular files named
 `000001`, `000002`, … with no gap, at most 1500. A symlink, a gap, a foreign
@@ -94,10 +96,63 @@ files under its own identity and never reads a workspace.
 Each case gets every requested layer, reported on its own, as two characters in
 `detail.cases` (floor, then classifier: `h` hit, `c` clear, `e` could not run,
 `-` not requested). A case that is empty, over `GATE_MAX_REQUEST`, or not text
-is `e`. `detail.inputs` names what the gate used: `policy_version`, the prompt
-and settings checksums, and whether the settings cache prompts. A bulk eval is
-bounded by `GATE_EVAL_BUDGET`, not `GATE_DEADLINE`; it writes no cache entry and
-no log.
+is `e`. `detail.inputs` names only the public settings file's checksum and
+whether it caches prompts. A bulk eval is bounded by `GATE_EVAL_BUDGET`, not
+`GATE_DEADLINE`; it writes no cache entry and no operator log line.
+
+### Verdict cache
+
+The decision core reuses an allow under the policy it was made under (AD-19):
+
+- **Key:** `sha256(normalised content) ‖ policy_version ‖ layer set`. Normalised:
+  line endings as LF, trailing newlines removed; nothing else.
+- **What is cached:** only `allow` under the `full` layer set. A block is never
+  cached. A floor-only session neither reads nor writes the cache, so a floor-only
+  allow can never serve a full request. A hit returns allow without a classifier
+  call; the floor still runs first.
+- **Never cached:** `eval` and `health` set the one bypass flag
+  (`GATE_CACHE_BYPASS`); the classifier is called for every item.
+- **Invalidation:** a new `policy_version` (new term list, prompt, model, runtime,
+  or gate code) is a new key; on the next lookup every entry under an earlier one
+  is purged.
+- **Faults:** a corrupt or unreadable cache, or a lock wait over 2 s, is
+  `fault:store` — never a miss that could turn into an allow. The cache
+  (`gate-store/cache.jsonl`, 0600) holds hashes only and is written only by the
+  gate, under `flock`.
+
+The service ops that use the cache (`prompt`, `tool_input`, …) arrive with the
+per-session sockets in Epic 4; on the hub socket today only `eval` and `health`
+are served, and both bypass it.
+
+### Rate limit and probe budget
+
+Per hub-socket peer (by peer uid), per window (`/etc/lane2/gate.conf`):
+
+```bash
+GATE_RATE_LIMIT=600     # requests per window
+GATE_RATE_WINDOW=60     # seconds
+GATE_PROBE_BUDGET=100   # blocks per window
+```
+
+A peer over either limit gets `block` with category `probe` for every request
+until its window ends; each is an operator log line, and the notifier raises a
+critical (coalesced) alert. Counters live in `gate-store/counters/<uid>` under
+`flock`; corrupt or unreadable counters count as over the limit. Invalid values
+stop the gate. Per-session counting and ending a session on a probe come with
+Epics 3 and 4, on these counters.
+
+### Query log
+
+`gate-store/query.jsonl` (0600): one metadata line per hub-socket request —
+`{time, op, peer_uid, verdict, ref}` (`ref` only on a block). Never content. It
+is trimmed to its newest 100000 lines past 8 MiB.
+
+No op or header field looks up a ref, returns the policy, `policy_version`, the
+term list, or a listing; every such request blocks (`fault:protocol`).
+
+**Residual (FR-28):** the gate is still an allow/block oracle. A caller allowed
+to ask can learn, one request at a time, whether a text is blocked. The rate
+limit and probe budget bound how fast; they do not remove it.
 
 ### Faults — every one is a block
 

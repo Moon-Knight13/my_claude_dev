@@ -16,7 +16,8 @@
 > opaque refs, retained payloads, the operator log, notifications, and `lane2 review show` — [SP1A_GATE.md](SP1A_GATE.md), [SP1A_RUNBOOK.md](SP1A_RUNBOOK.md);
 > health check v1, `lane2 health` — [SP1A_HUB_SETUP.md](SP1A_HUB_SETUP.md#health), and the eval
 > harness through the gate's `eval` op — [SP1A_EVAL_HARNESS.md](SP1A_EVAL_HARNESS.md);
-> the Lane 2 image and container definition, with userns-remap — [SP1A_WORKSPACE_SEPARATION.md](SP1A_WORKSPACE_SEPARATION.md).
+> the Lane 2 image and container definition, with userns-remap — [SP1A_WORKSPACE_SEPARATION.md](SP1A_WORKSPACE_SEPARATION.md);
+> the verdict cache, per-caller rate limit and probe budget, and the query log — [SP1A_GATE.md](SP1A_GATE.md#verdict-cache).
 
 ## Why
 

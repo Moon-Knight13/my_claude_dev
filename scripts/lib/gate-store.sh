@@ -150,7 +150,7 @@ gate_retain() {
 gate_oplog() {
     local op origin cat ref
     op="$(gate_op_name "$1")"; origin="$2"; cat="$3"; ref="$4"
-    [[ "$ref" =~ $GATE_REF_RE && "$cat" =~ ^(hit|fault):[a-z-]+$ ]] || return 4
+    [[ "$ref" =~ $GATE_REF_RE && ( "$cat" =~ ^(hit|fault):[a-z-]+$ || "$cat" == probe ) ]] || return 4
     case "$origin" in operator|container|hub) ;; *) return 4 ;; esac
     ( umask 027
       jq -nc --arg time "$(date -u -d "@$(gate_now)" +%Y-%m-%dT%H:%M:%SZ)" --arg op "$op" --arg origin "$origin" \

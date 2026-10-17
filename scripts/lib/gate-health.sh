@@ -52,11 +52,17 @@ gate_header_ok() {
         health)
             jq -e '(keys - ["v", "op"]) == []' "$h" >/dev/null 2>&1 ;;
         eval)
-            jq -e '(keys - ["v", "op", "layers", "manifest"]) == []
+            # A bulk eval names the policy_version it expects; the gate checks it
+            # and never sends one back (Story 2.5).
+            jq -e '(keys - ["v", "op", "layers", "manifest", "policy_version"]) == []
                    and (.layers | type) == "array" and (.layers | length) > 0
                    and (.layers | length) == (.layers | unique | length)
                    and all(.layers[]; . == "floor" or . == "classifier")
-                   and ((has("manifest") | not) or ((.manifest | type) == "string"))' "$h" >/dev/null 2>&1 ;;
+                   and (if has("manifest")
+                        then (.manifest | type) == "string"
+                             and (.policy_version | type) == "string"
+                             and (.policy_version | test("^[0-9a-f]{64}$"))
+                        else (has("policy_version") | not) end)' "$h" >/dev/null 2>&1 ;;
         *) return 1 ;;
     esac
 }
@@ -182,11 +188,11 @@ gate_eval_manifest() {
     return 0
 }
 
-# What a bulk eval reports about its inputs, so the eval record names the
-# policy the gate actually used (AD-19). Hub socket only; never leaves the hub.
+# What a bulk eval reports about its inputs: only the public settings file. The
+# policy_version is the caller's to state and the gate's to check (header); no op
+# returns it, the prompt, or anything derived from them (Story 2.5).
 gate_eval_inputs() {
-    jq -nc --arg pv "$1" --arg p "$(sha256sum < "$GATE_PROMPT_FILE" | cut -d' ' -f1)" \
-        --arg s "$(sha256sum < "$GATE_CLASSIFIER_SETTINGS" | cut -d' ' -f1)" \
+    jq -nc --arg s "$(sha256sum < "$GATE_CLASSIFIER_SETTINGS" | cut -d' ' -f1)" \
         --argjson c "$(jq -c '.params | if has("cache_prompt") then .cache_prompt else true end' "$GATE_CLASSIFIER_SETTINGS" 2>/dev/null || echo true)" \
-        '{policy_version: $pv, prompt_sha256: $p, settings_sha256: $s, cache_prompt: $c}'
+        '{settings_sha256: $s, cache_prompt: $c}'
 }

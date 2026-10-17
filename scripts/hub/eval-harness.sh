@@ -145,16 +145,20 @@ evalh_gate_conf() { lane2_conf_file_get "$EVALH_CONFDIR/gate.conf" "$1"; }
 evalh_gate_ask() {
     local dir="$1" n="$2" hdr rc=0
     EVALH_CODES=""; EVALH_INPUTS=""
-    hdr="$(jq -nc --arg m "$dir" '{v: 1, op: "eval", layers: ["floor", "classifier"], manifest: $m}')"
+    hdr="$(jq -nc --arg m "$dir" --arg pv "$EVALH_PV" \
+        '{v: 1, op: "eval", layers: ["floor", "classifier"], manifest: $m, policy_version: $pv}')"
     gate_client "$EVALH_SOCK" "$((EVALH_BUDGET + 2))" "$hdr" < /dev/null || rc=$?
     (( rc == 0 || rc == 3 )) || return 1
     # No answer is no answer; jq -e alone would not say so on every version.
     [[ "$GATE_CLIENT_RESPONSE" == \{* ]] || return 1
+    # The gate refuses a policy_version that is not its own (Story 2.5).
+    if [[ "$(jq -r '.detail.reason // .detail.reason_category // ""' <<<"$GATE_CLIENT_RESPONSE")" == fault:policy ]]; then
+        EVALH_PV_MISMATCH=1; return 1
+    fi
     jq -e --argjson n "$n" '(.v | type) == "number" and .v == 1
         and (.detail.cases | type) == "string" and (.detail.cases | length) == 2 * $n
         and (.detail.cases | test("^[hce-]*$"))
-        and (.detail.inputs.policy_version | type) == "string"
-        and (.detail.inputs.policy_version | test("^[0-9a-f]{64}$"))' <<<"$GATE_CLIENT_RESPONSE" >/dev/null 2>&1 \
+        and (.detail.inputs.settings_sha256 | type) == "string"' <<<"$GATE_CLIENT_RESPONSE" >/dev/null 2>&1 \
         || return 1
     EVALH_CODES="$(jq -r .detail.cases <<<"$GATE_CLIENT_RESPONSE")"
     EVALH_INPUTS="$(jq -c .detail.inputs <<<"$GATE_CLIENT_RESPONSE")"
@@ -189,17 +193,29 @@ evalh_prepare() {
     EVALH_MANIFESTS="$(conf LANE2_STATE_ROOT /var/lib/lane2)/manifests"
     [[ -d "$EVALH_MANIFESTS" && ! -L "$EVALH_MANIFESTS" && -w "$EVALH_MANIFESTS" ]] \
         || die 4 "manifests store missing or not writable: $EVALH_MANIFESTS (run lane2 install)"
+    # policy_version and the prompt checksum come from the policy store's record
+    # (written by lane2 policy update and lane2 install, on the hub); the gate
+    # confirms the policy_version and never sends it back (Story 2.5).
+    local pstate
+    pstate="$(conf LANE2_STATE_ROOT /var/lib/lane2)/gate-policy/state.json"
+    EVALH_PV="$(jq -r '.policy_version // ""' "$pstate" 2>/dev/null)" || EVALH_PV=""
+    [[ "$EVALH_PV" =~ ^[0-9a-f]{64}$ ]] \
+        || die 4 "record incomplete: policy_version (none recorded in the policy store; run lane2 policy update); nothing scored"
+    EVALH_PROMPT_SHA="$(jq -r '.prompt_sha256 // ""' "$pstate" 2>/dev/null)" || EVALH_PROMPT_SHA=""
+    [[ "$EVALH_PROMPT_SHA" =~ ^[0-9a-f]{64}$ ]] \
+        || die 4 "record incomplete: prompt_sha256 (none recorded in the policy store; run lane2 policy update); nothing scored"
     evalh_manifest_dir || die 4 "cannot create a manifest directory"
     d="$EVALH_MDIR"
-    evalh_gate_ask "$d" 0 \
-        || die 4 "record incomplete: policy_version (the gate's eval op did not answer: $(jq -r '.detail.reason // "no answer"' <<<"${GATE_CLIENT_RESPONSE:-null}" 2>/dev/null || echo "no answer")); nothing scored"
+    EVALH_PV_MISMATCH=0
+    if ! evalh_gate_ask "$d" 0; then
+        (( EVALH_PV_MISMATCH )) && die 4 "record incomplete: policy_version (the gate refused it: fault:policy — the gate's policy is missing or not the one recorded in the policy store; run lane2 policy update); nothing scored"
+        die 4 "record incomplete: policy_version (the gate's eval op did not answer: $(jq -r '.detail.reason // "no answer"' <<<"${GATE_CLIENT_RESPONSE:-null}" 2>/dev/null || echo "no answer")); nothing scored"
+    fi
     rm -rf -- "$d"
     jq -e '.cache_prompt == false' <<<"$EVALH_INPUTS" >/dev/null \
         || die 4 "the production classifier settings enable prompt caching; through the gate the eval cannot force it off"
     EVALH_MODE=cache_prompt_false
     EVALH_MEMBER=classifier
-    EVALH_PV="$(jq -r .policy_version <<<"$EVALH_INPUTS")"
-    EVALH_PROMPT_SHA="$(jq -r '.prompt_sha256 // ""' <<<"$EVALH_INPUTS")"
     EVALH_SETTINGS_SHA="$(jq -r '.settings_sha256 // ""' <<<"$EVALH_INPUTS")"
     EVALH_EFF_SHA="$EVALH_SETTINGS_SHA"
     EVALH_FLOOR_OK=1
@@ -217,10 +233,9 @@ evalh_score() {
     : > "$w/rows.jsonl"; : > "$w/batch.jsonl"
     flush() {
         (( n > 0 )) || return 0
+        EVALH_PV_MISMATCH=0
         if ! evalh_gate_ask "$d" "$n"; then EVALH_CODES=""; fi
-        if [[ -n "$EVALH_CODES" && "$(jq -r .policy_version <<<"$EVALH_INPUTS")" != "$EVALH_PV" ]]; then
-            die 4 "policy_version changed during the run; nothing recorded"
-        fi
+        (( EVALH_PV_MISMATCH )) && die 4 "policy_version changed during the run; nothing recorded"
         i=0
         while IFS= read -r line; do
             if [[ -n "$EVALH_CODES" ]]; then

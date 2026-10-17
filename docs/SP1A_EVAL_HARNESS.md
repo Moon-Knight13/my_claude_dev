@@ -118,7 +118,7 @@ mode 0600. The eval store is hub-only and never mounted into a container
 | Field | What it is |
 |---|---|
 | `path` | `gate: hub-socket eval op, …`, or `direct (Epic 1): …` for an `eval-direct.sh` record. |
-| `policy_version` | The gate's own `policy_version` for the run, from the gate's answer (AD-19). Every batch must report the same one, or the run stops. Hub only: `publish` drops it. |
+| `policy_version` | The policy store's recorded `policy_version`, confirmed by the gate on every batch (a mismatch stops the run) (AD-19). Hub only: `publish` drops it. |
 | `model_sha256` | The classifier model file checksum (`FLEET_CLASSIFIER_SHA256`). |
 | `prompt_sha256` | Checksum of the classifier prompt the gate used (the policy checkout's), reported by the gate. |
 | `settings_sha256` | Checksum of the production classifier settings file, reported by the gate. |
@@ -215,8 +215,12 @@ harness writes the case texts into a fresh manifest directory under
 request with layers `floor` and `classifier` on the hub socket through
 `gate_client`, and builds the three rows from the per-layer result of each case.
 The request is bounded by `GATE_EVAL_BUDGET`. Manifest directories are removed
-when the batch is done. Before any case, it sends an empty manifest to learn the
-gate's `policy_version` and input checksums for the record.
+when the batch is done. The run's `policy_version` and prompt checksum come from
+the policy store's record (`gate-policy/state.json`, written by `lane2 policy
+update` and `lane2 install`); every bulk request states that `policy_version`
+and the gate refuses a mismatch (`fault:policy`), so the record names the policy
+the gate really used without the gate ever returning it (Story 2.5). Before any
+case, an empty manifest checks it and reads the public settings checksum.
 
 The harness never loads the term list or the classifier prompt, and never calls
 a model. `scripts/tests/test-eval-via-gate.sh` lints it: a direct floor or model
