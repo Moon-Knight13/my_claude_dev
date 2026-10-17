@@ -77,6 +77,15 @@ gate_load() { # gate_load <confdir> — rc 4 on any unusable value
     GATE_PROBE_BUDGET="$(lane2_conf_file_get "$d/gate.conf" GATE_PROBE_BUDGET)"; GATE_PROBE_BUDGET="${GATE_PROBE_BUDGET:-100}"
     gate_rate_check_config "$GATE_RATE_LIMIT" "$GATE_RATE_WINDOW" "$GATE_PROBE_BUDGET" || return 4
     gate_cache_init "$GATE_STATE"
+    # Chunked classification (Story 2.7): chunk size in characters, overlap, and
+    # the most chunks one request may take. Invalid values stop the gate.
+    local v
+    v="$(lane2_conf_file_get "$d/gate.conf" GATE_CHUNK_CHARS)"; GATE_CHUNK_CHARS="${v:-$GATE_CHUNK_CHARS}"
+    v="$(lane2_conf_file_get "$d/gate.conf" GATE_CHUNK_OVERLAP)"; GATE_CHUNK_OVERLAP="${v:-$GATE_CHUNK_OVERLAP}"
+    v="$(lane2_conf_file_get "$d/gate.conf" GATE_CHUNK_BUDGET)"; GATE_CHUNK_BUDGET="${v:-$GATE_CHUNK_BUDGET}"
+    [[ "$GATE_CHUNK_CHARS" =~ ^[1-9][0-9]{2,5}$ && "$GATE_CHUNK_OVERLAP" =~ ^[0-9]{1,5}$ \
+       && "$GATE_CHUNK_BUDGET" =~ ^[1-9][0-9]?$ ]] || return 4
+    (( GATE_CHUNK_CHARS >= 500 && GATE_CHUNK_CHARS <= 64000 && GATE_CHUNK_OVERLAP * 4 <= GATE_CHUNK_CHARS )) || return 4
 }
 
 # --- peer --------------------------------------------------------------------
