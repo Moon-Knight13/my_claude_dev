@@ -15,10 +15,8 @@ Strict guard rails — no create, update, delete, move or archive operations.
 
 ## Setup
 
-```bash
-cd mcp-servers/outline-readonly
-npm install
-```
+Zero dependencies — requires only Node.js 18+ (uses built-in `fetch` and `readline`).
+No `npm install` needed.
 
 ### Register with Claude Code
 

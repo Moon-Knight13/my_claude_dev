@@ -1,8 +1,6 @@
 #!/usr/bin/env node
 
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { z } from "zod";
+import { createInterface } from "node:readline";
 import { OutlineClient } from "./outline-client.js";
 
 const API_URL = process.env.OUTLINE_API_URL;
@@ -17,15 +15,14 @@ if (!API_URL || !API_KEY) {
 }
 
 const client = new OutlineClient(API_URL, API_KEY);
-
 let collectionAllowlist = null;
+
+// --- Allowlist resolution ---
 
 async function resolveAllowlist() {
   if (ALLOWED_COLLECTIONS.length === 0) return null;
-
   const allCollections = await client.listCollections();
   const allowed = new Map();
-
   for (const name of ALLOWED_COLLECTIONS) {
     const match = allCollections.find(
       (c) => c.name.toLowerCase() === name.toLowerCase() || c.id === name
@@ -33,10 +30,9 @@ async function resolveAllowlist() {
     if (match) {
       allowed.set(match.id, match.name);
     } else {
-      console.error(`Warning: collection "${name}" not found in Outline — skipping`);
+      console.error(`Warning: collection "${name}" not found — skipping`);
     }
   }
-
   return allowed.size > 0 ? allowed : null;
 }
 
@@ -49,6 +45,8 @@ function enforceCollection(collectionId) {
   }
 }
 
+// --- Formatters ---
+
 function formatDocSummary(doc) {
   return [
     `Title: ${doc.title}`,
@@ -58,17 +56,11 @@ function formatDocSummary(doc) {
     `Updated: ${doc.updatedAt}`,
     `Created: ${doc.createdAt}`,
     doc.archivedAt ? `ARCHIVED: ${doc.archivedAt}` : null,
-  ]
-    .filter(Boolean)
-    .join("\n");
+  ].filter(Boolean).join("\n");
 }
 
 function formatDocFull(doc) {
-  return [
-    formatDocSummary(doc),
-    "---",
-    doc.text,
-  ].join("\n");
+  return formatDocSummary(doc) + "\n---\n" + doc.text;
 }
 
 function buildCollectionTree(documents, collection) {
@@ -78,7 +70,6 @@ function buildCollectionTree(documents, collection) {
     if (!byParent.has(parent)) byParent.set(parent, []);
     byParent.get(parent).push(doc);
   }
-
   function renderLevel(parentId, indent) {
     const children = byParent.get(parentId) || [];
     let output = "";
@@ -88,124 +79,204 @@ function buildCollectionTree(documents, collection) {
     }
     return output;
   }
-
   return `Collection: ${collection.name} [${collection.id}]\n` + renderLevel("root", "  ");
 }
 
-const server = new McpServer({
-  name: "outline-readonly",
-  version: "1.0.0",
-});
+// --- Tool definitions ---
 
-server.tool(
-  "outline_list_collections",
-  "List all accessible collections (folders) in Outline. If an allowlist is configured, only those are shown.",
-  {},
-  async () => {
-    const collections = await client.listCollections();
-    const filtered = collectionAllowlist
-      ? collections.filter((c) => collectionAllowlist.has(c.id))
-      : collections;
+const TOOLS = [
+  {
+    name: "outline_list_collections",
+    description: "List all accessible collections (folders) in Outline. If an allowlist is configured, only those are shown.",
+    inputSchema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "outline_collection_structure",
+    description: "Show the document tree structure of a collection — titles and IDs, nested by parent/child.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        collectionId: { type: "string", description: "Collection UUID" },
+      },
+      required: ["collectionId"],
+    },
+  },
+  {
+    name: "outline_list_documents",
+    description: "List documents in a collection, optionally under a specific parent document. Returns summaries (no body text).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        collectionId: { type: "string", description: "Collection UUID" },
+        parentDocumentId: { type: "string", description: "Parent document UUID to list children of" },
+        limit: { type: "number", description: "Max results (default 25)" },
+        offset: { type: "number", description: "Pagination offset (default 0)" },
+      },
+      required: ["collectionId"],
+    },
+  },
+  {
+    name: "outline_read_document",
+    description: "Read the full content (Markdown) of a single document by its ID.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        documentId: { type: "string", description: "Document UUID" },
+      },
+      required: ["documentId"],
+    },
+  },
+  {
+    name: "outline_search",
+    description: "Search documents by text query. Scoped to allowlisted collections if configured.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Search query text" },
+        collectionId: { type: "string", description: "Limit search to a specific collection UUID" },
+        limit: { type: "number", description: "Max results (default 10)" },
+      },
+      required: ["query"],
+    },
+  },
+];
 
-    const text = filtered
-      .map((c) => `${c.name} [${c.id}] — ${c.documents?.length || "?"} docs`)
-      .join("\n");
+// --- Tool handlers ---
 
-    return { content: [{ type: "text", text: text || "No collections found." }] };
-  }
-);
-
-server.tool(
-  "outline_collection_structure",
-  "Show the document tree structure of a collection — titles and IDs, nested by parent/child.",
-  { collectionId: z.string().describe("Collection UUID") },
-  async ({ collectionId }) => {
-    enforceCollection(collectionId);
-    const collection = await client.getCollectionStructure(collectionId);
-
-    const allDocs = [];
-    let offset = 0;
-    while (true) {
-      const batch = await client.listDocuments(collectionId, null, { limit: 100, offset });
-      allDocs.push(...batch.data);
-      if (batch.data.length < 100) break;
-      offset += 100;
+async function handleToolCall(name, args) {
+  switch (name) {
+    case "outline_list_collections": {
+      const collections = await client.listCollections();
+      const filtered = collectionAllowlist
+        ? collections.filter((c) => collectionAllowlist.has(c.id))
+        : collections;
+      const text = filtered
+        .map((c) => `${c.name} [${c.id}] — ${c.documents?.length || "?"} docs`)
+        .join("\n");
+      return text || "No collections found.";
     }
 
-    const tree = buildCollectionTree(allDocs, collection);
-    return { content: [{ type: "text", text: tree }] };
-  }
-);
-
-server.tool(
-  "outline_list_documents",
-  "List documents in a collection, optionally under a specific parent document. Returns summaries (no body text).",
-  {
-    collectionId: z.string().describe("Collection UUID"),
-    parentDocumentId: z.string().optional().describe("Parent document UUID to list children of"),
-    limit: z.number().optional().default(25).describe("Max results (default 25)"),
-    offset: z.number().optional().default(0).describe("Pagination offset"),
-  },
-  async ({ collectionId, parentDocumentId, limit, offset }) => {
-    enforceCollection(collectionId);
-    const result = await client.listDocuments(collectionId, parentDocumentId, { limit, offset });
-    const text = result.data.map(formatDocSummary).join("\n\n");
-    const pagination = result.pagination
-      ? `\n\n--- Page offset:${offset} limit:${limit} total:${result.pagination.total || "?"} ---`
-      : "";
-    return { content: [{ type: "text", text: (text || "No documents found.") + pagination }] };
-  }
-);
-
-server.tool(
-  "outline_read_document",
-  "Read the full content (Markdown) of a single document by its ID.",
-  { documentId: z.string().describe("Document UUID") },
-  async ({ documentId }) => {
-    const doc = await client.getDocument(documentId);
-    if (collectionAllowlist) enforceCollection(doc.collectionId);
-    return { content: [{ type: "text", text: formatDocFull(doc) }] };
-  }
-);
-
-server.tool(
-  "outline_search",
-  "Search documents by text query. Scoped to allowlisted collections if configured.",
-  {
-    query: z.string().describe("Search query text"),
-    collectionId: z.string().optional().describe("Limit search to a specific collection UUID"),
-    limit: z.number().optional().default(10).describe("Max results (default 10)"),
-  },
-  async ({ query, collectionId, limit }) => {
-    if (collectionId) enforceCollection(collectionId);
-
-    if (collectionAllowlist && !collectionId) {
-      const results = [];
-      for (const [cid] of collectionAllowlist) {
-        const batch = await client.searchDocuments(query, cid, { limit });
-        results.push(...(batch.data || []));
+    case "outline_collection_structure": {
+      enforceCollection(args.collectionId);
+      const collection = await client.getCollection(args.collectionId);
+      const allDocs = [];
+      let offset = 0;
+      while (true) {
+        const batch = await client.listDocuments(args.collectionId, null, { limit: 100, offset });
+        allDocs.push(...batch.data);
+        if (batch.data.length < 100) break;
+        offset += 100;
       }
-      results.sort((a, b) => (b.ranking || 0) - (a.ranking || 0));
+      return buildCollectionTree(allDocs, collection);
+    }
+
+    case "outline_list_documents": {
+      enforceCollection(args.collectionId);
+      const limit = args.limit || 25;
+      const offset = args.offset || 0;
+      const result = await client.listDocuments(args.collectionId, args.parentDocumentId, { limit, offset });
+      const text = result.data.map(formatDocSummary).join("\n\n");
+      const pagination = result.pagination
+        ? `\n\n--- Page offset:${offset} limit:${limit} total:${result.pagination.total || "?"} ---`
+        : "";
+      return (text || "No documents found.") + pagination;
+    }
+
+    case "outline_read_document": {
+      const doc = await client.getDocument(args.documentId);
+      if (collectionAllowlist) enforceCollection(doc.collectionId);
+      return formatDocFull(doc);
+    }
+
+    case "outline_search": {
+      const limit = args.limit || 10;
+      if (args.collectionId) enforceCollection(args.collectionId);
+
+      let results;
+      if (collectionAllowlist && !args.collectionId) {
+        results = [];
+        for (const [cid] of collectionAllowlist) {
+          const batch = await client.searchDocuments(args.query, cid, { limit });
+          results.push(...(batch.data || []));
+        }
+        results.sort((a, b) => (b.ranking || 0) - (a.ranking || 0));
+        results = results.slice(0, limit);
+      } else {
+        const result = await client.searchDocuments(args.query, args.collectionId, { limit });
+        results = result.data || [];
+      }
+
       const text = results
-        .slice(0, limit)
         .map((r) => {
           const doc = r.document;
           return `${formatDocSummary(doc)}\nContext: ${r.context || "(no snippet)"}`;
         })
         .join("\n\n---\n\n");
-      return { content: [{ type: "text", text: text || "No results." }] };
+      return text || "No results.";
     }
 
-    const result = await client.searchDocuments(query, collectionId, { limit });
-    const text = (result.data || [])
-      .map((r) => {
-        const doc = r.document;
-        return `${formatDocSummary(doc)}\nContext: ${r.context || "(no snippet)"}`;
-      })
-      .join("\n\n---\n\n");
-    return { content: [{ type: "text", text: text || "No results." }] };
+    default:
+      throw new Error(`Unknown tool: ${name}`);
   }
-);
+}
+
+// --- JSON-RPC over stdio ---
+
+function send(msg) {
+  const json = JSON.stringify(msg);
+  process.stdout.write(json + "\n");
+}
+
+function rpcResult(id, result) {
+  send({ jsonrpc: "2.0", id, result });
+}
+
+function rpcError(id, code, message) {
+  send({ jsonrpc: "2.0", id, error: { code, message } });
+}
+
+async function handleMessage(msg) {
+  const { id, method, params } = msg;
+
+  switch (method) {
+    case "initialize":
+      rpcResult(id, {
+        protocolVersion: "2024-11-05",
+        capabilities: { tools: {} },
+        serverInfo: { name: "outline-readonly", version: "1.0.0" },
+      });
+      break;
+
+    case "notifications/initialized":
+      break;
+
+    case "tools/list":
+      rpcResult(id, { tools: TOOLS });
+      break;
+
+    case "tools/call": {
+      const toolName = params?.name;
+      const toolArgs = params?.arguments || {};
+      try {
+        const text = await handleToolCall(toolName, toolArgs);
+        rpcResult(id, { content: [{ type: "text", text }] });
+      } catch (err) {
+        rpcResult(id, {
+          content: [{ type: "text", text: `Error: ${err.message}` }],
+          isError: true,
+        });
+      }
+      break;
+    }
+
+    default:
+      if (id !== undefined) {
+        rpcError(id, -32601, `Method not found: ${method}`);
+      }
+  }
+}
+
+// --- Main ---
 
 async function main() {
   collectionAllowlist = await resolveAllowlist();
@@ -218,8 +289,18 @@ async function main() {
     console.error("Outline MCP (read-only): all collections accessible (no allowlist set)");
   }
 
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  const rl = createInterface({ input: process.stdin });
+  rl.on("line", async (line) => {
+    if (!line.trim()) return;
+    try {
+      const msg = JSON.parse(line);
+      await handleMessage(msg);
+    } catch (err) {
+      rpcError(null, -32700, `Parse error: ${err.message}`);
+    }
+  });
+
+  console.error("Outline MCP (read-only): stdio transport ready");
 }
 
 main().catch((err) => {

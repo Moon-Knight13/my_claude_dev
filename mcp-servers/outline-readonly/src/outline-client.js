@@ -1,5 +1,3 @@
-import fetch from "node-fetch";
-
 export class OutlineClient {
   constructor(apiUrl, apiKey) {
     this.apiUrl = apiUrl.replace(/\/+$/, "");
@@ -34,11 +32,6 @@ export class OutlineClient {
   }
 
   async getCollection(id) {
-    const result = await this.request("collections.info", { id });
-    return result.data;
-  }
-
-  async getCollectionStructure(id) {
     const result = await this.request("collections.info", { id });
     return result.data;
   }
