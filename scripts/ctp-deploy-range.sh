@@ -65,7 +65,7 @@ declare -A STAGE_DESC=(
 # --- classify host into stage ------------------------------------------------
 classify() {
     local host="$1" name
-    name="${host%_${TEAM}}"
+    name="${host%_"${TEAM}"}"
     case "$name" in
         r-isp*|r[0-9]|r[0-9][0-9]|r-*) echo infra ;;
         fw1-*)                           echo infra ;;
@@ -87,7 +87,7 @@ sort_stage() {
         infra)
             local isps=() routers=() firewalls=()
             for h in "${hosts[@]}"; do
-                case "${h%_${TEAM}}" in
+                case "${h%_"${TEAM}"}" in
                     r-isp*) isps+=("$h") ;; fw1-*) firewalls+=("$h") ;; *) routers+=("$h") ;;
                 esac
             done
@@ -95,13 +95,13 @@ sort_stage() {
         dc)
             local primary=() secondary=()
             for h in "${hosts[@]}"; do
-                case "${h%_${TEAM}}" in *_01) primary+=("$h") ;; *) secondary+=("$h") ;; esac
+                case "${h%_"${TEAM}"}" in *_01) primary+=("$h") ;; *) secondary+=("$h") ;; esac
             done
             printf '%s\n' "${primary[@]}" "${secondary[@]}" ;;
         core)
             local proxies=() mail=()
             for h in "${hosts[@]}"; do
-                case "${h%_${TEAM}}" in proxy-*|elastic-*) proxies+=("$h") ;; *) mail+=("$h") ;; esac
+                case "${h%_"${TEAM}"}" in proxy-*|elastic-*) proxies+=("$h") ;; *) mail+=("$h") ;; esac
             done
             printf '%s\n' "${proxies[@]}" "${mail[@]}" ;;
         *)
@@ -288,14 +288,14 @@ if [[ "$ACTION" == "status" ]]; then
     echo ""
 
     for s in "${STAGE_ORDER[@]}"; do
-        hosts="${STAGE_HOSTS[$s]:-}"
-        [[ -z "$hosts" ]] && continue
+        read -ra hosts <<< "${STAGE_HOSTS[$s]:-}"
+        [[ ${#hosts[@]} -eq 0 ]] && continue
         local_up=0; local_pending=0
-        for h in $hosts; do
+        for h in "${hosts[@]}"; do
             if is_deployed "$h"; then local_up=$((local_up + 1)); else local_pending=$((local_pending + 1)); fi
         done
         printf "  [%s] %s  (%d deployed, %d pending)\n" "$s" "${STAGE_DESC[$s]}" "$local_up" "$local_pending"
-        for h in $hosts; do
+        for h in "${hosts[@]}"; do
             if is_deployed "$h"; then
                 printf "    + %s\n" "$h"
             else
@@ -335,7 +335,8 @@ fi
 # Count pending
 total_pending=0
 for s in "${STAGES_TO_RUN[@]}"; do
-    for h in ${STAGE_HOSTS[$s]:-}; do
+    read -ra _pending_hosts <<< "${STAGE_HOSTS[$s]:-}"
+    for h in "${_pending_hosts[@]}"; do
         is_deployed "$h" || total_pending=$((total_pending + 1))
     done
 done
@@ -350,13 +351,10 @@ echo ""
 echo "-- Deploying $total_pending pending hosts across ${#STAGES_TO_RUN[@]} stages..."
 echo ""
 
-TOTAL_OK=0
-TOTAL_FAIL=0
-
 for s in "${STAGES_TO_RUN[@]}"; do
-    raw_hosts="${STAGE_HOSTS[$s]:-}"
-    [[ -z "$raw_hosts" ]] && continue
-    mapfile -t sorted_hosts < <(sort_stage "$s" $raw_hosts)
+    read -ra stage_hosts <<< "${STAGE_HOSTS[$s]:-}"
+    [[ ${#stage_hosts[@]} -eq 0 ]] && continue
+    mapfile -t sorted_hosts < <(sort_stage "$s" "${stage_hosts[@]}")
     deploy_stage "$s" "${sorted_hosts[@]}" || true
 done
 
