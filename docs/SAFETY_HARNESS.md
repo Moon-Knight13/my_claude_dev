@@ -85,12 +85,12 @@ set an env var in the same call could otherwise rewrite its own limits.
 | **Build-tooling bridge** | any attempt to drive `ctp`/`docker exec` into the container directly | `deny` bare access; `ask` for a permitted wrapper verb; `deny` a refused verb | `CTP_ALLOWED_TARGET`, `CTP_ALLOWED_TEAM`, `CTP_ALLOWED_VERBS` |
 | **Secret-read deny** | Read/Write/Edit/Bash touching a credential path | `deny` | `CTP_SECRET_PATHS` |
 | **A · Destructive-action gate** | `rm -rf`, `shred`, `mkfs`, `dd of=`, `dropdb`, `DROP`/`TRUNCATE`, `terraform destroy`, `kubectl delete`, `docker prune`/`rm -f` | `ask` (→ `deny` with no human) | `~/.config/safety-guard.conf` (`SAFETY_ALLOWLIST`) |
-| **C1 · PII/IP path guard** | Read/Write/Edit/Bash touching an Org-data path | `deny` | `CTP_PII_PATHS` (opt-in) **+ `~/.config/orchestrator/*` always, not configurable** |
+| **C1 · PII/IP path guard** | Read/Write/Edit/Bash touching an Org-data path | `deny` | `CTP_PII_PATHS` (opt-in) |
 | **B · Commit guard** | staged secrets/PII on every commit | **warn + log** (never blocks) | global `core.hooksPath` |
 | **2b · Destructive-git gate** | `git push --force`, `reset --hard`, `clean -f`, `branch -D`, `checkout --force` | `ask` (→ `deny` with no human) | `~/.config/git-guard.conf` (`GITGUARD_ALLOWLIST`) |
 | **Killswitch** | credentials left on the box after the last session | shred | PAM + systemd timer |
 
-### One policy, two enforcement points
+### Guard stack
 
 The hook-side controls above are **composed in `scripts/lib/guard-stack.sh`**, not
 implemented in the hook. `.claude/hooks/pretooluse-ctp.sh` parses the tool call and
@@ -98,48 +98,9 @@ renders a verdict in the hook's JSON protocol; the stack decides. The layers run
 a fixed order per command segment: segmentation → build tooling → secret paths →
 C1 PII paths → destructive actions → destructive git. First verdict wins.
 
-This matters because the hook is **enforcement point #1** and fronts only Claude's
-tools. **Enforcement point #2** is the local-model executor (G3,
-`scripts/orchestrator/execute-local.sh`), which does not go through Claude and
-therefore does not inherit the hook. It calls the same library, so the two cannot
-drift: a layer added here defends both.
-
-The executor is now built. It drives a local model through a **fixed** tool set —
-`read_file`, `write_file`, `list_dir`, `run_command` — and every one of them is
-classified by the stack: a structured tool is never a route round a layer. An
-`ask` is confirmed on the controlling TTY (both stdin and stdout), and with no TTY
-it denies, mirroring the hook's behaviour where no human can answer. Tool output
-reaches the model in a labelled data channel and never becomes part of its
-instructions, and a bounded step budget caps any sequence an injected instruction
-could start. Its metadata log carries opaque handles rather than filesystem paths,
-so a log Claude can read indexes nothing.
-
-What comes back out of it is governed separately, by the **disclosure boundary**
-(`scripts/lib/contract.sh`). A human at the terminal gets the raw answer; a
-cloud-bound caller gets a **declared interface** — name, invocation, inputs,
-outputs, exit codes — and never the artifact or a scrubbed copy of it. Only named
-fields are copied, so undeclared content was never in the message; a filesystem
-path is rejected outright, because a path discloses org structure and client
-identity even when file contents never move. The owner's term list runs on the
-outbound text before and after the sanitiser, a sanitiser failure blocks on this
-path rather than passing through, and the owner approves every contract seeing the
-exact text that would cross. Approval needs a terminal, so unattended
-cloud/local co-operation is impossible by construction — a stated property, not a
-gap.
-
-The stack takes a **caller mode**, and exactly one layer varies by it — **C1**. In
-`hook` mode an Org PII/IP path is denied, keeping that material out of Claude's
-transcript. In `executor` mode it is permitted, because the local executor is the
-component whose purpose is to read that material without egress; the carve-out is
-paid for on the return path (interface-only disclosure), not waived. Secret paths
-are denied in **both** modes — reading Org data is the executor's job, reading
-credentials is not.
-
-
-Not built yet: **C2** (intelligent, content-level PII redaction — belongs in the
-local-model orchestrator **G3**, which can redact *tool output* that hooks
-cannot), **hook-level D** (egress visibility on top of the org network),
-**2b** (warn on destructive git ops — `force-push`, `reset --hard`).
+Not built yet: **C2** (intelligent, content-level PII redaction — can redact
+*tool output* that hooks cannot), **hook-level D** (egress visibility on top of
+the org network).
 
 ## Demonstrating it on a box
 

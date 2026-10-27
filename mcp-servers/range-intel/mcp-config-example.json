@@ -3,9 +3,9 @@
     "range-intel": {
       "command": "python3",
       "args": ["-m", "range_intel.server"],
-      "cwd": "/home/gt/my_claude_dev/range-intel-mcp",
+      "cwd": "/home/gt/my_claude_dev/mcp-servers/range-intel",
       "env": {
-        "PYTHONPATH": "/home/gt/my_claude_dev/range-intel-mcp/src"
+        "PYTHONPATH": "/home/gt/my_claude_dev/mcp-servers/range-intel/src"
       }
     }
   }

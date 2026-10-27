@@ -321,8 +321,7 @@ This is deliberate: a hook can deny a read but **cannot redact tool output**
 (`PostToolUse` runs after the tool), so for a file's contents the only reliable
 in-harness protection is to refuse the read. It is path-based — PII inside a
 non-listed file is not caught; intelligent content-level redaction (including of
-tool output) is the job of the planned local-model orchestrator, which reads and
-rephrases sensitive content before Claude sees it. Defense-in-depth, not OS
+tool output) is deferred work. Defense-in-depth, not OS
 containment. `check-day0.sh` asserts the capability is present on a box.
 
 ## CI and Quality Gates
@@ -425,8 +424,7 @@ a team without agents stepping on each other. It is entirely `gh`-CLI driven:
 interactive session and `gh`.
 
 - Columns: `Backlog → Todo → Ready → In Progress → In Review → Done`.
-- Fields: **BMAD Stage** and **Route** (Human / Claude / Local, derived from
-  `scripts/route-model.sh` via `scripts/suggest-route.sh`).
+- Fields: **BMAD Stage** and **Route** (Human / Claude / Local).
 - Coordination: a collision-safe **claim protocol** (`scripts/board.sh claim` —
   self-assign + `wip` lock + In Progress + re-check), one branch per issue, and
   git worktrees for parallel subagents.
@@ -471,7 +469,6 @@ These slash commands are defined in `.claude/commands/` and are specific to this
 | `/bmad-to-board` | Turn a BMAD decomposition into epic + story issues on the Kanban board |
 | `/next-issue` | Claim the next ready card (collision-safe), build it, open a PR |
 | `/run-epic` | Take ownership of an epic and fan its stories out to subagents |
-| `/route-task` | Invoke the model routing protocol explicitly |
 | `/day0-check` | Validate day-0 setup and get guided remediation |
 | `/security-audit` | Full security scan with MITRE ATLAS + PII coverage mapping |
 | `/firewall-allow` | Add an egress host to the dev container firewall allowlist |
@@ -505,20 +502,13 @@ git ls-remote https://github.com/JuliusBrussee/caveman refs/tags/<new-tag>^{}
 Then rebuild the container. Leaving `CAVEMAN_COMMIT` stale is safe by design — the
 drift check refuses to install instead of running the unpinned code.
 
-### Model routing and cost controls
+### Local model offload
 
-- Model routing policy uses local endpoint for low-risk tasks and Claude for high-risk tasks.
-- Disable local routing with `CAVEMAN_ENABLED=0` or `LOCAL_MODEL_ENABLED=false`.
+- Disable local offload with `LOCAL_MODEL_ENABLED=false`.
 - Recommended local defaults:
    - `qwen2.5-coder:7b` for normal coding tasks
    - `qwen2.5-coder:1.5b` for fast/simple edits (instruct-tuned — not the
      `:1.5b-base` variant, which continues prompts instead of following them)
-   - escalate to Claude for high-risk or ambiguous changes
-- Optional fast-path env controls:
-   - `LOCAL_MODEL_FAST_MODEL=qwen2.5-coder:1.5b`
-   - `LOCAL_MODEL_FAST_TASK_TYPES=format,docs,tiny-refactor,rename,simple-test`
-
-See [docs/AI_ROUTING_POLICY.md](AI_ROUTING_POLICY.md) and `scripts/route-model.sh`.
 
 ## Secrets Handling
 
@@ -568,7 +558,7 @@ workflow, `.templatesyncignore`, and `scripts/adopt-template-sync.sh` are
 removed. Every file here is owned by this repository; nothing upstream can
 overwrite it.
 
-Why: this repo diverged too far (local orchestrator, SP1a) for a sync to be
+Why: this repo diverged too far for a sync to be
 reviewable, and the sync merged with `-X theirs`, so on any line both repos had
 changed it proposed the template's version — a standing risk to this repo's
 security rules.

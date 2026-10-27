@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-27
 **Status:** Draft
-**Location:** New sub-project in `my_claude_dev` (or standalone repo TBD)
+**Location:** `mcp-servers/range-intel/` in `my_claude_dev`
 
 ## Intent
 
@@ -309,7 +309,7 @@ LOG_LEVEL=INFO
 ## Project structure
 
 ```
-range-intel-mcp/
+mcp-servers/range-intel/
 ├── pyproject.toml
 ├── README.md
 ├── src/
