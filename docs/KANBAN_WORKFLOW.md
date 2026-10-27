@@ -1,8 +1,8 @@
 # Kanban & Agent Orchestration
 
 A GitHub Project v2 board turns BMAD planning into trackable work that a human
-orchestrator hands off to Claude sessions or local models — solo, or across a
-team without agents stepping on each other. It is `gh`-CLI driven: no API keys,
+orchestrator hands off to Claude sessions — solo, or across a team without
+agents stepping on each other. It is `gh`-CLI driven: no API keys,
 no secrets, no Claude-in-CI. Claude acts through your interactive session and
 `gh`, exactly as it does now.
 
@@ -16,16 +16,13 @@ command below is the manual fallback.
 |---------|--------|---------|
 | **Status** (columns) | Backlog → Todo → Ready → In Progress → In Review → Done | The at-a-glance overview and delivery stage |
 | **BMAD Stage** (field) | Discovery … Security & Release | Which planning stage a card came from (mostly on epics) |
-| **Route** (field) | Human · Claude · Local | Who should work the card — derived from `scripts/route-model.sh` |
+| **Route** (field) | Human · Claude | Who should work the card |
 | `agent-ready` (label) | — | Card is triaged and may be claimed by an agent session |
 | `wip` (label) + assignee | — | Card is claimed; a claim lock — **do not touch** |
 
-**Route** is the orchestration surface. It is populated from the same routing
-policy as CLAUDE.md via `scripts/suggest-route.sh`, so the board never disagrees
-with how work is actually routed:
+**Route** is the orchestration surface:
 
-- `Human` — complex/high-risk (architecture, security, deep-debug, cross-cutting, risk=high).
-- `Local` — simple work the local model handles (`scripts/ask-local.sh`).
+- `Human` — complex/high-risk (architecture, security, deep-debug, cross-cutting).
 - `Claude` — agentic work for a Claude session.
 
 ## One-time setup (day 0)
@@ -46,8 +43,8 @@ than duplicates. It writes `.ai/project.env`, which `scripts/board.sh` sources.
 
 1. **Plan** with `/bmad` through the Task Decomposition stage.
 2. **Populate the board**: `/bmad-to-board` creates the epic + story issues,
-   adds them to the board, and sets BMAD Stage + a suggested Route on each.
-3. **Triage**: review each card, adjust Route, move the ones you want worked to
+   adds them to the board and sets BMAD Stage on each.
+3. **Triage**: review each card, set Route, move the ones you want worked to
    **Ready**, and add `agent-ready`. Leave complex cards as `Route=Human`.
 4. **Build**: `/next-issue` claims the top ready card, branches, implements, and
    opens a PR that closes the issue (card → In Review). Merge → move to Done.
@@ -95,6 +92,4 @@ events. `/next-issue` and PR steps move the cards at the right moments.
 ## Related
 
 - `docs/BMAD_WORKFLOW.md` — planning stages that feed the board.
-- `docs/AI_ROUTING_POLICY.md` + `scripts/route-model.sh` — the routing policy the
-  Route field mirrors.
 - Commands: `/bmad-to-board`, `/next-issue`, `/run-epic`.

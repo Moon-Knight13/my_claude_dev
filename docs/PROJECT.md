@@ -107,46 +107,15 @@ already carry a marker re-provision.
 
 ### `.env` only works because something loads it
 
-`.env.example` is copied to `.env` by `setup-day0.sh`, but for a long time
-nothing read the result. Every consumer took its values straight from the
-environment — `route-model.sh` still opens with
-`LOCAL_MODEL_ENABLED="${LOCAL_MODEL_ENABLED:-false}"` — so the file was
-decoration. `scripts/lib/load-env.sh` closes that gap and the routing entry
-points (`route-model.sh`, `delegate-local.sh`, `local-health.sh`,
-`ask-local.sh`) source it.
+`.env.example` is copied to `.env` by `setup-day0.sh`. `scripts/lib/load-env.sh`
+parses it (never sources — `.env` is developer-authored) and exports `KEY=VALUE`
+lines. The environment wins over the file, so CI and `containerEnv` still
+override `.env`. `scripts/lib/subsystems.sh` refuses to source `template.conf`
+for the same reason.
 
-The failure was surface-specific, which is why it survived so long. In the
-devcontainer, `devcontainer.json` sets `LOCAL_MODEL_ENABLED` and
-`LOCAL_MODEL_ENDPOINT` through `containerEnv`, so local routing worked and
-looked configured. On a remote box there is no `containerEnv` — `.env` is all
-there is — so `route-model.sh` fell through to its default and returned
-`local_disabled` for every task. This is the exact trap the "What this
-repository is" section warns about: an environment variable that only exists in
-`devcontainer.json` is not available on a box.
-
-Every variable `containerEnv` does *not* set was inert on **both** surfaces:
-`LOCAL_MODEL_MODEL`, the timeouts, `LOCAL_MODEL_MIN_TPS`, `LOCAL_HEALTH_TTL`,
-`CLAUDE_MODEL`, and the `FORCE_*` overrides. Setting `FORCE_LOCAL=true` in
-`.env` did nothing at all.
-
-Two properties of the loader matter if you change it:
-
-- **The environment wins over the file.** A variable already set is left alone,
-  so `FORCE_CLAUDE=true bash scripts/route-model.sh …`, CI, and `containerEnv`
-  keep overriding `.env` rather than being overwritten by it.
-- **The file is parsed, not sourced.** `.env` is developer-authored, so sourcing
-  it would execute its contents on every routing decision. Only `KEY=VALUE`
-  lines are honoured. `scripts/lib/subsystems.sh` refuses to source
-  `template.conf` for the same reason.
-
-`check-day0.sh` asserts the plumbing rather than the file. Checking that `.env`
-exists reported OK for a subsystem that had never worked — the same shape as the
-provisioning failure in "Provisioning must not lie". It now fails when
-`route-model.sh` does not source the loader, and warns when local routing is
-switched off, so the reported state matches the routed state.
-
-If a later change drops the loader, `check-day0.sh` fails on "`.env` values
-reach the routing scripts" rather than going quiet.
+Note: the routing subsystem (`SUBSYSTEM_ROUTING`) that was the primary consumer
+of `.env` has been disabled and its scripts removed (archived to
+`archive/sp1a-gate`). `load-env.sh` remains because other scripts still use it.
 
 ### sudo is for one step, not for the whole run
 
@@ -174,43 +143,13 @@ so `command -v code` alone reports no CLI on boxes that have one), and `sudo`
 strips `SSH_AUTH_SOCK`, so an agent check run as root says nothing about whether
 forwarding works.
 
-### Two traps in the local-model config
+### Local-model routing subsystem (removed)
 
-Both were live for the whole life of the routing subsystem and neither failed
-loudly, which is why they survived.
-
-**Model names contain colons.** `route-model.sh` prints `provider:model:reason`,
-and every real Ollama tag — `qwen2.5-coder:7b` — has a colon in the middle field.
-`delegate-local.sh` split that string left to right, so the model was truncated at
-its first colon: the health preflight probed a model called `qwen2.5-coder` while
-routing had selected `qwen2.5-coder:7b`. Ollama resolves an untagged name by
-prefix, so `model_present` still passed and the only symptom was an occasional
-unexplained `health:probe_timeout` served from a health cache keyed to the wrong
-name. Provider and reason never contain a colon; the model may — so parse from
-both ends and treat the remainder as the model. `scripts/tests/test-delegation.sh`
-asserts the full tagged name reaches both the route log and the health cache.
-
-**A base model is not an instruct model.** The template shipped
-`LOCAL_MODEL_FAST_MODEL=qwen2.5-coder:1.5b-base`. Base models have had no
-instruction tuning: given "Reply with the single word OK" they *continue* the
-text rather than obeying it. The output is fluent English, so it passes the empty
-and degenerate output checks in `delegate-local.sh` and is returned as a
-successful delegation. Every fast-path task got plausible nonsense. Never put a
-`:*-base` tag in either model variable.
-
-### Local routing is an optimisation, not a dependency
-
-When the endpoint is unreachable, `route-model.sh` returns
-`claude:…:local_unreachable_fallback` and `delegate-local.sh` exits 3. Work still
-gets done — by Claude. Nothing in the harness may treat an absent local model as
-a blocker.
-
-`check-day0.sh` reports that state honestly without failing on it: on a box,
-enabled-but-unreachable is a WARN whose text says everything is routing to
-Claude. `LOCAL_MODEL_REQUIRED=true` turns it into a FAIL, for a developer who has
-decided the local model is load-bearing for them. That is the compromise between
-this rule and "Provisioning must not lie" — the report always states what is
-actually happening; only its severity is the developer's choice.
+The routing subsystem (`SUBSYSTEM_ROUTING`) and its scripts (`route-model.sh`,
+`delegate-local.sh`, `local-health.sh`, `ask-local.sh`, `suggest-route.sh`) have
+been disabled and removed. The code is preserved on the `archive/sp1a-gate`
+branch. Architecture pivot: Opus 4.6 is the primary session with no local model
+routing layer; MCP servers provide data and execution surfaces directly.
 
 ### Build-tooling commands are confirmed manually
 
@@ -376,9 +315,8 @@ Two properties matter if you change it:
   `FOO=1 dropdb prod` and `$(rm -rf x)` are — the classifier sees the real command
   word after env prefixes are stripped and substitutions are descended.
 - **It is model-agnostic and honest about its reach.** The classifier is a lib —
-  the single choke point any executor routes through. Claude's hook is enforcement
-  point #1; a future local-model orchestrator calls the same lib rather than a
-  second copy. It stops the accidental and the misread-instruction cases; an
+  the single choke point any executor routes through. It stops the accidental
+  and the misread-instruction cases; an
   adversarial model can still obfuscate around string classification, so like the
   secret-read hook it is defense-in-depth, not a sandbox — the real containment is
   OS-level, which the shared-sudo box does not provide (accepted risk).
@@ -422,104 +360,22 @@ Two properties matter if you change it:
 
 - **It is a separate list from secrets, on purpose.** Secrets are credentials
   (never touch, for anyone); PII paths are a data-governance boundary the owner
-  tunes independently — and one a future local-model front-door may be allowed to
-  read while Claude is not. Keeping them apart preserves that. **Empty is the
+  tunes independently. Keeping them apart preserves that. **Empty is the
   default (opt-in):** nothing is denied until the owner lists the directories
   where Org data lives. The deny is **symmetric** (read *and* write) because a
   PII/IP directory is a boundary the agent should not touch at all.
 - **It is path-based, and honest about that.** PII sitting inside a file *outside*
   the listed globs is not caught, and the guard does not redact PII embedded in an
-  otherwise-readable file's output — hooks cannot rewrite output regardless. That
-  intelligent, content-level sanitisation is the job of the local-model
-  orchestrator (G3): the local model reads/handles sensitive content and rephrases
-  before Claude ever sees it, which *does* cover tool output because the local
-  model is the reader. Until then this is the same defense-in-depth, accepted-risk
-  framing as the secret-read hook — the real containment is OS-level, which the
-  shared-sudo box does not provide. `check-day0.sh` asserts the capability is
-  present on a box (a stale install predating it FAILs).
-
-### The local-model orchestrator (G3, experimental spine)
-
-`scripts/orchestrator/orchestrate.sh` is the front door for routing a prompt to
-the right model: it decides whether a task stays on the **local fleet** or hands
-off to a more capable model (e.g. Claude via `claude -p`, where the A/B gates and
-caveman still apply). The decision logic is a pure, unit-tested lib
-(`scripts/lib/orchestrator-route.sh`); the config is a gitignored on-box file
-(`~/.config/orchestrator.conf`, parsed never sourced) holding a mode and a model
-registry (name · tier · capability rank · endpoint).
-
-**Run it on the machine where the local models answer and the sensitive files
-live — normally the host, not a devcontainer.** Two settings change with that
-choice: the registry's endpoint (`localhost` on a host,
-`host.docker.internal` from a container) and whether `~/.config/orchestrator/` —
-the private term list, prompts and handle map — survives. A devcontainer home is
-usually rebuilt with the container, so a term list written there is lost. Note
-also that `~/.config/orchestrator.conf` (the registry file) and
-`~/.config/orchestrator/` (the private directory) are different things; only the
-directory is sensitive, and only it is guarded from Claude's tools. Setup steps
-are in `docs/ORCHESTRATOR.md`.
-
-The reason this control exists is one **non-negotiable, structural invariant**:
-
-> **Sensitivity gates tier eligibility before capability ranking.** A task the
-> router treats as sensitive is never eligible for the frontier (cloud) tier,
-> however capable — the cloud endpoint is removed from the eligible set, so the
-> picker cannot choose it. `orchestrate.sh` also re-asserts this immediately
-> before dispatch and refuses (exit 4) rather than egress a sensitive task.
-
-Three modes, owner-controlled: `AUTO` (classify, then route), `LOCAL-ONLY` (the
-human seatbelt — nothing egresses), `CLAUDE-ONLY` (the human asserts cloud is
-acceptable). What matters if you change it:
-
-- **Fail closed.** The sensitivity classifier is a **local-LLM judge**
-  (`scripts/orchestrator/classify-sensitivity.sh`) — opt-in via `ORCH_CLASSIFIER`;
-  until enabled, AUTO keeps the built-in stub that treats everything as sensitive.
-  It reads the prompt on stdin, never argv. With `LOCAL_MODEL_API=openai` it
-  calls the model through `fleet_call` (`scripts/lib/fleet.sh`), the one
-  model-call client; a model request anywhere else fails a lint test
-  (`docs/SP1A_FLEET.md`).
-  The judge runs on a **local endpoint only** (it reads the raw prompt, so it
-  refuses a non-local endpoint) and **fails closed**: a timeout, error, or any
-  answer that is not a clean `nonsensitive` resolves to *sensitive*. It disables
-  qwen3 thinking and asks for a one-word verdict at temperature 0; the owner tunes
-  what "sensitive" means in `~/.config/orchestrator/classifier-prompt.md` (on the
-  local model, so tuning never leaks). That tuned file accumulates the sensitive
-  patterns it is meant to catch, so it stays on the box (the committed
-  `classifier-prompt.default.md` must remain generic) and its path belongs in
-  `CTP_PII_PATHS`, so the C1 guard stops Claude's own tools reading it — the
-  classifier reads it directly (not a tool call), Claude cannot. There is **no**
-  deterministic hard-floor
-  (owner decision): an LLM that mislabels a sensitive query as safe can still
-  egress — the accepted residual risk, mitigated by `LOCAL-ONLY` + fail-closed and
-  bounded by the eval (`scripts/orchestrator/eval-classifier.sh`, whose headline
-  metric is sensitive-recall). Do not "optimise" the stub or the judge to a
-  permissive default.
-- **The log records metadata only.** `mode/sensitive/tier/model` go to
-  `.ai/orchestrator-log.jsonl` — never the prompt text, which may be the sensitive
-  content the control exists to protect (same reasoning as the ctp and commit-
-  guard logs).
-- **Sanitiser (control C2).** On the cloud-handoff path only, an opt-in
-  (`ORCH_SANITISER`) LOCAL-LLM rephrase (`scripts/orchestrator/sanitise.sh`)
-  strips incidental identifiers (names, emails, IPs, tokens, internal hostnames,
-  codenames) to neutral placeholders before a prompt reaches Claude, preserving
-  the task. It is defense-in-depth on top of the classifier, not the gate: it runs
-  **local-only** (refuses a non-local endpoint), and if it cannot sanitise,
-  `ORCH_SANITISE_ON_FAIL` decides — `block` (default since SP1a story 2.3: fail
-  closed) or an explicit `passthrough` (the classifier already cleared the prompt).
-  This reverses the earlier passthrough default. Held line: it de-identifies **data**, it must
-  **not** be used to disguise a prohibited **action** as an allowed one. Its
-  prompt is tuned/guarded exactly like the classifier's, and marker-stripping is
-  measured by `scripts/orchestrator/eval-sanitiser.sh`.
-- **Deferred slices** (see `_bmad-output/planning-artifacts/architecture-g3-local-orchestrator.md`):
-  the LiteLLM multi-machine pool, and the local shell executor (which will route
-  through `safety-guard.sh` as enforcement point #2). The local-LLM classifier and
-  the sanitiser have landed (above).
+  otherwise-readable file's output — hooks cannot rewrite output regardless. This
+  is the same defense-in-depth, accepted-risk framing as the secret-read hook —
+  the real containment is OS-level, which the shared-sudo box does not provide.
+  `check-day0.sh` asserts the capability is present on a box (a stale install
+  predating it FAILs).
 
 ### Network changes are deliberate
 
 Adding an outbound host to the devcontainer firewall goes through
-`/firewall-allow`. Per `CLAUDE.md` this is a hard escalation trigger and must
-never be routed to a local model.
+`/firewall-allow`. Per `CLAUDE.md` this is a hard escalation trigger.
 
 Note that the firewall pins hostnames to the IPs resolved at container start, so
 a CDN-hosted host can drift and need a rebuild.

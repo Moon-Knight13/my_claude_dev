@@ -106,7 +106,6 @@ require_files board \
     .github/ISSUE_TEMPLATE/epic.yml \
     .github/ISSUE_TEMPLATE/user-story.yml \
     scripts/board.sh \
-    scripts/suggest-route.sh \
     scripts/bootstrap-project.sh
 
 echo ""

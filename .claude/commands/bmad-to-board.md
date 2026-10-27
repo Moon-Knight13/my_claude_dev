@@ -25,7 +25,6 @@ artifact and create an epic plus its stories as GitHub issues on the project boa
    Note its number `E`.
 
 4. For each story, in order:
-   - Suggest a Route: `route=$(bash scripts/suggest-route.sh <task_type> <risk> <files>)`
    - Create it:
      `gh issue create --label story --title "[Story] <title>" --body "<story + gherkin AC + Parent epic: #E>"`
    - Add it to the board and set its fields:
