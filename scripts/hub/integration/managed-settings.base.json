@@ -1,6 +1,0 @@
-{
-  "autoUpdates": false,
-  "env": {
-    "DISABLE_AUTOUPDATER": "1"
-  }
-}
