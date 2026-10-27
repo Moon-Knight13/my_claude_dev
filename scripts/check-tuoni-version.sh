@@ -68,7 +68,9 @@ fi
 # Returns 0 if $1 >= $2.
 _ver_gte() {
     local IFS=.
-    local -a a=($1) b=($2)
+    local -a a b
+    read -ra a <<< "$1"
+    read -ra b <<< "$2"
     local i
     for i in 0 1 2; do
         local av="${a[$i]:-0}" bv="${b[$i]:-0}"
