@@ -21,20 +21,35 @@ source "$_SCRIPT_DIR/lib/load-env.sh"
 
 # Load allocations.env — single source of truth for box assignments.
 # This is the PREFERRED source; tuoni-mcp/.env is fallback for compat.
+# Environment variables set by the caller take precedence (never overwritten).
+_load_tuoni_env() {
+    local file="$1"
+    [[ -f "$file" ]] || return 1
+    local line key val
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        line="${line%$'\r'}"
+        [[ "$line" =~ ^[[:space:]]*(#|$) ]] && continue
+        line="${line#"${line%%[![:space:]]*}"}"
+        [[ "$line" == export\ * ]] && line="${line#export }"
+        [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]] || continue
+        key="${BASH_REMATCH[1]}"
+        val="${BASH_REMATCH[2]}"
+        # Environment wins: never clobber a variable the caller already set.
+        [[ -n "${!key+x}" ]] && continue
+        val="${val%\"}" ; val="${val#\"}"
+        val="${val%\'}" ; val="${val#\'}"
+        export "$key=$val"
+    done < "$file"
+    return 0
+}
+
 _alloc_file="$_SCRIPT_DIR/../config/allocations.env"
-if [[ -f "$_alloc_file" ]]; then
-    set -a
-    # shellcheck disable=SC1090
-    source "$_alloc_file"
-    set +a
+if _load_tuoni_env "$_alloc_file"; then
     echo "INFO  Loaded allocations from config/allocations.env"
-elif [[ -f "$HOME/tuoni-mcp/.env" ]]; then
-    set -a
-    # shellcheck disable=SC1091
-    source "$HOME/tuoni-mcp/.env"
-    set +a
+elif _load_tuoni_env "$HOME/tuoni-mcp/.env"; then
     echo "INFO  Fallback: loaded creds from ~/tuoni-mcp/.env (consider migrating to config/allocations.env)"
 fi
+unset -f _load_tuoni_env
 
 # ── Minimum version required by official shell-dot/tuoni-mcp ────────────
 OFFICIAL_MCP_MIN="0.17.0"
@@ -117,8 +132,11 @@ if [[ -z "$_auth_endpoint" ]]; then
 fi
 
 # ── Extract token ───────────────────────────────────────────────────────
+# v0.16.x wraps the JWT in JSON; v0.17+ returns the bare JWT from v1.
 _token=""
-if command -v python3 &>/dev/null; then
+if [[ "$_body" == eyJ* ]]; then
+    _token="$_body"
+elif command -v python3 &>/dev/null; then
     _token=$(echo "$_body" | python3 -Ic "
 import sys, json
 d = json.load(sys.stdin)
