@@ -1,0 +1,14 @@
+{
+  "name": "outline-mcp-readonly",
+  "version": "1.0.0",
+  "description": "Read-only MCP server for Outline wiki — scoped to specific collections",
+  "type": "module",
+  "main": "src/server.js",
+  "bin": {
+    "outline-mcp-readonly": "src/server.js"
+  },
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {}
+}

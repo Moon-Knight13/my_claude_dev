@@ -69,6 +69,35 @@ if command -v claude >/dev/null 2>&1; then
     done
 fi
 
+# 3b. Deploy user-level Claude config (CLAUDE.md + MCP server).
+#     Never clobbers — only deploys if missing. Symlinks so git-tracked
+#     source stays authoritative.
+_claude_home="$HOME/.claude"
+mkdir -p "$_claude_home"
+
+if [[ ! -f "$_claude_home/CLAUDE.md" ]]; then
+    ln -sf "$_SCRIPT_DIR/../config/claude/CLAUDE.md" "$_claude_home/CLAUDE.md"
+    echo "  ++  Deployed user-level CLAUDE.md (symlink to config/claude/CLAUDE.md)"
+elif [[ ! -L "$_claude_home/CLAUDE.md" ]]; then
+    echo "  --  ~/.claude/CLAUDE.md exists (not a symlink) — skipping deploy"
+fi
+
+# Deploy outline-readonly MCP server config if not already registered.
+if command -v claude >/dev/null 2>&1; then
+    _mcp_list="$(claude mcp list 2>/dev/null || echo "")"
+    if ! echo "$_mcp_list" | grep -q "outline-readonly"; then
+        _mcp_server="$_SCRIPT_DIR/../mcp-servers/outline-readonly/src/server.js"
+        if [[ -f "$_mcp_server" ]]; then
+            echo "  >>  outline-readonly MCP server available but not registered."
+            echo "      To activate, run:"
+            echo "      claude mcp add outline-readonly -s user -t stdio \\"
+            echo "        -e OUTLINE_API_URL=https://wiki.crp.cr14.net \\"
+            echo "        -e OUTLINE_API_KEY=<your-key> \\"
+            echo "        -- node $_mcp_server"
+        fi
+    fi
+fi
+
 # 4. Best-effort GitHub bootstraps — only when gh is already authenticated.
 #    These mutate REMOTE GitHub settings, so log loudly. Each is guarded by its
 #    completion marker so it runs at most once.
