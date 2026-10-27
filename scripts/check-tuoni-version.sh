@@ -19,12 +19,21 @@ _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/lib/load-env.sh disable=SC1090,SC1091
 source "$_SCRIPT_DIR/lib/load-env.sh"
 
-# Also try tuoni-mcp .env if the my_claude_dev one didn't set TUONI_URL.
-if [[ -z "${TUONI_URL:-}" && -f "$HOME/tuoni-mcp/.env" ]]; then
+# Load allocations.env — single source of truth for box assignments.
+# This is the PREFERRED source; tuoni-mcp/.env is fallback for compat.
+_alloc_file="$_SCRIPT_DIR/../config/allocations.env"
+if [[ -f "$_alloc_file" ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "$_alloc_file"
+    set +a
+    echo "INFO  Loaded allocations from config/allocations.env"
+elif [[ -f "$HOME/tuoni-mcp/.env" ]]; then
     set -a
     # shellcheck disable=SC1091
     source "$HOME/tuoni-mcp/.env"
     set +a
+    echo "INFO  Fallback: loaded creds from ~/tuoni-mcp/.env (consider migrating to config/allocations.env)"
 fi
 
 # ── Minimum version required by official shell-dot/tuoni-mcp ────────────
@@ -53,6 +62,20 @@ _ver_gte() {
     done
     return 0
 }
+
+# ── Reachability pre-check ───────────────────────────────────────────────
+_host="${TUONI_URL#https://}"
+_host="${_host#http://}"
+_host="${_host%%:*}"
+_port="${TUONI_URL##*:}"
+_port="${_port%%/*}"
+
+if ! timeout 5 bash -c "echo >/dev/tcp/$_host/$_port" 2>/dev/null; then
+    echo "TUONI_VERSION=unknown MCP_COMPAT=unreachable UPGRADE_TO=$OFFICIAL_MCP_MIN"
+    echo "FAIL  Cannot reach $_host:$_port — box may have been reallocated."
+    echo "      Check Providentia for current allocation and update config/allocations.env"
+    exit 1
+fi
 
 # ── Authenticate (try v1 then v2) ───────────────────────────────────────
 TLS_FLAG=""
