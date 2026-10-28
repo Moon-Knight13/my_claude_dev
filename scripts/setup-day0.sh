@@ -90,13 +90,16 @@ fi
 # 3c. Memory path alias for devcontainer.
 #     Claude keys memory to the working directory path. Inside a container the
 #     workspace mounts at /workspace, but host memory lives under the host path.
-#     Symlink the container path to the host path so both resolve to one store.
+#     Use a RELATIVE symlink so it resolves correctly regardless of the mount
+#     point (/home/chris/.claude on host vs /home/node/.claude in container).
 if [[ "${DEVCONTAINER:-}" == "true" ]]; then
-    _container_proj="$_claude_home/projects/-workspace"
+    _projects_dir="$_claude_home/projects"
+    _container_proj="$_projects_dir/-workspace"
     # Find the host-path memory dir (there should be exactly one with files).
-    _host_proj="$(find "$_claude_home/projects/" -maxdepth 1 -name '-home-*' -type d 2>/dev/null | head -1)"
+    _host_proj="$(find "$_projects_dir/" -maxdepth 1 -name '-home-*' -type d \
+        ! -name '*--claude-worktrees-*' 2>/dev/null | head -1)"
     if [[ -n "$_host_proj" && -d "$_host_proj/memory" && ! -e "$_container_proj" ]]; then
-        ln -sfn "$_host_proj" "$_container_proj"
+        ln -sfn "$(basename "$_host_proj")" "$_container_proj"
         echo "  ++  Linked container memory path to host memory: $(basename "$_host_proj")"
     fi
 fi
