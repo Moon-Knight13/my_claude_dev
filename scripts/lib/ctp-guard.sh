@@ -39,7 +39,7 @@ ctp_load_config() {
         # shellcheck disable=SC2034  # CTP_PROJECT_DIR is consumed cross-file by ctp-bridge.sh
         case "$key" in
             CTP_ALLOWED_TARGET) CTP_ALLOWED_TARGET="$val" ;;
-            CTP_ALLOWED_TEAM)   CTP_ALLOWED_TEAM="${val//[[:space:]]/}" ;;
+            CTP_ALLOWED_TEAM)   CTP_ALLOWED_TEAM="$val" ;;
             CTP_ALLOWED_VERBS)  CTP_ALLOWED_VERBS="$val" ;;
             CTP_CONTAINER)      CTP_CONTAINER="$val" ;;
             CTP_PROJECT_DIR)    CTP_PROJECT_DIR="$val" ;;
@@ -139,12 +139,21 @@ ctp_classify() {
     [[ -n "$target" ]] || { printf 'refuse mutating-verb-needs-a-target:%s' "$verb"; return 1; }
     [[ -z "$a4" ]] || { printf 'refuse unexpected-extra-args'; return 1; }
     ctp_has_glob "$target" && { printf 'refuse glob-in-target-refused:%s' "$verb"; return 1; }
-    # team gate (mandatory, fail closed)
+    # team gate (mandatory, fail closed; space-separated list of allowed teams)
     [[ -n "$CTP_ALLOWED_TEAM" ]] || { printf 'refuse no-authorised-team-configured'; return 1; }
-    [[ "$target" == *"_$CTP_ALLOWED_TEAM" ]] || { printf 'refuse target-not-in-authorised-team:%s' "$CTP_ALLOWED_TEAM"; return 1; }
-    # box allow-list (one named box, fail closed)
-    [[ -n "$CTP_ALLOWED_TARGET" ]] || { printf 'refuse no-allowed-target-configured'; return 1; }
-    [[ "$target" == "$CTP_ALLOWED_TARGET" ]] || { printf 'refuse target-not-allowed'; return 1; }
+    local _team_suffix="${target##*_}" _team_ok=false _t
+    for _t in $CTP_ALLOWED_TEAM; do
+        [[ "$_team_suffix" == "$_t" ]] && { _team_ok=true; break; }
+    done
+    [[ "$_team_ok" == true ]] || { printf 'refuse target-not-in-authorised-team:%s' "$CTP_ALLOWED_TEAM"; return 1; }
+    # box allow-list (optional; space-separated list of allowed targets)
+    if [[ -n "$CTP_ALLOWED_TARGET" ]]; then
+        local _box_ok=false _b
+        for _b in $CTP_ALLOWED_TARGET; do
+            [[ "$target" == "$_b" ]] && { _box_ok=true; break; }
+        done
+        [[ "$_box_ok" == true ]] || { printf 'refuse target-not-allowed'; return 1; }
+    fi
 
     printf 'confirm mutating %s %s' "$verb" "$target"; return 0
 }
