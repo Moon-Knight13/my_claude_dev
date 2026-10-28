@@ -52,6 +52,27 @@ Requirement terms (MUST, SHOULD, MAY, etc.) follow RFC 2119.
 - **API-002:** Providentia API MUST NOT be used for custom automation unless authorised by Dev Tech Lead.
 - **API-003:** Automated polling SHALL apply request chunking, caching, and retry backoff.
 
+## Red Team OPSEC — Always Apply During Offensive Operations
+
+### Target Discipline (RT-TGT)
+- **RT-TGT-001:** MUST get explicit operator approval on exact target list before any scan, exploit, or offensive command. Discovered hosts are NOT automatically in scope.
+- **RT-TGT-002:** MUST NOT upload offensive tools (nmap, hydra, sshpass, expect) to target systems. Run tools from Kali through SSH tunnels or proxychains.
+
+### Identity and Signature (RT-SIG)
+- **RT-SIG-001:** Use `root` agent for all outbound C2 and lateral movement. MUST NOT use `rt`-prefixed usernames — obvious red team indicator in target logs.
+- **RT-SIG-002:** Unique payload ID per target. MUST NOT reuse payload identifiers across hosts.
+- **RT-SIG-003:** Platform-appropriate cover filenames (e.g. `svchost.exe` on Windows, `crond` on Linux). MUST NOT use generic names like `payload` or `agent`.
+- **RT-SIG-004:** Right-sized binary padding: Linux 1–5 MB, Windows 120–180 MB. Match expected binary sizes for the platform.
+- **RT-SIG-005:** `rsh` default user is `root` — do not override without reason.
+
+### Deployment Order (RT-DEP)
+- **RT-DEP-001:** DCM deploy sequence: ISPs first, then routers, then firewalls, then per-enclave: DCs, proxy, mail, workstations.
+
+## Commit Attribution
+
+- **GitLab / catapult remotes:** End commit messages with `DCM27-Chris.M #UseTheRobotsToDestroyTheRobots`. No Claude attribution.
+- **GitHub / my_claude_dev:** Standard Claude `Co-Authored-By` attribution line.
+
 ## Domain-Specific Rules — Use MCP When Relevant
 
 For full rules in these domains, use `outline_search` or `outline_read_document`

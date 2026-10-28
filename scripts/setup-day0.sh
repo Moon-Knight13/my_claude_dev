@@ -39,6 +39,11 @@ if [[ ! -f .claude/settings.json && -f .claude/settings.json.example ]]; then
     cp .claude/settings.json.example .claude/settings.json
     echo "  ++  Created .claude/settings.json from example"
 fi
+if [[ ! -f .claude/settings.local.json && -f .claude/settings.local.json.example ]]; then
+    sed "s|\\\$HOME|$HOME|g; s|\\\$CLAUDE_PROJECT_DIR|$PWD|g" \
+        .claude/settings.local.json.example > .claude/settings.local.json
+    echo "  ++  Created .claude/settings.local.json (machine-specific deny rules, gitignored)"
+fi
 
 # 2. Fill CODEOWNERS with the repo owner derived from the git remote (no gh auth
 #    needed). Only touches the file while it still holds the placeholder.
