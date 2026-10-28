@@ -172,10 +172,10 @@ else
         "Run: bash scripts/install-claude-plugins.sh  (or restart the devcontainer to re-run postStartCommand)"
 fi
 
-# 8b. Commit guard (warn-only PII/secret scan). Installed at USER scope on a box
-# by provisioning (install-commit-guard.sh) so it covers every repo incl. the
-# range checkout; not applied in the devcontainer. It NEVER blocks a commit — it
-# prints and logs findings so a leaked secret can be rotated per SECURITY.md.
+# 8b. Commit guard (warn-only PII/secret scan). Installed at USER scope by
+# install-commit-guard.sh (setup-day0.sh runs it on container start). It NEVER
+# blocks a commit — it prints and logs findings so a leaked secret can be
+# rotated per SECURITY.md.
 _cg_runner="$HOME/.local/lib/commit-guard/commit-scan.sh"
 _cg_hooks="$(git config --global --get core.hooksPath 2>/dev/null || true)"
 if [[ -x "$_cg_runner" && "$_cg_hooks" == *commit-guard* ]]; then
@@ -185,43 +185,31 @@ if [[ -x "$_cg_runner" && "$_cg_hooks" == *commit-guard* ]]; then
         check "Commit guard installed, but gitleaks missing (scans no-op)" "warn" \
             "Install gitleaks so staged content is scanned. The guard is warn-only either way — it never blocks a commit."
     fi
-elif [[ "$(current_surface)" == "box" ]]; then
-    check "Commit guard installed (warn-only PII/secret scan)" "fail" \
-        "Run: bash scripts/install-commit-guard.sh (or re-run provisioning). Warn-only: never blocks a commit; prints/logs findings so secrets can be rotated per SECURITY.md. Bypassable with --no-verify — defense-in-depth, not a boundary."
 else
-    check "Commit guard (warn-only; box-only)" "skip" \
-        "not installed in the devcontainer — applied on a box by provisioning"
+    check "Commit guard installed (warn-only PII/secret scan)" "fail" \
+        "Run: bash scripts/install-commit-guard.sh (or re-run setup-day0.sh). Warn-only: never blocks a commit; prints/logs findings so secrets can be rotated per SECURITY.md. Bypassable with --no-verify — defense-in-depth, not a boundary."
 fi
 
-# 8b. Destructive-action gate (safety-guard). Installed at USER scope on a box by
-# provisioning (install-ctp-bridge.sh, step 8): the PreToolUse hook confirms
+# 8b. Destructive-action gate (safety-guard). The PreToolUse hook confirms
 # destructive commands (rm -rf, dropdb, terraform destroy, ...) before they run,
-# failing closed to a deny with no human present. Not installed in the devcontainer.
+# failing closed to a deny with no human present.
 _sg_lib="$HOME/.local/lib/ctp-bridge/safety-guard.sh"
-_sg_hook="$HOME/.claude/hooks/pretooluse-ctp.sh"
-if [[ -f "$_sg_lib" ]] && grep -q "safety_classify" "$_sg_hook" 2>/dev/null; then
+if [[ -f "$_sg_lib" ]] && grep -q "safety_classify" "$_sg_lib" 2>/dev/null; then
     check "Destructive-action gate installed (defense-in-depth, not a sandbox)" "pass" ""
-elif [[ "$(current_surface)" == "box" ]]; then
-    check "Destructive-action gate installed" "fail" \
-        "Run: bash scripts/install-ctp-bridge.sh (or re-run provisioning). It confirms destructive commands via the PreToolUse hook. Defeatable by obfuscation — defense-in-depth, not a sandbox."
 else
-    check "Destructive-action gate (box-only)" "skip" \
-        "not installed in the devcontainer — applied on a box by provisioning"
+    check "Destructive-action gate installed" "fail" \
+        "Run: bash scripts/install-ctp-bridge.sh (or re-run setup-day0.sh). It confirms destructive commands via the PreToolUse hook. Defeatable by obfuscation — defense-in-depth, not a sandbox."
 fi
 
 # 8b. Destructive-git gate (git-guard, control 2b). The PreToolUse hook confirms
 # force-push, reset --hard, clean -f, branch -D, checkout --force before an agent
 # runs them (git is out of the destructive-action gate's scope by decision).
 _gg_lib="$HOME/.local/lib/ctp-bridge/git-guard.sh"
-_gg_hook="$HOME/.claude/hooks/pretooluse-ctp.sh"
-if [[ -f "$_gg_lib" ]] && grep -q "gitguard_classify" "$_gg_hook" 2>/dev/null; then
+if [[ -f "$_gg_lib" ]] && grep -q "gitguard_classify" "$_gg_lib" 2>/dev/null; then
     check "Destructive-git gate installed (force-push/reset --hard/clean/branch -D)" "pass" ""
-elif [[ "$(current_surface)" == "box" ]]; then
-    check "Destructive-git gate installed" "fail" \
-        "Run: bash scripts/install-ctp-bridge.sh (or re-run provisioning). It confirms destructive git ops via the PreToolUse hook. Defeatable by obfuscation — defense-in-depth, not a sandbox."
 else
-    check "Destructive-git gate (box-only)" "skip" \
-        "not installed in the devcontainer — applied on a box by provisioning"
+    check "Destructive-git gate installed" "fail" \
+        "Run: bash scripts/install-ctp-bridge.sh (or re-run setup-day0.sh). It confirms destructive git ops via the PreToolUse hook. Defeatable by obfuscation — defense-in-depth, not a sandbox."
 fi
 
 # 8b. PII/IP path guard (C1). The installed guard lib must define ctp_is_pii_path,
@@ -230,12 +218,9 @@ fi
 _pii_lib="$HOME/.local/lib/ctp-bridge/ctp-guard.sh"
 if [[ -f "$_pii_lib" ]] && grep -q "ctp_is_pii_path" "$_pii_lib" 2>/dev/null; then
     check "PII/IP path guard present (set CTP_PII_PATHS to use it)" "pass" ""
-elif [[ "$(current_surface)" == "box" ]]; then
-    check "PII/IP path guard present" "fail" \
-        "Run: bash scripts/install-ctp-bridge.sh (or re-run provisioning). Then list Org-data dirs in CTP_PII_PATHS in ~/.ctp-bridge.conf so their contents never reach the transcript."
 else
-    check "PII/IP path guard (box-only)" "skip" \
-        "not installed in the devcontainer — applied on a box by provisioning"
+    check "PII/IP path guard present" "fail" \
+        "Run: bash scripts/install-ctp-bridge.sh (or re-run setup-day0.sh). Then list Org-data dirs in CTP_PII_PATHS in ~/.ctp-bridge.conf so their contents never reach the transcript."
 fi
 
 # 9. GitHub bootstrap has been run (completion marker written by

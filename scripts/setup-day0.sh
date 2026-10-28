@@ -123,6 +123,22 @@ if [[ "${DEVCONTAINER:-}" == "true" ]]; then
     fi
 fi
 
+# 3d. Install guard libs (commit guard + ctp bridge safety/git/PII guards).
+#     Previously done by box provisioning; now runs on every container start.
+#     Both scripts are idempotent. CTP_SKIP_SETTINGS=1 prevents the ctp-bridge
+#     installer from writing a container-absolute hook path into the bind-mounted
+#     ~/.claude/settings.json (the project-scope hook handles this repo).
+if [[ ! -x "$HOME/.local/lib/commit-guard/commit-scan.sh" ]]; then
+    echo "  >>  Installing commit guard (warn-only)…"
+    bash "$_SCRIPT_DIR/install-commit-guard.sh" \
+        || echo "  !!  install-commit-guard.sh failed (continuing)"
+fi
+if [[ ! -f "$HOME/.local/lib/ctp-bridge/guard-stack.sh" ]]; then
+    echo "  >>  Installing ctp bridge guards (safety/git/PII)…"
+    CTP_SKIP_SETTINGS=1 bash "$_SCRIPT_DIR/install-ctp-bridge.sh" \
+        || echo "  !!  install-ctp-bridge.sh failed (continuing)"
+fi
+
 # Deploy outline-readonly MCP server config if not already registered.
 if command -v claude >/dev/null 2>&1; then
     _mcp_list="$(claude mcp list 2>/dev/null || echo "")"
