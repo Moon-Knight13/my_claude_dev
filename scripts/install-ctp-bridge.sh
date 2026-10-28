@@ -114,25 +114,32 @@ else
 fi
 
 # --- 3. merge the PreToolUse hook into user settings (no clobber) ------------
-[[ -f "$SETTINGS" ]] || echo '{}' > "$SETTINGS"
-if ! jq -e . "$SETTINGS" >/dev/null 2>&1; then
-    host_fail "$SETTINGS is not valid JSON; refusing to touch it. Fix it and re-run."
-    exit 1
+# CTP_SKIP_SETTINGS=1 skips this step. Used in devcontainer where the project-
+# scope hook already covers the repo, and writing a container-absolute path into
+# the bind-mounted user settings would break host-side sessions.
+if [[ "${CTP_SKIP_SETTINGS:-}" == "1" ]]; then
+    host_note "skipping user-settings merge (CTP_SKIP_SETTINGS=1; project-scope hook handles this repo)"
+else
+    [[ -f "$SETTINGS" ]] || echo '{}' > "$SETTINGS"
+    if ! jq -e . "$SETTINGS" >/dev/null 2>&1; then
+        host_fail "$SETTINGS is not valid JSON; refusing to touch it. Fix it and re-run."
+        exit 1
+    fi
+    # Upsert our entry: if one with our command exists, refresh its matcher (so an
+    # older install's matcher is upgraded); otherwise append. Other hooks untouched.
+    HOOK_ABS="$HOOK" MATCHER="Bash|Read|Write|Edit" jq '
+      .hooks //= {} |
+      .hooks.PreToolUse //= [] |
+      if any(.hooks.PreToolUse[]?; (.hooks[]?.command) == env.HOOK_ABS)
+      then .hooks.PreToolUse |= map(
+        if (.hooks[]?.command) == env.HOOK_ABS then .matcher = env.MATCHER else . end)
+      else .hooks.PreToolUse += [{
+        "matcher": env.MATCHER,
+        "hooks": [{"type": "command", "command": env.HOOK_ABS}]
+      }] end
+    ' "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
+    host_info "registered PreToolUse hook in $SETTINGS (absolute path, no clobber)"
 fi
-# Upsert our entry: if one with our command exists, refresh its matcher (so an
-# older install's matcher is upgraded); otherwise append. Other hooks untouched.
-HOOK_ABS="$HOOK" MATCHER="Bash|Read|Write|Edit" jq '
-  .hooks //= {} |
-  .hooks.PreToolUse //= [] |
-  if any(.hooks.PreToolUse[]?; (.hooks[]?.command) == env.HOOK_ABS)
-  then .hooks.PreToolUse |= map(
-    if (.hooks[]?.command) == env.HOOK_ABS then .matcher = env.MATCHER else . end)
-  else .hooks.PreToolUse += [{
-    "matcher": env.MATCHER,
-    "hooks": [{"type": "command", "command": env.HOOK_ABS}]
-  }] end
-' "$SETTINGS" > "$SETTINGS.tmp" && mv "$SETTINGS.tmp" "$SETTINGS"
-host_info "registered PreToolUse hook in $SETTINGS (absolute path, no clobber)"
 
 # --- 4. PATH reminder --------------------------------------------------------
 case ":$PATH:" in
