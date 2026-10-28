@@ -1,0 +1,23 @@
+{
+  "_note": "Machine-specific overrides. Copy to settings.local.json and edit paths. Gitignored.",
+  "permissions": {
+    "deny": [
+      "Read($HOME/tuoni-live/**/*.pem)",
+      "Read($HOME/tuoni-live/**/*.keystore)",
+      "Read($HOME/tuoni-live/**/*.jks)",
+      "Read($HOME/tuoni-live/ssl/**)",
+      "Read($HOME/tuoni-live/config/tuoni.env)",
+      "Read($HOME/tuoni-live/config/tuoni.yml)",
+      "Read($HOME/tuoni-live/data/tuoni-db.sqlite3)",
+      "Edit($HOME/tuoni-live/**/*.pem)",
+      "Edit($HOME/tuoni-live/**/*.keystore)",
+      "Edit($HOME/tuoni-live/**/*.jks)",
+      "Edit($HOME/tuoni-live/ssl/**)",
+      "Edit($HOME/tuoni-live/config/tuoni.env)",
+      "Edit($HOME/tuoni-live/config/tuoni.yml)",
+      "Read($CLAUDE_PROJECT_DIR/range-intel-mcp/.env)",
+      "Edit($CLAUDE_PROJECT_DIR/range-intel-mcp/.env)",
+      "Bash(*range-intel-mcp/.env*)"
+    ]
+  }
+}

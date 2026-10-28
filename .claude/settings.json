@@ -24,6 +24,15 @@
             "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/pretooluse-ctp.sh"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/tuoni-secret-guard.sh"
+          }
+        ]
       }
     ]
   }
