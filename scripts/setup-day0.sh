@@ -87,6 +87,20 @@ elif [[ ! -L "$_claude_home/CLAUDE.md" ]]; then
     echo "  --  ~/.claude/CLAUDE.md exists (not a symlink) — skipping deploy"
 fi
 
+# 3c. Memory path alias for devcontainer.
+#     Claude keys memory to the working directory path. Inside a container the
+#     workspace mounts at /workspace, but host memory lives under the host path.
+#     Symlink the container path to the host path so both resolve to one store.
+if [[ "${DEVCONTAINER:-}" == "true" ]]; then
+    _container_proj="$_claude_home/projects/-workspace"
+    # Find the host-path memory dir (there should be exactly one with files).
+    _host_proj="$(find "$_claude_home/projects/" -maxdepth 1 -name '-home-*' -type d 2>/dev/null | head -1)"
+    if [[ -n "$_host_proj" && -d "$_host_proj/memory" && ! -e "$_container_proj" ]]; then
+        ln -sfn "$_host_proj" "$_container_proj"
+        echo "  ++  Linked container memory path to host memory: $(basename "$_host_proj")"
+    fi
+fi
+
 # Deploy outline-readonly MCP server config if not already registered.
 if command -v claude >/dev/null 2>&1; then
     _mcp_list="$(claude mcp list 2>/dev/null || echo "")"
