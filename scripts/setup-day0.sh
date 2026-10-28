@@ -98,9 +98,28 @@ if [[ "${DEVCONTAINER:-}" == "true" ]]; then
     # Find the host-path memory dir (there should be exactly one with files).
     _host_proj="$(find "$_projects_dir/" -maxdepth 1 -name '-home-*' -type d \
         ! -name '*--claude-worktrees-*' 2>/dev/null | head -1)"
-    if [[ -n "$_host_proj" && -d "$_host_proj/memory" && ! -e "$_container_proj" ]]; then
-        ln -sfn "$(basename "$_host_proj")" "$_container_proj"
-        echo "  ++  Linked container memory path to host memory: $(basename "$_host_proj")"
+    if [[ -n "$_host_proj" && -d "$_host_proj/memory" ]]; then
+        if [[ -L "$_container_proj" ]]; then
+            # Already a symlink — check it points to the right place.
+            _current_target="$(readlink "$_container_proj")"
+            if [[ "$_current_target" != "$(basename "$_host_proj")" ]]; then
+                ln -sfn "$(basename "$_host_proj")" "$_container_proj"
+                echo "  ++  Re-linked container memory path to host memory: $(basename "$_host_proj")"
+            fi
+        elif [[ -d "$_container_proj" ]]; then
+            # Real directory (created by Claude before symlink existed).
+            # Merge any session logs into host dir, then replace with symlink.
+            find "$_container_proj" -maxdepth 1 -name '*.jsonl' -exec mv -n {} "$_host_proj/" \; 2>/dev/null
+            if [[ -d "$_container_proj/memory" ]]; then
+                find "$_container_proj/memory" -maxdepth 1 -type f -exec mv -n {} "$_host_proj/memory/" \; 2>/dev/null
+            fi
+            rm -rf "$_container_proj"
+            ln -sfn "$(basename "$_host_proj")" "$_container_proj"
+            echo "  ++  Replaced -workspace dir with symlink to host memory: $(basename "$_host_proj")"
+        else
+            ln -sfn "$(basename "$_host_proj")" "$_container_proj"
+            echo "  ++  Linked container memory path to host memory: $(basename "$_host_proj")"
+        fi
     fi
 fi
 
