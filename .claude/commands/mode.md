@@ -14,8 +14,9 @@ different MCP servers, permissions, OPSEC rules, and documentation pipelines.
 |------|-------------|----------------|
 | `platform-ops` | Framework self-maintenance (default) | No |
 | `red-team` | Offensive ops against authorized targets | Yes |
-
-Future modes (not yet available): `red-dev`, `green-dev`, `purple`.
+| `red-dev` | Exploit development, RE, CVE research | Yes (test range) |
+| `green-dev` | Range infrastructure build and configure | Yes |
+| `purple` | Attack + detection testing with scoring | Yes |
 
 ## Procedure
 

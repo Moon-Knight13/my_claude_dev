@@ -146,7 +146,97 @@ else
     ok platform-ops-no-opsec
 fi
 
-# --- 12. Invalid mode directory rejected ------------------------------------
+# --- 12. Red-dev has eip-mcp but no tuoni in production role ----------------
+merged_rd="$(jq -n --slurpfile base "$MODES_DIR/base/settings.json" --slurpfile mode "$MODES_DIR/red-dev/settings.json" '
+    $base[0] + {
+        mcpServers: (($base[0].mcpServers // {}) + ($mode[0].mcpServers // {}))
+    }
+' 2>/dev/null)"
+
+if echo "$merged_rd" | jq -e '.mcpServers["eip-mcp"]' >/dev/null 2>&1 \
+   && echo "$merged_rd" | jq -e '.mcpServers["hacktricks-mcp"]' >/dev/null 2>&1; then
+    ok red-dev-has-research-mcps
+else
+    bad red-dev-has-research-mcps "missing eip-mcp or hacktricks-mcp in red-dev"
+fi
+
+# --- 13. Red-dev CLAUDE.md has exploit hygiene rules -----------------------
+if grep -q "Exploit Hygiene" "$MODES_DIR/red-dev/CLAUDE.md" \
+   && grep -q "RT-TGT-001" "$MODES_DIR/red-dev/CLAUDE.md"; then
+    ok red-dev-has-opsec
+else
+    bad red-dev-has-opsec "missing exploit hygiene or RT-TGT-001 in red-dev CLAUDE.md"
+fi
+
+# --- 14. Green-dev has range-intel but no offensive MCPs -------------------
+merged_gd="$(jq -n --slurpfile base "$MODES_DIR/base/settings.json" --slurpfile mode "$MODES_DIR/green-dev/settings.json" '
+    $base[0] + {
+        mcpServers: (($base[0].mcpServers // {}) + ($mode[0].mcpServers // {}))
+    }
+' 2>/dev/null)"
+
+if echo "$merged_gd" | jq -e '.mcpServers["range-intel"]' >/dev/null 2>&1 \
+   && ! echo "$merged_gd" | jq -e '.mcpServers["tuoni-mcp"]' >/dev/null 2>&1; then
+    ok green-dev-range-intel-no-offensive
+else
+    bad green-dev-range-intel-no-offensive "green-dev should have range-intel, no tuoni-mcp"
+fi
+
+# --- 15. Green-dev CLAUDE.md has DEV rules ---------------------------------
+if grep -q "DEV-002" "$MODES_DIR/green-dev/CLAUDE.md" \
+   && grep -q "Providentia" "$MODES_DIR/green-dev/CLAUDE.md"; then
+    ok green-dev-has-dev-rules
+else
+    bad green-dev-has-dev-rules "missing DEV-002 or Providentia in green-dev CLAUDE.md"
+fi
+
+# --- 16. Purple has all red-team MCPs -------------------------------------
+merged_pu="$(jq -n --slurpfile base "$MODES_DIR/base/settings.json" --slurpfile mode "$MODES_DIR/purple/settings.json" '
+    $base[0] + {
+        mcpServers: (($base[0].mcpServers // {}) + ($mode[0].mcpServers // {}))
+    }
+' 2>/dev/null)"
+
+if echo "$merged_pu" | jq -e '.mcpServers["tuoni-mcp"]' >/dev/null 2>&1 \
+   && echo "$merged_pu" | jq -e '.mcpServers["range-intel"]' >/dev/null 2>&1 \
+   && echo "$merged_pu" | jq -e '.mcpServers["hacktricks-mcp"]' >/dev/null 2>&1 \
+   && echo "$merged_pu" | jq -e '.mcpServers["mitre-mcp"]' >/dev/null 2>&1; then
+    ok purple-has-full-mcp-stack
+else
+    bad purple-has-full-mcp-stack "purple missing expected MCP servers"
+fi
+
+# --- 17. Purple CLAUDE.md has detection scoring ----------------------------
+if grep -q "Detection Scoring" "$MODES_DIR/purple/CLAUDE.md" \
+   && grep -q "RT-TGT-001" "$MODES_DIR/purple/CLAUDE.md" \
+   && grep -q "time_to_detect" "$MODES_DIR/purple/CLAUDE.md"; then
+    ok purple-has-detection-scoring
+else
+    bad purple-has-detection-scoring "missing detection scoring or OPSEC in purple CLAUDE.md"
+fi
+
+# --- 18. Purple CLAUDE.md has OPSEC inherited from red-team ----------------
+if grep -q "RT-SIG-001" "$MODES_DIR/purple/CLAUDE.md" \
+   && grep -q "RT-SIG-002" "$MODES_DIR/purple/CLAUDE.md" \
+   && grep -q "RT-DEP-001" "$MODES_DIR/purple/CLAUDE.md"; then
+    ok purple-inherits-opsec
+else
+    bad purple-inherits-opsec "purple missing inherited OPSEC rules"
+fi
+
+# --- 19. All modes have _mode field in settings ----------------------------
+all_have_mode=true
+for mode_dir in "$MODES_DIR"/*/; do
+    mode="$(basename "$mode_dir")"
+    [[ "$mode" == "base" ]] && continue
+    if ! jq -e '._mode' "$mode_dir/settings.json" >/dev/null 2>&1; then
+        all_have_mode=false
+        bad "mode-$mode-has-_mode-field" "missing _mode in settings.json"
+    fi
+done
+$all_have_mode && ok all-modes-have-_mode-field
+
+# --- 20. Invalid mode directory rejected ------------------------------------
 if [[ ! -d "$MODES_DIR/nonexistent" ]]; then
     ok invalid-mode-rejected
 else

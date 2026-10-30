@@ -1,0 +1,24 @@
+{
+  "_mode": "green-dev",
+  "_description": "Range infrastructure build and configure. Providentia-first, GitLab READMEs, spoke deploy.",
+  "mcpServers": {
+    "range-intel": {
+      "command": "node",
+      "args": ["${RANGE_INTEL_PATH}/index.js"],
+      "env": {
+        "PROVIDENTIA_URL": "${PROVIDENTIA_URL}",
+        "PROVIDENTIA_TOKEN": "${PROVIDENTIA_TOKEN}",
+        "GITLAB_URL": "${GITLAB_URL}",
+        "GITLAB_TOKEN": "${GITLAB_TOKEN}"
+      }
+    },
+    "outline-readonly": {
+      "command": "npx",
+      "args": ["-y", "@anthropic-ai/outline-mcp", "--readonly"],
+      "env": {
+        "OUTLINE_URL": "${OUTLINE_URL}",
+        "OUTLINE_TOKEN": "${OUTLINE_TOKEN}"
+      }
+    }
+  }
+}
