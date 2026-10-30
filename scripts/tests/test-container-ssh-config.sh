@@ -10,6 +10,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT="$(dirname "$HERE")/setup-container-ssh.sh"
+# shellcheck disable=SC2034  # REPO_ROOT used by sourced scripts
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 
 fails=0

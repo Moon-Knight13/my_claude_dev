@@ -12,7 +12,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=scripts/lib/load-env.sh
+# shellcheck source=scripts/lib/load-env.sh disable=SC1091
 source "$SCRIPT_DIR/lib/load-env.sh"
 
 SSH_DIR="$HOME/.ssh"
@@ -122,6 +122,9 @@ chmod 600 "$SSH_CONFIG"
 
 # Summary
 echo "  --  Hub: ${HUB_USER}@host.docker.internal"
+# shellcheck disable=SC2015
 [[ -n "${SPOKE_DEPLOYBOX_HOST:-}" ]] && echo "  --  Deploy box: ${SPOKE_DEPLOYBOX_USER:-gt}@${SPOKE_DEPLOYBOX_HOST} (via hub)" || true
-[[ -n "${SPOKE_KALI_HOST:-}" ]] && echo "  --  Kali: ${SPOKE_KALI_USER:-root}@${SPOKE_KALI_HOST} (via hub)" || true
+# shellcheck disable=SC2015
+[[ -n "${SPOKE_KALI_HOST:-}" ]] && echo "  --  Kali: ${SPOKE_KALI_USER:-rt}@${SPOKE_KALI_HOST} (via hub)" || true
+# shellcheck disable=SC2015
 [[ -n "${RANGE_GIT_HOST:-}" && -n "${RANGE_GIT_USER:-}" ]] && echo "  --  Range git: ${RANGE_GIT_USER}@${RANGE_GIT_HOST}:${RANGE_GIT_SSH_PORT:-10022} (via deploybox)" || true
