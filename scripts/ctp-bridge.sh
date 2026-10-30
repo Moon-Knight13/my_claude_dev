@@ -134,6 +134,7 @@ if [[ "$CLASS" != "inventory" ]]; then
     fi
 fi
 if [[ "$CLASS" == "mutating" ]]; then
+    # shellcheck disable=SC2016
     if _docker exec "$CONTAINER" pgrep -f 'ansible-playbook|ctp ' >/dev/null 2>&1; then
         host_warn "a run is already in progress in '$CONTAINER' — refusing to start a second"
         exit 4

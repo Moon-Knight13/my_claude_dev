@@ -28,6 +28,7 @@ CTP_REMOTE_HOST=deploybox
 CTP_PROJECT_DIR=/srv/inventories/dcm
 EOF
 
+# shellcheck source=/dev/null
 source "$REPO_ROOT/scripts/lib/ctp-guard.sh"
 CTP_REMOTE_HOST=""
 ctp_load_config "$TMP/conf-remote"
@@ -80,6 +81,7 @@ else
 fi
 
 # --- 5. _docker routes through ssh when remote --------------------------------
+# shellcheck disable=SC2016
 if grep -q 'ssh -o BatchMode=yes "$CTP_REMOTE_HOST" docker' "$REPO_ROOT/scripts/ctp-bridge.sh"; then
     ok docker-routes-through-ssh
 else
@@ -107,6 +109,7 @@ else
 fi
 
 # --- 7. Remote requires CTP_PROJECT_DIR message in _resolve_workdir -----------
+# shellcheck disable=SC2016
 if grep -q 'CTP_PROJECT_DIR is required when CTP_REMOTE_HOST is set' "$REPO_ROOT/scripts/ctp-bridge.sh"; then
     ok remote-requires-project-dir-message
 else
@@ -114,6 +117,7 @@ else
 fi
 
 # --- 8. SSH connectivity check exists -----------------------------------------
+# shellcheck disable=SC2016
 if grep -q 'ConnectTimeout.*CTP_REMOTE_HOST' "$REPO_ROOT/scripts/ctp-bridge.sh"; then
     ok ssh-connectivity-check
 else
@@ -122,6 +126,7 @@ fi
 
 # --- 9. _resolve_workdir refuses remote without CTP_PROJECT_DIR ---------------
 result="$(
+    # shellcheck source=/dev/null
     source "$REPO_ROOT/scripts/lib/ctp-guard.sh"
     CTP_REMOTE_HOST="deploybox"
     CTP_PROJECT_DIR=""
