@@ -1,0 +1,10 @@
+# shellcheck configuration — project-wide
+# Disable style-only optional checks that shellcheck 0.10+ enables by default
+# on Ubuntu 26.04 runners. These are cosmetic preferences, not correctness.
+
+# SC2248: Prefer double quoting even when variables don't contain special chars
+# SC2249: Consider quoting case values that contain metacharacters
+# SC2250: Prefer braces around variable references even when not required
+# SC2310: Function in 'if' disables set -e (intentional — if/then is standard flow)
+# SC2312: Pipeline element return value masked (informational)
+disable=SC2248,SC2249,SC2250,SC2310,SC2312
