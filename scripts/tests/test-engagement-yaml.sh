@@ -3,6 +3,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 VALIDATOR="$SCRIPT_DIR/../validate-engagement.sh"
+
+# Skip if yq not available (CI may not have it)
+if ! command -v yq >/dev/null 2>&1; then
+  echo "SKIP: yq not found — engagement YAML tests require yq"
+  exit 0
+fi
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 
