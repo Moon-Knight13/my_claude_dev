@@ -25,6 +25,7 @@ CTP_CONTAINER=""
 CTP_PROJECT_DIR=""
 CTP_SECRET_PATHS=""
 CTP_PII_PATHS=""
+CTP_REMOTE_HOST=""
 
 ctp_load_config() {
     local conf="$1" line key val
@@ -45,6 +46,7 @@ ctp_load_config() {
             CTP_PROJECT_DIR)    CTP_PROJECT_DIR="$val" ;;
             CTP_SECRET_PATHS)   CTP_SECRET_PATHS="$val" ;;
             CTP_PII_PATHS)      CTP_PII_PATHS="$val" ;;
+            CTP_REMOTE_HOST)    CTP_REMOTE_HOST="$val" ;;
         esac
     done < "$conf"
     return 0
