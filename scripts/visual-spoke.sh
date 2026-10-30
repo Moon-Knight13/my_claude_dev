@@ -131,28 +131,38 @@ cmd_test() {
     fi
     local port="${2:-3389}"
 
+    # Validate target: IP address or hostname only (no shell metacharacters)
+    if [[ ! "$target" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+        echo "Invalid target: must be an IP address or hostname" >&2
+        return 1
+    fi
+    if [[ ! "$port" =~ ^[0-9]+$ ]]; then
+        echo "Invalid port: must be numeric" >&2
+        return 1
+    fi
+
     if ! is_running; then
         printf '%b%s%b\n' "${RED}" "SOCKS tunnel not running. Start with: visual-spoke.sh up" "${NC}"
         return 1
     fi
 
     echo "Testing ${target}:${port} through SOCKS..."
-    if command -v proxychains4 >/dev/null 2>&1; then
-        if proxychains4 -q bash -c "echo '' | nc -w 3 ${target} ${port}" 2>/dev/null; then
-            printf "${GREEN}REACHABLE${NC}  %s:%s\n" "$target" "$port"
-        else
-            printf "${RED}UNREACHABLE${NC}  %s:%s\n" "$target" "$port"
-            return 1
-        fi
-    elif command -v nc >/dev/null 2>&1; then
+    if command -v nc >/dev/null 2>&1; then
         if nc -z -w 3 -X 5 -x "127.0.0.1:${SOCKS_PORT}" "$target" "$port" 2>/dev/null; then
             printf "${GREEN}REACHABLE${NC}  %s:%s\n" "$target" "$port"
         else
             printf "${RED}UNREACHABLE${NC}  %s:%s\n" "$target" "$port"
             return 1
         fi
+    elif command -v proxychains4 >/dev/null 2>&1; then
+        if proxychains4 -q nc -z -w 3 "$target" "$port" 2>/dev/null; then
+            printf "${GREEN}REACHABLE${NC}  %s:%s\n" "$target" "$port"
+        else
+            printf "${RED}UNREACHABLE${NC}  %s:%s\n" "$target" "$port"
+            return 1
+        fi
     else
-        echo "No proxychains4 or nc with SOCKS support. Install one to test."
+        echo "No nc or proxychains4 with SOCKS support. Install one to test."
         return 1
     fi
 }
