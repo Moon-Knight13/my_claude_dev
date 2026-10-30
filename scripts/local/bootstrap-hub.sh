@@ -95,55 +95,131 @@ else
     fi
 fi
 
-# ── Step 3: SSH agent ─────────────────────────────────────────────────────────
-step "Checking SSH agent"
+# ── Step 3: Hub SSH key ───────────────────────────────────────────────────────
+# One key per hub machine. Used to authenticate to spokes (deploy box, Kali) and
+# to GitLab. Forwarded via agent into the devcontainer and through ProxyJump.
+# On the spokes, onward hops to range boxes use the gt account's own keys.
+step "Checking hub SSH key"
 
-if ssh-add -l >/dev/null 2>&1; then
-    KEY_COUNT=$(ssh-add -l | wc -l | tr -d ' ')
-    ok "SSH agent has $KEY_COUNT key(s) loaded"
-    ssh-add -l | while read -r line; do note "  $line"; done
+HOSTNAME_SHORT="$(hostname -s 2>/dev/null || hostname)"
+HUB_KEY="$HOME/.ssh/mcd_hub_${HOSTNAME_SHORT}"
+
+if [[ -f "$HUB_KEY" ]]; then
+    ok "Hub key exists: $HUB_KEY"
 else
-    fail "No keys in SSH agent. Add your key:"
-    fail "  ssh-add ~/.ssh/id_ed25519"
-    ERRORS=$((ERRORS + 1))
+    note "No hub key found. Generating..."
+    ssh-keygen -t ed25519 -C "mcd-hub-${HOSTNAME_SHORT}" -f "$HUB_KEY" -N "" \
+        || ssh-keygen -t ed25519 -C "mcd-hub-${HOSTNAME_SHORT}" -f "$HUB_KEY"
+    ok "Generated: $HUB_KEY"
 fi
 
-# ── Step 4: VPN check (optional) ──────────────────────────────────────────────
+# Ensure key is in agent
+if ssh-add -l 2>/dev/null | grep -q "mcd-hub-${HOSTNAME_SHORT}\|${HUB_KEY}"; then
+    ok "Hub key loaded in agent"
+else
+    note "Adding hub key to agent..."
+    ssh-add "$HUB_KEY"
+    ok "Hub key added to agent"
+fi
+
+info "Agent keys:"
+ssh-add -l | while read -r line; do note "  $line"; done
+
+echo ""
+info "Public key (add to GitLab profile and spoke authorized_keys):"
+echo ""
+cat "${HUB_KEY}.pub"
+echo ""
+
+# ── Step 4: Load spoke config from .env ───────────────────────────────────────
+step "Loading spoke configuration"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+load_env_var() {
+    local var_name="$1"
+    local default="${2:-}"
+    local val=""
+    if [[ -f "$REPO_ROOT/.env" ]]; then
+        val=$(grep -E "^${var_name}=" "$REPO_ROOT/.env" 2>/dev/null | cut -d= -f2- | tr -d "'\"" || true)
+    fi
+    echo "${val:-$default}"
+}
+
+DEPLOYBOX_HOST="$(load_env_var SPOKE_DEPLOYBOX_HOST)"
+DEPLOYBOX_USER="$(load_env_var SPOKE_DEPLOYBOX_USER gt)"
+KALI_HOST="$(load_env_var SPOKE_KALI_HOST)"
+KALI_USER="$(load_env_var SPOKE_KALI_USER root)"
+
+if [[ -z "$DEPLOYBOX_HOST" && -z "$KALI_HOST" ]]; then
+    note "No spoke hosts configured in .env. Fill SPOKE_DEPLOYBOX_HOST and/or"
+    note "SPOKE_KALI_HOST to enable VPN check and key distribution."
+    note "Skipping spoke steps."
+    SKIP_SPOKES=1
+else
+    SKIP_SPOKES=0
+    [[ -n "$DEPLOYBOX_HOST" ]] && ok "Deploy box: ${DEPLOYBOX_USER}@${DEPLOYBOX_HOST}"
+    [[ -n "$KALI_HOST" ]] && ok "Kali box: ${KALI_USER}@${KALI_HOST}"
+fi
+
+# ── Step 5: VPN check ────────────────────────────────────────────────────────
 step "Checking VPN / range connectivity"
 
-if [[ "${SKIP_VPN_CHECK:-0}" == "1" ]]; then
-    note "VPN check skipped (SKIP_VPN_CHECK=1)"
+if [[ "${SKIP_VPN_CHECK:-0}" == "1" || "$SKIP_SPOKES" == "1" ]]; then
+    note "VPN check skipped"
 else
-    # Try to resolve a range hostname. Use SPOKE_DEPLOYBOX_HOST from .env if set,
-    # otherwise ask. Do NOT hardcode any range domain (public repo).
-    SPOKE_HOST="${SPOKE_DEPLOYBOX_HOST:-}"
-    if [[ -z "$SPOKE_HOST" ]]; then
-        # Try loading from .env in repo root
-        SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-        REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-        if [[ -f "$REPO_ROOT/.env" ]]; then
-            SPOKE_HOST=$(grep -E "^SPOKE_DEPLOYBOX_HOST=" "$REPO_ROOT/.env" 2>/dev/null | cut -d= -f2- | tr -d "'\"" || true)
+    VPN_OK=0
+    for spoke_host in "$DEPLOYBOX_HOST" "$KALI_HOST"; do
+        [[ -z "$spoke_host" ]] && continue
+        if host "$spoke_host" >/dev/null 2>&1; then
+            ok "DNS resolves $spoke_host — VPN appears connected"
+            VPN_OK=1
+            break
         fi
+    done
+    if [[ "$VPN_OK" -eq 0 ]]; then
+        fail "Cannot resolve any spoke host — VPN not connected?"
+        ERRORS=$((ERRORS + 1))
     fi
+fi
 
-    if [[ -z "$SPOKE_HOST" ]]; then
-        note "No SPOKE_DEPLOYBOX_HOST set. Skipping VPN check."
-        note "Set it in .env or export it to enable this check."
-    else
-        if host "$SPOKE_HOST" >/dev/null 2>&1; then
-            ok "DNS resolves $SPOKE_HOST — VPN appears connected"
-            # Try SSH connection
-            if ssh -o ConnectTimeout=3 -o StrictHostKeyChecking=no -o BatchMode=yes \
-                "${SPOKE_DEPLOYBOX_USER:-gt}@${SPOKE_HOST}" "echo ok" >/dev/null 2>&1; then
-                ok "SSH to deploy box works from host"
-            else
-                note "DNS resolves but SSH failed — check credentials or box status"
-            fi
+# ── Step 6: Copy key to spokes ────────────────────────────────────────────────
+step "Distributing hub key to spokes"
+
+if [[ "$SKIP_SPOKES" == "1" ]]; then
+    note "No spokes configured. Skipping key distribution."
+else
+    copy_key_to_spoke() {
+        local label="$1" host="$2" user="$3"
+        [[ -z "$host" ]] && return
+
+        if ssh -o ConnectTimeout=3 -o StrictHostKeyChecking=no -o BatchMode=yes \
+            "${user}@${host}" "echo ok" >/dev/null 2>&1; then
+            ok "Already authenticated to $label ($host)"
         else
-            fail "Cannot resolve $SPOKE_HOST — VPN not connected or wrong hostname"
-            ERRORS=$((ERRORS + 1))
+            note "Cannot authenticate to $label ($host)"
+            read -rp "  Copy hub key to ${user}@${host}? [y/N] " answer
+            if [[ "$answer" =~ ^[Yy] ]]; then
+                if ssh-copy-id -i "${HUB_KEY}.pub" "${user}@${host}"; then
+                    ok "Key copied to $label"
+                else
+                    warn "Key copy failed — do it manually"
+                fi
+            else
+                note "Skipped. Copy manually later:"
+                note "  ssh-copy-id -i ${HUB_KEY}.pub ${user}@${host}"
+            fi
         fi
-    fi
+    }
+
+    copy_key_to_spoke "deploy box" "$DEPLOYBOX_HOST" "$DEPLOYBOX_USER"
+    copy_key_to_spoke "Kali box" "$KALI_HOST" "$KALI_USER"
+
+    echo ""
+    note "Remember to also add your public key to GitLab:"
+    note "  cat ${HUB_KEY}.pub"
+    note "  Then paste at your GitLab profile SSH keys page"
 fi
 
 # ── Step 5: Docker check ─────────────────────────────────────────────────────
