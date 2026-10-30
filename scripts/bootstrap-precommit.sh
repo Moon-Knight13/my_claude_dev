@@ -34,15 +34,25 @@ else
 fi
 
 _saved_hooks_path="$(git config --get core.hooksPath 2>/dev/null || true)"
+_hooks_scope=""
 if [[ -n "$_saved_hooks_path" ]]; then
-  echo "Temporarily unsetting core.hooksPath for pre-commit install."
-  git config --unset-all core.hooksPath
+  _hooks_scope="$(git config --show-scope --get core.hooksPath 2>/dev/null | awk '{print $1}')"
+  echo "Temporarily unsetting core.hooksPath (scope: ${_hooks_scope:-local}) for pre-commit install."
+  case "$_hooks_scope" in
+    global) git config --global --unset-all core.hooksPath ;;
+    system) git config --system --unset-all core.hooksPath ;;
+    *)      git config --unset-all core.hooksPath ;;
+  esac
 fi
 
 pre-commit install
 
 if [[ -n "$_saved_hooks_path" ]]; then
-  git config core.hooksPath "$_saved_hooks_path"
+  case "$_hooks_scope" in
+    global) git config --global core.hooksPath "$_saved_hooks_path" ;;
+    system) git config --system core.hooksPath "$_saved_hooks_path" ;;
+    *)      git config core.hooksPath "$_saved_hooks_path" ;;
+  esac
   echo "Restored core.hooksPath -> $_saved_hooks_path"
 fi
 
