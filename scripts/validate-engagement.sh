@@ -36,11 +36,11 @@ for key in $REQUIRED_KEYS; do
   [[ "$(_yq ".$key // \"__MISSING__\"" "$FILE")" != "__MISSING__" ]] || err "missing required key: $key"
 done
 
-[[ "$(_yq '.metadata.id // empty' "$FILE")" ]] || err "metadata.id required"
-[[ "$(_yq '.metadata.operator // empty' "$FILE")" ]] || err "metadata.operator required"
+[[ "$(_yq '.metadata.id // ""' "$FILE")" ]] || err "metadata.id required"
+[[ "$(_yq '.metadata.operator // ""' "$FILE")" ]] || err "metadata.operator required"
 
 VALID_PHASES="targeting recon initial-access discovery priv-esc cred-harvest persist lateral collection exfil cleanup complete"
-phase="$(_yq '.phase // empty' "$FILE")"
+phase="$(_yq '.phase // ""' "$FILE")"
 if [[ -n "$phase" ]]; then
   valid=false
   for vp in $VALID_PHASES; do [[ "$phase" == "$vp" ]] && { valid=true; break; }; done
@@ -49,9 +49,9 @@ fi
 
 target_count="$(_yq '.targets | length' "$FILE" 2>/dev/null || echo 0)"
 for ((i=0; i<target_count; i++)); do
-  h="$(_yq ".targets[$i].hostname // empty" "$FILE")"
+  h="$(_yq ".targets[$i].hostname // \"\"" "$FILE")"
   [[ -n "$h" ]] || err "targets[$i] missing hostname"
-  approved="$(_yq ".targets[$i].approved // empty" "$FILE")"
+  approved="$(_yq ".targets[$i].approved // \"\"" "$FILE")"
   if [[ "$approved" != "true" ]]; then
     warn "targets[$i] ($h) not approved — RT-TGT-001 requires explicit approval"
   fi
@@ -68,14 +68,14 @@ for ((i=0; i<cred_count; i++)); do
       fi
     done
   done
-  tcid="$(_yq ".cred_refs[$i].tuoni_cred_id // empty" "$FILE")"
+  tcid="$(_yq ".cred_refs[$i].tuoni_cred_id // \"\"" "$FILE")"
   [[ -n "$tcid" ]] || err "cred_refs[$i] missing tuoni_cred_id"
 done
 
 agent_count="$(_yq '.agents | length' "$FILE" 2>/dev/null || echo 0)"
 declare -A seen_payloads=()
 for ((i=0; i<agent_count; i++)); do
-  pid="$(_yq ".agents[$i].payload_id // empty" "$FILE")"
+  pid="$(_yq ".agents[$i].payload_id // \"\"" "$FILE")"
   if [[ -n "$pid" ]]; then
     if [[ -n "${seen_payloads[$pid]:-}" ]]; then
       err "duplicate payload_id '$pid' — RT-SIG-002 requires unique IDs"
@@ -86,15 +86,15 @@ done
 
 persist_count="$(_yq '.persistence | length' "$FILE" 2>/dev/null || echo 0)"
 for ((i=0; i<persist_count; i++)); do
-  [[ "$(_yq ".persistence[$i].target // empty" "$FILE")" ]] || err "persistence[$i] missing target"
-  [[ "$(_yq ".persistence[$i].method // empty" "$FILE")" ]] || err "persistence[$i] missing method"
+  [[ "$(_yq ".persistence[$i].target // \"\"" "$FILE")" ]] || err "persistence[$i] missing target"
+  [[ "$(_yq ".persistence[$i].method // \"\"" "$FILE")" ]] || err "persistence[$i] missing method"
 done
 
 lat_count="$(_yq '.lateral_moves | length' "$FILE" 2>/dev/null || echo 0)"
 if ((lat_count > 0 && cred_count > 0)); then
   valid_refs="$(_yq '.cred_refs[].ref_id' "$FILE")"
   for ((i=0; i<lat_count; i++)); do
-    cr="$(_yq ".lateral_moves[$i].cred_ref // empty" "$FILE")"
+    cr="$(_yq ".lateral_moves[$i].cred_ref // \"\"" "$FILE")"
     if [[ -n "$cr" ]]; then
       found=false
       while IFS= read -r ref; do [[ "$cr" == "$ref" ]] && { found=true; break; }; done <<< "$valid_refs"
