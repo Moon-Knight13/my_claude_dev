@@ -202,13 +202,17 @@ else
     for spoke_host in "$DEPLOYBOX_HOST" "$KALI_HOST"; do
         [[ -z "$spoke_host" ]] && continue
         if host "$spoke_host" >/dev/null 2>&1; then
-            ok "DNS resolves $spoke_host — VPN appears connected"
+            ok "DNS resolves $spoke_host — VPN connected"
+            VPN_OK=1
+            break
+        elif (echo >/dev/tcp/"$spoke_host"/22) 2>/dev/null; then
+            ok "TCP reachable $spoke_host:22 — VPN connected (DNS not resolving)"
             VPN_OK=1
             break
         fi
     done
     if [[ "$VPN_OK" -eq 0 ]]; then
-        fail "Cannot resolve any spoke host — VPN not connected?"
+        fail "Cannot reach any spoke host — VPN not connected?"
         ERRORS=$((ERRORS + 1))
     fi
 fi
