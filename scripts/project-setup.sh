@@ -17,5 +17,9 @@
 
 set -euo pipefail
 
-echo "project-setup.sh: nothing to do (template default)."
-echo "  Derivatives override this — see the comments in this file."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# ── SSH config for spoke connectivity ────────────────────────────────────────
+# Generate ~/.ssh/config Host blocks from .env spoke variables so ProxyJump
+# through host.docker.internal works without manual -o flags.
+bash "$SCRIPT_DIR/setup-container-ssh.sh" || true
