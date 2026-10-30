@@ -6,8 +6,6 @@
 # Sections: docker, mcp, deps, ci, spoke, all (default)
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 PASS=0
 WARN=0
 FAIL=0
@@ -36,7 +34,6 @@ run_docker() {
 
     disk_json="$(docker system df --format json 2>/dev/null || echo "")"
     if [[ -n "$disk_json" ]]; then
-        total_size="$(docker system df 2>/dev/null | awk 'NR>1{print $4}' | head -5)"
         ok "Docker daemon reachable"
         echo "      Disk usage:"
         docker system df 2>/dev/null | head -5 | sed 's/^/      /'

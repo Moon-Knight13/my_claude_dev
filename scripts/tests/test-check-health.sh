@@ -77,8 +77,7 @@ echo "=== check-health tests ==="
 
 # --- T1: script exists and is executable ---
 rc=0; [[ -x "$HEALTH" ]] || rc=1
-ok_or_bad() { [[ $1 -eq 0 ]] && ok "$2" || bad "$2" "$3"; }
-ok_or_bad $rc "script exists and is executable" "not found or not executable"
+if [[ $rc -eq 0 ]]; then ok "script exists and is executable"; else bad "script exists and is executable" "not found or not executable"; fi
 
 # --- T2: --section docker runs docker section ---
 rc=$(run_health docker)
