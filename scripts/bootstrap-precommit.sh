@@ -51,6 +51,7 @@ fi
 # failing so a broken container never blocks committing a fix.
 _hook="$(git rev-parse --git-dir)/hooks/pre-commit"
 if [[ -f "$_hook" ]]; then
+  sed -i '/exec.*-mpre_commit/i\    "$INSTALL_PYTHON" -c "import pre_commit" 2>/dev/null || { echo "pre-commit not available — skipping checks." >&2; exit 0; }' "$_hook"
   sed -i 's/echo .* not found\..*/echo "pre-commit not available — skipping checks." >\&2/' "$_hook"
   sed -i 's/exit 1$/exit 0/' "$_hook"
   echo "Patched pre-commit hook for graceful host-side fallback."
