@@ -200,6 +200,7 @@ _log_count() { # verb class outcome — verbs/outcomes only, never target or out
 # qualifier makes an unmatched pattern expand to nothing instead. argv stays
 # positional.
 set +e
+# shellcheck disable=SC2016
 _docker exec -i -w "$WORKDIR" "$CONTAINER" zsh -c '
     _src() { [ -f "$1" ] && . "$1" >/dev/null 2>&1; }
     _src "$HOME/.local/bin/env"
