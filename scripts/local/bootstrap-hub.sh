@@ -48,8 +48,7 @@ ok "Detected: $OS"
 step "Checking SSH server"
 
 ssh_server_running() {
-    ssh -o ConnectTimeout=2 -o StrictHostKeyChecking=no -o BatchMode=yes \
-        localhost "echo ok" >/dev/null 2>&1
+    (echo >/dev/tcp/localhost/22) 2>/dev/null
 }
 
 if ssh_server_running; then
@@ -67,7 +66,8 @@ else
                 ERRORS=$((ERRORS + 1))
             else
                 if ! sudo systemctl enable --now sshd 2>/dev/null && \
-                   ! sudo systemctl enable --now ssh 2>/dev/null; then
+                   ! sudo systemctl enable --now ssh 2>/dev/null && \
+                   ! sudo systemctl enable --now ssh.socket 2>/dev/null; then
                     note "sshd not installed. Installing openssh-server..."
                     if command -v apt-get >/dev/null 2>&1; then
                         info "Running: sudo apt-get install -y openssh-server"
@@ -84,7 +84,8 @@ else
                     fi
                     if [[ "$ERRORS" -eq 0 ]]; then
                         sudo systemctl enable --now sshd 2>/dev/null || \
-                        sudo systemctl enable --now ssh 2>/dev/null || {
+                        sudo systemctl enable --now ssh 2>/dev/null || \
+                        sudo systemctl enable --now ssh.socket 2>/dev/null || {
                             fail "Installed but could not start sshd."
                             ERRORS=$((ERRORS + 1))
                         }
@@ -101,8 +102,8 @@ else
             ;;
     esac
 
-    # Verify it came up
-    sleep 1
+    # Verify it came up (socket activation may need a moment)
+    sleep 2
     if ssh_server_running; then
         ok "SSH server now running"
     else
@@ -140,6 +141,18 @@ fi
 
 info "Agent keys:"
 ssh-add -l | while read -r line; do note "  $line"; done
+
+# Ensure hub key authorises localhost login (needed for container ProxyJump)
+AUTH_KEYS="$HOME/.ssh/authorized_keys"
+HUB_PUB="$(cat "${HUB_KEY}.pub")"
+if [[ -f "$AUTH_KEYS" ]] && grep -qF "$HUB_PUB" "$AUTH_KEYS"; then
+    ok "Hub key already in localhost authorized_keys"
+else
+    mkdir -p "$HOME/.ssh"
+    echo "$HUB_PUB" >> "$AUTH_KEYS"
+    chmod 600 "$AUTH_KEYS"
+    ok "Hub key added to localhost authorized_keys"
+fi
 
 echo ""
 info "Public key (add to GitLab profile and spoke authorized_keys):"
