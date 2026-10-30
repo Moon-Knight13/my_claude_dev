@@ -1,0 +1,38 @@
+{
+  "_comment": "Base settings — always active regardless of mode. Hooks and guards live here. Mode-specific MCP servers are merged on top by /mode skill.",
+  "mcpServers": {
+    "local-ollama": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "ollama-mcp-server"
+      ],
+      "env": {
+        "OLLAMA_HOST": "http://host.docker.internal:11434",
+        "OLLAMA_MODEL": "qwen2.5-coder:7b"
+      }
+    }
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Read|Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/pretooluse-ctp.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/tuoni-secret-guard.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
