@@ -6,6 +6,13 @@ for p in "$HOME/.local/bin" /usr/local/bin; do
 done
 command -v yq >/dev/null 2>&1 || { echo "FATAL: yq not found"; exit 2; }
 
+# Detect yq flavor: mikefarah/yq (Go, outputs raw by default) vs kislyuk/yq (Python, needs -r)
+if yq --version 2>&1 | grep -qi "mikefarah\|https://github.com/mikefarah\|version v\?[34]\."; then
+  _yq() { yq "$@"; }
+else
+  _yq() { yq -r "$@"; }
+fi
+
 usage() { echo "Usage: $0 <engagement.yaml>"; exit 2; }
 [[ $# -eq 1 ]] || usage
 [[ -f "$1" ]] || { echo "ERROR: file not found: $1"; exit 2; }
@@ -19,40 +26,41 @@ if ! yq '.' "$FILE" >/dev/null 2>&1; then
   echo "ERROR: invalid YAML"; exit 1
 fi
 
-if [[ "$(yq -r 'type' "$FILE")" == "null" ]]; then
+_doc_type="$(_yq 'type' "$FILE")"
+if [[ "$_doc_type" == "null" || "$_doc_type" == "!!null" ]]; then
   echo "ERROR: empty or null document"; exit 1
 fi
 
 REQUIRED_KEYS="metadata phase targets agents cred_refs findings persistence lateral_moves handoff"
 for key in $REQUIRED_KEYS; do
-  [[ "$(yq -r ".$key // \"__MISSING__\"" "$FILE")" != "__MISSING__" ]] || err "missing required key: $key"
+  [[ "$(_yq ".$key // \"__MISSING__\"" "$FILE")" != "__MISSING__" ]] || err "missing required key: $key"
 done
 
-[[ "$(yq -r '.metadata.id // empty' "$FILE")" ]] || err "metadata.id required"
-[[ "$(yq -r '.metadata.operator // empty' "$FILE")" ]] || err "metadata.operator required"
+[[ "$(_yq '.metadata.id // empty' "$FILE")" ]] || err "metadata.id required"
+[[ "$(_yq '.metadata.operator // empty' "$FILE")" ]] || err "metadata.operator required"
 
 VALID_PHASES="targeting recon initial-access discovery priv-esc cred-harvest persist lateral collection exfil cleanup complete"
-phase="$(yq -r '.phase // empty' "$FILE")"
+phase="$(_yq '.phase // empty' "$FILE")"
 if [[ -n "$phase" ]]; then
   valid=false
   for vp in $VALID_PHASES; do [[ "$phase" == "$vp" ]] && { valid=true; break; }; done
   $valid || err "invalid phase: $phase"
 fi
 
-target_count="$(yq -r '.targets | length' "$FILE" 2>/dev/null || echo 0)"
+target_count="$(_yq '.targets | length' "$FILE" 2>/dev/null || echo 0)"
 for ((i=0; i<target_count; i++)); do
-  h="$(yq -r ".targets[$i].hostname // empty" "$FILE")"
+  h="$(_yq ".targets[$i].hostname // empty" "$FILE")"
   [[ -n "$h" ]] || err "targets[$i] missing hostname"
-  approved="$(yq -r ".targets[$i].approved // empty" "$FILE")"
+  approved="$(_yq ".targets[$i].approved // empty" "$FILE")"
   if [[ "$approved" != "true" ]]; then
     warn "targets[$i] ($h) not approved — RT-TGT-001 requires explicit approval"
   fi
 done
 
 BANNED_FIELDS="password hash secret ntlm plaintext passwd cleartext credential token private_key"
-cred_count="$(yq -r '.cred_refs | length' "$FILE" 2>/dev/null || echo 0)"
+cred_count="$(_yq '.cred_refs | length' "$FILE" 2>/dev/null || echo 0)"
 for ((i=0; i<cred_count; i++)); do
-  keys="$(yq -r ".cred_refs[$i] | keys[]" "$FILE")"
+  keys="$(_yq ".cred_refs[$i] | keys[]" "$FILE")"
   for k in $keys; do
     for banned in $BANNED_FIELDS; do
       if [[ "$k" == "$banned" ]]; then
@@ -60,14 +68,14 @@ for ((i=0; i<cred_count; i++)); do
       fi
     done
   done
-  tcid="$(yq -r ".cred_refs[$i].tuoni_cred_id // empty" "$FILE")"
+  tcid="$(_yq ".cred_refs[$i].tuoni_cred_id // empty" "$FILE")"
   [[ -n "$tcid" ]] || err "cred_refs[$i] missing tuoni_cred_id"
 done
 
-agent_count="$(yq -r '.agents | length' "$FILE" 2>/dev/null || echo 0)"
+agent_count="$(_yq '.agents | length' "$FILE" 2>/dev/null || echo 0)"
 declare -A seen_payloads=()
 for ((i=0; i<agent_count; i++)); do
-  pid="$(yq -r ".agents[$i].payload_id // empty" "$FILE")"
+  pid="$(_yq ".agents[$i].payload_id // empty" "$FILE")"
   if [[ -n "$pid" ]]; then
     if [[ -n "${seen_payloads[$pid]:-}" ]]; then
       err "duplicate payload_id '$pid' — RT-SIG-002 requires unique IDs"
@@ -76,17 +84,17 @@ for ((i=0; i<agent_count; i++)); do
   fi
 done
 
-persist_count="$(yq -r '.persistence | length' "$FILE" 2>/dev/null || echo 0)"
+persist_count="$(_yq '.persistence | length' "$FILE" 2>/dev/null || echo 0)"
 for ((i=0; i<persist_count; i++)); do
-  [[ "$(yq -r ".persistence[$i].target // empty" "$FILE")" ]] || err "persistence[$i] missing target"
-  [[ "$(yq -r ".persistence[$i].method // empty" "$FILE")" ]] || err "persistence[$i] missing method"
+  [[ "$(_yq ".persistence[$i].target // empty" "$FILE")" ]] || err "persistence[$i] missing target"
+  [[ "$(_yq ".persistence[$i].method // empty" "$FILE")" ]] || err "persistence[$i] missing method"
 done
 
-lat_count="$(yq -r '.lateral_moves | length' "$FILE" 2>/dev/null || echo 0)"
+lat_count="$(_yq '.lateral_moves | length' "$FILE" 2>/dev/null || echo 0)"
 if ((lat_count > 0 && cred_count > 0)); then
-  valid_refs="$(yq -r '.cred_refs[].ref_id' "$FILE")"
+  valid_refs="$(_yq '.cred_refs[].ref_id' "$FILE")"
   for ((i=0; i<lat_count; i++)); do
-    cr="$(yq -r ".lateral_moves[$i].cred_ref // empty" "$FILE")"
+    cr="$(_yq ".lateral_moves[$i].cred_ref // empty" "$FILE")"
     if [[ -n "$cr" ]]; then
       found=false
       while IFS= read -r ref; do [[ "$cr" == "$ref" ]] && { found=true; break; }; done <<< "$valid_refs"
