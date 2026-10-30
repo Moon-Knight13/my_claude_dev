@@ -21,7 +21,6 @@ SKILL="$REPO_ROOT/.claude/skills/red-team/discovery.md"
 # bail early if no file
 [[ -f "$SKILL" ]] || { echo "ABORT: skill file missing"; exit 1; }
 
-CONTENT="$(cat "$SKILL")"
 
 # ── 2. Valid frontmatter ────────────────────────────────────────────────────
 head -1 "$SKILL" | grep -q '^---' \
