@@ -231,10 +231,12 @@ echo ""
 echo "[7] Shell script linting (shellcheck):"
 if command -v shellcheck &>/dev/null; then
     while IFS= read -r -d '' script; do
-        if shellcheck "$script" &>/dev/null; then
+        _sc_out="$(shellcheck "$script" 2>&1)" || true
+        if [[ -z "$_sc_out" ]]; then
             check "shellcheck: $script" "pass"
         else
             check "shellcheck: $script" "fail" "Run: shellcheck $script"
+            printf '%s\n' "$_sc_out" | while IFS= read -r _line; do echo "      | $_line"; done
         fi
     done < <(find scripts -name "*.sh" -print0)
 else
