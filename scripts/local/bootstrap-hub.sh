@@ -202,13 +202,26 @@ else
     for spoke_host in "$DEPLOYBOX_HOST" "$KALI_HOST"; do
         [[ -z "$spoke_host" ]] && continue
         if host "$spoke_host" >/dev/null 2>&1; then
-            ok "DNS resolves $spoke_host — VPN appears connected"
+            ok "DNS resolves $spoke_host — VPN connected"
             VPN_OK=1
             break
+        elif (echo >/dev/tcp/"$spoke_host"/22) 2>/dev/null; then
+            ok "TCP reachable $spoke_host:22 — VPN connected (DNS not resolving)"
+            VPN_OK=1
+            break
+        else
+            # SSH config may map hostname to a different IP (e.g. via Host/Hostname)
+            resolved_ip=$(ssh -G "$spoke_host" 2>/dev/null | awk '/^hostname /{print $2}')
+            if [[ -n "$resolved_ip" && "$resolved_ip" != "$spoke_host" ]] && \
+               (echo >/dev/tcp/"$resolved_ip"/22) 2>/dev/null; then
+                ok "SSH-config resolves $spoke_host to $resolved_ip — VPN connected"
+                VPN_OK=1
+                break
+            fi
         fi
     done
     if [[ "$VPN_OK" -eq 0 ]]; then
-        fail "Cannot resolve any spoke host — VPN not connected?"
+        fail "Cannot reach any spoke host — VPN not connected?"
         ERRORS=$((ERRORS + 1))
     fi
 fi
@@ -251,7 +264,7 @@ else
     note "  Then paste at your GitLab profile SSH keys page"
 fi
 
-# ── Step 5: Docker check ─────────────────────────────────────────────────────
+# ── Step 7: Docker check ─────────────────────────────────────────────────────
 step "Checking Docker"
 
 if command -v docker >/dev/null 2>&1; then
