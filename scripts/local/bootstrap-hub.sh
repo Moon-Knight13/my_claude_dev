@@ -62,18 +62,34 @@ else
             sudo systemsetup -setremotelogin on
             ;;
         linux)
-            if command -v systemctl >/dev/null 2>&1; then
-                info "Running: sudo systemctl enable --now sshd"
-                sudo systemctl enable --now sshd 2>/dev/null || \
-                sudo systemctl enable --now ssh 2>/dev/null || {
-                    fail "Could not start sshd. Install openssh-server:"
-                    fail "  Ubuntu/Debian: sudo apt install openssh-server"
-                    fail "  Fedora/RHEL:   sudo dnf install openssh-server"
-                    ERRORS=$((ERRORS + 1))
-                }
-            else
+            if ! command -v systemctl >/dev/null 2>&1; then
                 fail "No systemctl found. Start sshd manually."
                 ERRORS=$((ERRORS + 1))
+            else
+                if ! sudo systemctl enable --now sshd 2>/dev/null && \
+                   ! sudo systemctl enable --now ssh 2>/dev/null; then
+                    note "sshd not installed. Installing openssh-server..."
+                    if command -v apt-get >/dev/null 2>&1; then
+                        info "Running: sudo apt-get install -y openssh-server"
+                        sudo apt-get install -y openssh-server
+                    elif command -v dnf >/dev/null 2>&1; then
+                        info "Running: sudo dnf install -y openssh-server"
+                        sudo dnf install -y openssh-server
+                    elif command -v pacman >/dev/null 2>&1; then
+                        info "Running: sudo pacman -S --noconfirm openssh"
+                        sudo pacman -S --noconfirm openssh
+                    else
+                        fail "Unknown package manager. Install openssh-server manually."
+                        ERRORS=$((ERRORS + 1))
+                    fi
+                    if [[ "$ERRORS" -eq 0 ]]; then
+                        sudo systemctl enable --now sshd 2>/dev/null || \
+                        sudo systemctl enable --now ssh 2>/dev/null || {
+                            fail "Installed but could not start sshd."
+                            ERRORS=$((ERRORS + 1))
+                        }
+                    fi
+                fi
             fi
             ;;
         windows)
