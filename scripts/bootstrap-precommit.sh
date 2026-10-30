@@ -33,7 +33,28 @@ else
   fi
 fi
 
+_saved_hooks_path="$(git config --get core.hooksPath 2>/dev/null || true)"
+if [[ -n "$_saved_hooks_path" ]]; then
+  echo "Temporarily unsetting core.hooksPath for pre-commit install."
+  git config --unset-all core.hooksPath
+fi
+
 pre-commit install
+
+if [[ -n "$_saved_hooks_path" ]]; then
+  git config core.hooksPath "$_saved_hooks_path"
+  echo "Restored core.hooksPath -> $_saved_hooks_path"
+fi
+
+# Patch generated hook to degrade gracefully when pre-commit is not installed
+# (e.g. host-side commits while container is down). Warn and exit 0 instead of
+# failing so a broken container never blocks committing a fix.
+_hook="$(git rev-parse --git-dir)/hooks/pre-commit"
+if [[ -f "$_hook" ]]; then
+  sed -i 's/echo .* not found\..*/echo "pre-commit not available — skipping checks." >\&2/' "$_hook"
+  sed -i 's/exit 1$/exit 0/' "$_hook"
+  echo "Patched pre-commit hook for graceful host-side fallback."
+fi
 
 if [[ "${PRECOMMIT_INSTALL_HOOK_ENVS:-0}" == "1" ]]; then
   pre-commit install --install-hooks
