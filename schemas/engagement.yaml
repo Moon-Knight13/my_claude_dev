@@ -1,0 +1,118 @@
+# Engagement YAML Schema — cross-session state contract for offensive operations.
+#
+# This is the template/example file. Copy to engagements/<id>.yaml to start.
+# Skills read at start, write results on completion.
+# Corrupt or missing YAML triggers fail-closed in skills.
+#
+# SECURITY: cred_refs store REFERENCES ONLY — never plaintext passwords,
+# hashes, or secrets. Values live in tuoni cred store.
+
+metadata:
+  # Unique engagement identifier (ISO date + short slug)
+  id: "2026-10-30-fw-t02"
+  created: "2026-10-30T14:00:00Z"
+  updated: "2026-10-30T16:30:00Z"
+  operator: "operator"
+  # Modes used during this engagement, in order
+  mode_history:
+    - mode: red-team
+      entered: "2026-10-30T14:00:00Z"
+    - mode: purple
+      entered: "2026-10-30T16:00:00Z"
+
+# Current kill chain phase
+# Valid: targeting, recon, initial-access, discovery, priv-esc, cred-harvest,
+#        persist, lateral, collection, exfil, cleanup, complete
+phase: lateral
+
+targets:
+  # Each target requires explicit operator approval (RT-TGT-001)
+  - hostname: fw-target
+    ip: "10.0.1.1"
+    providentia_ref: "prov://hosts/fw-target"
+    approved: true
+    approved_by: operator
+    scope_note: "Perimeter firewall, team-alpha enclave"
+  - hostname: dc-target
+    ip: "10.0.1.10"
+    providentia_ref: "prov://hosts/dc-target"
+    approved: true
+    approved_by: operator
+    scope_note: "AD DC, approved for lateral from fw-target"
+
+agents:
+  # Active C2 agents — tuoni agent references
+  - agent_id: agent-fw
+    hostname: fw-target
+    user: root
+    pid: 882
+    listener: https_443
+    status: active
+    payload_id: "pl-fw-001"
+  - agent_id: agent-dc
+    hostname: dc-target
+    user: SYSTEM
+    pid: 4412
+    listener: https_443
+    status: active
+    payload_id: "pl-dc-001"
+
+cred_refs:
+  # REFERENCES ONLY — no plaintext passwords, hashes, or secrets here.
+  # Values stored in tuoni credential store, referenced by tuoni_cred_id.
+  - ref_id: cred-001
+    type: ldap_bind
+    source_host: fw-target
+    tuoni_cred_id: "tc-4a8b"
+    note: "Service account from config.xml LDAP bind"
+  - ref_id: cred-002
+    type: radius_secret
+    source_host: fw-target
+    tuoni_cred_id: "tc-7c3d"
+    note: "RADIUS shared secret from config.xml"
+
+findings:
+  - target: fw-target
+    finding: "Default admin credentials active on WebGUI"
+    severity: critical
+    timestamp: "2026-10-30T14:15:00Z"
+  - target: fw-target
+    finding: "OSPF peering with core-router, route injection possible"
+    severity: high
+    timestamp: "2026-10-30T14:30:00Z"
+
+persistence:
+  # Each persistence entry maps to a deployed agent
+  - target: fw-target
+    method: cron
+    beacon_interval: 60
+    payload_id: "pl-fw-persist-001"
+    type: operational
+    status: active
+  - target: fw-target
+    method: rc.local
+    beacon_interval: 600
+    payload_id: "pl-fw-persist-002"
+    type: sleeper
+    status: active
+  - target: dc-target
+    method: service
+    beacon_interval: 120
+    payload_id: "pl-dc-persist-001"
+    type: operational
+    status: active
+
+lateral_moves:
+  - from_host: fw-target
+    to_host: dc-target
+    method: wmi
+    cred_ref: cred-001
+    timestamp: "2026-10-30T15:45:00Z"
+    agent_id: agent-dc
+
+# Free-text notes for next session or mode switch
+handoff: |
+  Firewall fully compromised with persistence. DC accessed via WMI using
+  LDAP bind service account. OSPF route hijack available but not used —
+  discuss with operator before attempting (high blast radius).
+  Next: enumerate DC, harvest domain creds, lateral to mail server.
