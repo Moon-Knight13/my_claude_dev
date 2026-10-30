@@ -1,0 +1,51 @@
+{
+  "_mode": "purple",
+  "_description": "Attack + detection testing. Red-team skills with detection validation and scoring.",
+  "mcpServers": {
+    "tuoni-mcp": {
+      "command": "npx",
+      "args": ["-y", "@anthropic-ai/tuoni-mcp"],
+      "env": {
+        "TUONI_URL": "${TUONI_URL}",
+        "TUONI_TOKEN": "${TUONI_TOKEN}"
+      }
+    },
+    "range-intel": {
+      "command": "node",
+      "args": ["${RANGE_INTEL_PATH}/index.js"],
+      "env": {
+        "PROVIDENTIA_URL": "${PROVIDENTIA_URL}",
+        "PROVIDENTIA_TOKEN": "${PROVIDENTIA_TOKEN}",
+        "GITLAB_URL": "${GITLAB_URL}",
+        "GITLAB_TOKEN": "${GITLAB_TOKEN}"
+      }
+    },
+    "outline-readonly": {
+      "command": "npx",
+      "args": ["-y", "@anthropic-ai/outline-mcp", "--readonly"],
+      "env": {
+        "OUTLINE_URL": "${OUTLINE_URL}",
+        "OUTLINE_TOKEN": "${OUTLINE_TOKEN}"
+      }
+    },
+    "obsidian-mcp": {
+      "command": "npx",
+      "args": ["-y", "obsidian-mcp"],
+      "env": {
+        "OBSIDIAN_VAULT_PATH": "/home/node/vault"
+      }
+    },
+    "hacktricks-mcp": {
+      "command": "npx",
+      "args": ["-y", "hacktricks-mcp"]
+    },
+    "mitre-mcp": {
+      "command": "npx",
+      "args": ["-y", "mitre-attack-mcp"]
+    },
+    "gtfobins-mcp": {
+      "command": "npx",
+      "args": ["-y", "gtfobins-mcp"]
+    }
+  }
+}

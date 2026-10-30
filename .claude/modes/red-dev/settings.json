@@ -1,0 +1,36 @@
+{
+  "_mode": "red-dev",
+  "_description": "Exploit development, reverse engineering, CVE research. Test range only.",
+  "mcpServers": {
+    "eip-mcp": {
+      "command": "npx",
+      "args": ["-y", "eip-mcp"],
+      "env": {
+        "NVD_API_KEY": "${NVD_API_KEY}"
+      }
+    },
+    "hacktricks-mcp": {
+      "command": "npx",
+      "args": ["-y", "hacktricks-mcp"]
+    },
+    "mitre-mcp": {
+      "command": "npx",
+      "args": ["-y", "mitre-attack-mcp"]
+    },
+    "obsidian-mcp": {
+      "command": "npx",
+      "args": ["-y", "obsidian-mcp"],
+      "env": {
+        "OBSIDIAN_VAULT_PATH": "/home/node/vault"
+      }
+    },
+    "tuoni-mcp": {
+      "command": "npx",
+      "args": ["-y", "@anthropic-ai/tuoni-mcp"],
+      "env": {
+        "TUONI_URL": "${TUONI_URL}",
+        "TUONI_TOKEN": "${TUONI_TOKEN}"
+      }
+    }
+  }
+}
