@@ -111,6 +111,22 @@ A half-finished deploy leaves the box in an unknown state. Do not assume a retry
 is safe — inspect what the failing stage owns first, fix at that layer, then
 re-run the single role.
 
+## Remote execution (devcontainer topology)
+
+When running from a devcontainer, docker is not available locally — the catapult
+container lives on the deploy spoke. Set `CTP_REMOTE_HOST=deploybox` in
+`~/.ctp-bridge.conf` and the bridge routes all docker commands through SSH to
+that host. Requirements:
+
+- **SSH config** must define the spoke alias (done by `setup-container-ssh.sh`)
+- **VPN** must be connected (SSH ProxyJump through hub requires range access)
+- **CTP_PROJECT_DIR** is REQUIRED — CWD translation through a remote bind mount
+  is not supported. Set it to the project path inside the catapult container.
+
+The guard stack, classification, approval tokens, and human confirmation all
+run locally in the devcontainer. Only the docker invocations are remoted. If
+SSH connectivity fails, the bridge reports the failure and the spoke to check.
+
 ## What never goes in the repo or the transcript
 
 Box detail, range topology, credentials, vault contents. The hook blocks reads of

@@ -52,6 +52,20 @@ if ! ctp_load_config "$CONF"; then
     exit 2
 fi
 
+# --- remote execution helpers -------------------------------------------------
+# When CTP_REMOTE_HOST is set (devcontainer topology), docker commands route
+# through SSH to the spoke. Classification + approval stay local; only the
+# docker invocations are remoted.
+_is_remote() { [[ -n "${CTP_REMOTE_HOST:-}" ]]; }
+
+_docker() {
+    if _is_remote; then
+        ssh -o BatchMode=yes "$CTP_REMOTE_HOST" docker "$@"
+    else
+        docker "$@"
+    fi
+}
+
 # --- classify (shared gates) -------------------------------------------------
 verdict="$(ctp_classify "$@")" && rc=0 || rc=$?
 read -r decision CLASS VERB TARGET <<<"$verdict"
@@ -84,8 +98,13 @@ _resolve_workdir() {
     printf '%s%s' "$best_dst" "$rel"
 }
 WORKDIR="$(_resolve_workdir)" || {
-    host_warn "cannot map CWD ($PWD) into '$CONTAINER' — run from the project directory"
-    host_warn "under the container's bind mount, or set CTP_PROJECT_DIR in ~/.ctp-bridge.conf"
+    if _is_remote; then
+        host_warn "CTP_PROJECT_DIR is required when CTP_REMOTE_HOST is set"
+        host_warn "set it in ~/.ctp-bridge.conf to the project path inside the catapult container"
+    else
+        host_warn "cannot map CWD ($PWD) into '$CONTAINER' — run from the project directory"
+        host_warn "under the container's bind mount, or set CTP_PROJECT_DIR in ~/.ctp-bridge.conf"
+    fi
     exit 4
 }
 
@@ -94,19 +113,28 @@ WORKDIR="$(_resolve_workdir)" || {
 # `host list` decrypts the inventory, so a locked vault gives the same 20-line
 # ansible wall a deploy would — the clean one-line check belongs to both. Only a
 # mutating run gates on "no run already in flight".
-if ! docker inspect -f '{{.State.Running}}' "$CONTAINER" >/dev/null 2>&1; then
+# Remote spoke connectivity check: fail early with a clear message.
+if _is_remote; then
+    if ! ssh -o BatchMode=yes -o ConnectTimeout=5 "$CTP_REMOTE_HOST" true 2>/dev/null; then
+        host_warn "cannot reach remote host '$CTP_REMOTE_HOST' via SSH"
+        host_warn "check VPN, hub SSH server, and ~/.ssh/config (setup-container-ssh.sh)"
+        exit 4
+    fi
+fi
+
+if ! _docker inspect -f '{{.State.Running}}' "$CONTAINER" >/dev/null 2>&1; then
     host_warn "container '$CONTAINER' is not running — run 'make start' first"
+    _is_remote && host_warn "(checked on remote host '$CTP_REMOTE_HOST')"
     exit 4
 fi
 if [[ "$CLASS" != "inventory" ]]; then
-    # Vault must be unlocked. Check EXISTENCE ONLY — never read the file's contents.
-    if ! docker exec "$CONTAINER" test -e /var/tmp/vlt_pf 2>/dev/null; then
+    if ! _docker exec "$CONTAINER" test -e /var/tmp/vlt_pf 2>/dev/null; then
         host_warn "vault is locked (no /var/tmp/vlt_pf) — run 'make start' and complete first-run config"
         exit 4
     fi
 fi
 if [[ "$CLASS" == "mutating" ]]; then
-    if docker exec "$CONTAINER" pgrep -f 'ansible-playbook|ctp ' >/dev/null 2>&1; then
+    if _docker exec "$CONTAINER" pgrep -f 'ansible-playbook|ctp ' >/dev/null 2>&1; then
         host_warn "a run is already in progress in '$CONTAINER' — refusing to start a second"
         exit 4
     fi
@@ -171,7 +199,7 @@ _log_count() { # verb class outcome — verbs/outcomes only, never target or out
 # qualifier makes an unmatched pattern expand to nothing instead. argv stays
 # positional.
 set +e
-docker exec -i -w "$WORKDIR" "$CONTAINER" zsh -c '
+_docker exec -i -w "$WORKDIR" "$CONTAINER" zsh -c '
     _src() { [ -f "$1" ] && . "$1" >/dev/null 2>&1; }
     _src "$HOME/.local/bin/env"
     for _v in "$HOME"/*/.venv/bin/activate(N) "$HOME"/.venv/bin/activate(N); do _src "$_v" && break; done

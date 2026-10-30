@@ -69,3 +69,12 @@ CTP_SECRET_PATHS=/var/tmp/vlt_pf ~/.ssh/id_* ~/.zsh_history ~/.bash_history **/.
 # List only YOUR OWN data paths below.
 #   CTP_PII_PATHS=~/org-data/** /srv/customer/**
 CTP_PII_PATHS=
+
+# Remote execution: SSH host alias for the spoke that runs the catapult
+# container. When set, docker commands route through `ssh <host>` instead of
+# running locally. Use this in a devcontainer where docker is not available
+# but the spoke is reachable via SSH (e.g. ProxyJump through hub).
+# The alias must be resolvable from ~/.ssh/config (see setup-container-ssh.sh).
+# When CTP_REMOTE_HOST is set, CTP_PROJECT_DIR is REQUIRED — CWD translation
+# through a remote bind mount is not supported.
+CTP_REMOTE_HOST=
