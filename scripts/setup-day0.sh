@@ -74,6 +74,22 @@ if command -v claude >/dev/null 2>&1; then
     done
 fi
 
+# 3a. Default model — set Opus 4.6 in user settings if not already configured.
+#     Uses jq merge (not `claude config set`, which is intercepted inside a
+#     Claude session). Idempotent: skips if model key already present.
+_user_settings="$HOME/.claude/settings.json"
+if [[ -f "$_user_settings" ]]; then
+    _cur_model="$(jq -r '.model // empty' "$_user_settings" 2>/dev/null || true)"
+    if [[ -z "$_cur_model" ]]; then
+        jq '.model = "claude-opus-4-6"' "$_user_settings" > "$_user_settings.tmp" \
+            && mv "$_user_settings.tmp" "$_user_settings" \
+            && echo "  ++  Set default model to claude-opus-4-6 in ~/.claude/settings.json"
+    fi
+elif command -v jq >/dev/null 2>&1; then
+    echo '{"model":"claude-opus-4-6"}' > "$_user_settings"
+    echo "  ++  Created ~/.claude/settings.json with model claude-opus-4-6"
+fi
+
 # 3b. Deploy user-level Claude config (CLAUDE.md + MCP server).
 #     Never clobbers — only deploys if missing. Symlinks so git-tracked
 #     source stays authoritative.
