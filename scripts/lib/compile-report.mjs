@@ -9,7 +9,7 @@
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'fs';
 import { join, basename, dirname } from 'path';
-import { execSync } from 'child_process';
+import { execSync, execFileSync } from 'child_process';
 import { parseArgs } from 'util';
 
 const { values: args } = parseArgs({
@@ -71,6 +71,16 @@ function collectPages(subdir) {
     .filter(Boolean);
 }
 
+// ── HTML escaping ────────────────────────────────────────────────────────
+function esc(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 // ── Markdown to HTML (minimal — no external deps) ────────────────────────
 function mdToHtml(md) {
   return md
@@ -109,7 +119,7 @@ const remediation = collectPages('wiki/remediation');
 const purple     = collectPages('wiki/purple');
 
 const date = new Date().toISOString().slice(0, 10);
-const title = engPage.meta.name || ENGAGEMENT;
+const title = esc(engPage.meta.name || ENGAGEMENT);
 
 // ── HTML template ────────────────────────────────────────────────────────
 const html = `<!DOCTYPE html>
@@ -150,9 +160,9 @@ const html = `<!DOCTYPE html>
 <h1>${title} — Engagement Report</h1>
 <div class="meta">
   <p><strong>Generated:</strong> ${date}</p>
-  ${engPage.meta.team ? `<p><strong>Team:</strong> ${engPage.meta.team}</p>` : ''}
-  ${engPage.meta.start_date ? `<p><strong>Period:</strong> ${engPage.meta.start_date} — ${engPage.meta.end_date || 'ongoing'}</p>` : ''}
-  ${engPage.meta.status ? `<p><strong>Status:</strong> ${engPage.meta.status}</p>` : ''}
+  ${engPage.meta.team ? `<p><strong>Team:</strong> ${esc(engPage.meta.team)}</p>` : ''}
+  ${engPage.meta.start_date ? `<p><strong>Period:</strong> ${esc(engPage.meta.start_date)} — ${esc(engPage.meta.end_date) || 'ongoing'}</p>` : ''}
+  ${engPage.meta.status ? `<p><strong>Status:</strong> ${esc(engPage.meta.status)}</p>` : ''}
 </div>
 
 ${mdToHtml(engPage.body)}
@@ -161,12 +171,12 @@ ${mdToHtml(engPage.body)}
 ${targets.length === 0 ? '<p class="section-empty">No target pages found.</p>' :
   targets.map(t => `
   <div class="finding">
-    <h3>${t.meta.hostname || t.name}</h3>
+    <h3>${esc(t.meta.hostname || t.name)}</h3>
     <table>
-      <tr><td><strong>IP</strong></td><td>${t.meta.ip || '—'}</td>
-          <td><strong>OS</strong></td><td>${t.meta.os || '—'}</td></tr>
-      <tr><td><strong>Domain</strong></td><td>${t.meta.domain || '—'}</td>
-          <td><strong>Role</strong></td><td>${t.meta.role || '—'}</td></tr>
+      <tr><td><strong>IP</strong></td><td>${esc(t.meta.ip) || '—'}</td>
+          <td><strong>OS</strong></td><td>${esc(t.meta.os) || '—'}</td></tr>
+      <tr><td><strong>Domain</strong></td><td>${esc(t.meta.domain) || '—'}</td>
+          <td><strong>Role</strong></td><td>${esc(t.meta.role) || '—'}</td></tr>
     </table>
     ${mdToHtml(t.body)}
   </div>`).join('\n')}
@@ -175,8 +185,8 @@ ${targets.length === 0 ? '<p class="section-empty">No target pages found.</p>' :
 ${techniques.length === 0 ? '<p class="section-empty">No technique pages found.</p>' :
   techniques.map(t => `
   <div class="finding">
-    <h3>${t.meta.name || t.name}${t.meta.mitre_id ? ` (${t.meta.mitre_id})` : ''}</h3>
-    ${t.meta.mitre_tactic ? `<p><strong>Tactic:</strong> ${t.meta.mitre_tactic}</p>` : ''}
+    <h3>${esc(t.meta.name || t.name)}${t.meta.mitre_id ? ` (${esc(t.meta.mitre_id)})` : ''}</h3>
+    ${t.meta.mitre_tactic ? `<p><strong>Tactic:</strong> ${esc(t.meta.mitre_tactic)}</p>` : ''}
     ${mdToHtml(t.body)}
   </div>`).join('\n')}
 
@@ -185,11 +195,11 @@ ${creds.length === 0 ? '<p class="section-empty">No credential pages found.</p>'
   `<table>
     <tr><th>Username</th><th>Domain</th><th>Type</th><th>Source</th><th>Method</th></tr>
     ${creds.map(c => `<tr>
-      <td>${c.meta.username || '—'}</td>
-      <td>${c.meta.domain || '—'}</td>
-      <td>${c.meta.type || '—'}</td>
-      <td>${c.meta.source_host || '—'}</td>
-      <td>${c.meta.harvest_method || '—'}</td>
+      <td>${esc(c.meta.username) || '—'}</td>
+      <td>${esc(c.meta.domain) || '—'}</td>
+      <td>${esc(c.meta.type) || '—'}</td>
+      <td>${esc(c.meta.source_host) || '—'}</td>
+      <td>${esc(c.meta.harvest_method) || '—'}</td>
     </tr>`).join('\n')}
   </table>`}
 
@@ -198,10 +208,10 @@ ${iocs.length === 0 ? '<p class="section-empty">No IOC pages found.</p>' :
   `<table>
     <tr><th>Type</th><th>Value</th><th>Context</th><th>First Seen</th></tr>
     ${iocs.map(i => `<tr>
-      <td>${i.meta.type || '—'}</td>
-      <td><code>${i.meta.value || '—'}</code></td>
-      <td>${i.meta.context || '—'}</td>
-      <td>${i.meta.first_seen || '—'}</td>
+      <td>${esc(i.meta.type) || '—'}</td>
+      <td><code>${esc(i.meta.value) || '—'}</code></td>
+      <td>${esc(i.meta.context) || '—'}</td>
+      <td>${esc(i.meta.first_seen) || '—'}</td>
     </tr>`).join('\n')}
   </table>`}
 
@@ -239,7 +249,7 @@ if (FORMAT === 'docx' || FORMAT === 'all') {
   try {
     execSync('which pandoc', { stdio: 'ignore' });
     const docxPath = join(OUTPUT_DIR, `${date}-report.docx`);
-    execSync(`pandoc "${htmlPath}" -o "${docxPath}" --from html --to docx`);
+    execFileSync('pandoc', [htmlPath, '-o', docxPath, '--from', 'html', '--to', 'docx']);
     console.log(`DOCX: ${docxPath}`);
   } catch {
     console.log('DOCX: pandoc not available — install pandoc for DOCX export');
