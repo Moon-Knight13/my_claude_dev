@@ -13,6 +13,7 @@ secrets.*
 # Agent and local tool state
 # Ignore Claude runtime state and machine-local settings, but NOT template
 # assets (.claude/commands/, .claude/settings.json, .claude/settings.json.example).
+.mcp.json
 .claude/mcp.json
 .claude/settings.local.json
 .claude/todos/
