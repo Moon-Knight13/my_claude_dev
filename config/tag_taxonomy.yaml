@@ -1,0 +1,172 @@
+# Tag taxonomy for Obsidian vault ↔ agent skill search
+# Maps operational intent to vault tags and MITRE ATT&CK tactic IDs.
+# Skills use this to query personal notes before executing.
+#
+# Structure: each skill mode lists the vault tags and tactic directories
+# it should search when looking for operator knowledge.
+
+skills:
+  recon:
+    description: "Pre-engagement reconnaissance and enumeration"
+    vault_tags:
+      - Recon
+      - Discovery
+      - Active_Directory
+      - Service_Scanning
+      - OSINT
+    mitre_tactics:
+      - TA0043  # Reconnaissance
+      - TA0007  # Discovery
+    tactic_dirs:
+      - 1_reconnaissance
+      - 9_discovery
+
+  initial_access:
+    description: "Gaining initial foothold on target"
+    vault_tags:
+      - Initial_Access
+      - Exploitation
+      - Phishing
+      - Web
+    mitre_tactics:
+      - TA0001  # Initial Access
+    tactic_dirs:
+      - 3_initial_access
+
+  execution:
+    description: "Running code on target systems"
+    vault_tags:
+      - Execution
+      - PowerShell
+      - Windows
+      - Linux
+    mitre_tactics:
+      - TA0002  # Execution
+    tactic_dirs:
+      - 4_execution
+
+  persistence:
+    description: "Maintaining access across reboots"
+    vault_tags:
+      - Persistence
+      - Backdoor
+      - Registry
+      - Scheduled_Task
+      - SUID
+    mitre_tactics:
+      - TA0003  # Persistence
+    tactic_dirs:
+      - 5_persistence
+
+  privilege_escalation:
+    description: "Escalating from user to admin/root"
+    vault_tags:
+      - Privilege_Escalation
+      - Privilege_Esculation  # common typo in existing notes
+      - SUID
+      - Token
+      - UAC
+    mitre_tactics:
+      - TA0004  # Privilege Escalation
+    tactic_dirs:
+      - 6_privilege_escalation
+
+  defense_evasion:
+    description: "Avoiding detection"
+    vault_tags:
+      - Defense_Evasion
+      - AV_Bypass
+      - AMSI
+      - Obfuscation
+    mitre_tactics:
+      - TA0005  # Defense Evasion
+    tactic_dirs:
+      - 7_defense_evasion
+
+  credential_access:
+    description: "Harvesting credentials and hashes"
+    vault_tags:
+      - Credential_Access
+      - Kerberos
+      - Mimikatz
+      - Hash
+      - NTLM
+      - SAM
+    mitre_tactics:
+      - TA0006  # Credential Access
+    tactic_dirs:
+      - 8_credential_access
+
+  lateral_movement:
+    description: "Moving between hosts in the network"
+    vault_tags:
+      - Lateral_Movement
+      - WinRM
+      - PSRemoting
+      - SSH
+      - RDP
+      - SMB
+      - Pivoting
+    mitre_tactics:
+      - TA0008  # Lateral Movement
+    tactic_dirs:
+      - 10_lateral_movement
+
+  c2:
+    description: "Command and control infrastructure"
+    vault_tags:
+      - C2
+      - Tuoni
+      - Sliver
+      - Cobalt_Strike
+      - Empire
+    mitre_tactics:
+      - TA0011  # Command and Control
+    tactic_dirs:
+      - 12_command_and_control
+
+  exfiltration:
+    description: "Data collection and exfiltration"
+    vault_tags:
+      - Exfiltration
+      - Collection
+      - File_Transfer
+    mitre_tactics:
+      - TA0010  # Exfiltration
+    tactic_dirs:
+      - 13_exfiltration
+
+# Tags that indicate note quality/source
+metadata_tags:
+  source:
+    - Field_Observation   # validated in engagement
+    - Research            # agent-researched, hypothesis
+    - Course_Material     # from training courses
+    - CTF                 # from CTF/lab work
+  confidence:
+    - validated           # proven in engagement
+    - hypothesis          # researched but untested
+    - unvalidated         # raw research output
+  platform:
+    - Windows
+    - Linux
+    - Active_Directory
+    - Azure
+    - Network
+
+# Common tag aliases (normalise during search)
+aliases:
+  Privilege_Esculation: Privilege_Escalation
+  Recon: Reconnaissance
+  cred: Credential_Access
+  privesc: Privilege_Escalation
+  lat_move: Lateral_Movement
+  defev: Defense_Evasion
+  persistence: Persistence
+  tunneling: Pivoting
+  pivoting: Pivoting
+  port: Network
+  initial: Initial_Access
+  ssh: SSH
+  smb: SMB
+  rdp: RDP
