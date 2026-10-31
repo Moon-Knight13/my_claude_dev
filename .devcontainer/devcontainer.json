@@ -50,7 +50,7 @@
     "source=claude-code-bashhistory-${devcontainerId},target=/commandhistory,type=volume",
     "source=${localEnv:HOME}/.claude,target=/home/node/.claude,type=bind,consistency=cached",
     "source=claude-code-ghconfig-${devcontainerId},target=/home/node/.config/gh,type=volume",
-    "source=${localEnv:HOME}/Documents/my_notes,target=/home/node/vault,type=bind,consistency=cached,readonly"
+    "source=${localEnv:HOME}/Documents/my_notes,target=/home/node/vault,type=bind,consistency=cached"
   ],
   "containerEnv": {
     "NODE_OPTIONS": "--max-old-space-size=4096 --dns-result-order=ipv4first",

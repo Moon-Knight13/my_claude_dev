@@ -10,6 +10,14 @@
         "OLLAMA_HOST": "http://host.docker.internal:11434",
         "OLLAMA_MODEL": "qwen2.5-coder:7b"
       }
+    },
+    "rea-mcp": {
+      "command": "npx",
+      "args": ["-y", "rea-agents@6.8.0", "mcp"]
+    },
+    "obsidian-mcp": {
+      "command": "npx",
+      "args": ["-y", "obsidian-mcp@2.0.1", "serve", "--vault", "my_notes=/home/node/vault"]
     }
   },
   "_pii_shield_note": "PII-Shield (gregmos/PII-Shield) anonymizes content before it reaches Claude. Install manually: Settings > Extensions > drag in the .mcpb file. See docs/TEMPLATE_GUIDE.md#pii--privacy-controls for details.",
