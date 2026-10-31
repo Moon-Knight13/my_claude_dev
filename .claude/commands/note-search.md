@@ -1,8 +1,9 @@
-# /note-search — Search personal MITRE notes for technique knowledge
+# /note-search — Search personal notes for technique knowledge
 
-Search the operator's Obsidian vault for relevant technique notes before
-executing an engagement action. Uses the tag taxonomy to map operational
-intent to vault tags and tactic directories.
+Search the operator's Obsidian vault for relevant technique notes and
+prior engagement experience before executing an action. Searches MITRE
+technique notes, Write_Ups, and Vuln_Labs. Uses the tag taxonomy to map
+operational intent to vault tags and tactic directories.
 
 ## Arguments
 
@@ -30,13 +31,23 @@ with winrm", "privilege escalation linux suid").
    - The Commands table (if present)
    - OPSEC Considerations (if present)
 
-5. Present results as a concise briefing:
+5. Present results as a concise briefing, grouped by source:
 
    **Prior Knowledge: $QUERY**
 
+   **Technique Notes (MITRE):**
    | Note | Tactic | Tags | Summary |
    |------|--------|------|---------|
    | [[note_name]] | tactic_id | tags | one-line summary |
+
+   **Engagement Experience:**
+   | Note | Engagement | Type | Context |
+   |------|-----------|------|---------|
+   | [[writeup_note]] | DCM27 | exercise | one-line context |
+
+   Notes from Write_Ups/ and Vuln_Labs/ have `engagement` and
+   `engagement_type` in frontmatter — use these to identify prior
+   experience with the technique in real engagements vs labs.
 
    **Commands Available:**
    List any command tables found, grouped by note.
