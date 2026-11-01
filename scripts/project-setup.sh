@@ -23,3 +23,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Generate ~/.ssh/config Host blocks from .env spoke variables so ProxyJump
 # through host.docker.internal works without manual -o flags.
 bash "$SCRIPT_DIR/setup-container-ssh.sh" || true
+
+# ── Ghidra backend for rea-mcp (on-demand, idempotent) ─────────────────────
+# Downloads ~1.5GB on first run, no-op when already installed.
+# Skipped when SKIP_GHIDRA=1 to keep rebuild fast during dev.
+if [[ "${SKIP_GHIDRA:-0}" != "1" ]]; then
+  bash "$SCRIPT_DIR/install-ghidra-backend.sh" || true
+fi
