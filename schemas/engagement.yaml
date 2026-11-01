@@ -28,13 +28,13 @@ phase: lateral
 targets:
   # Each target requires explicit operator approval (RT-TGT-001)
   - hostname: fw-target
-    ip: "10.0.1.1"
+    ip: "198.51.100.1"
     providentia_ref: "prov://hosts/fw-target"
     approved: true
     approved_by: operator
     scope_note: "Perimeter firewall, team-alpha enclave"
   - hostname: dc-target
-    ip: "10.0.1.10"
+    ip: "198.51.100.10"
     providentia_ref: "prov://hosts/dc-target"
     approved: true
     approved_by: operator
