@@ -45,15 +45,39 @@ Server 2022").
    The note path should follow the vault convention:
    `Notes_Mitre_ATTack_Framework/{tactic_dir}/{technique_name}/{technique_name}.md`
 
-6. Confirm the action:
+6. **Write to LLM Wiki** (dual-write: reference layer + operational layer):
+
+   a. **Technique page** (`llm-wiki/wiki/techniques/{technique_slug}.md`):
+      Search the wiki techniques dir first. If a page exists, append the
+      finding under `## Engagement Usage`. If not, create one using the
+      template at `llm-wiki/templates/technique.md`, filling `name`,
+      `mitre_tactic`, `tactic`, `reference_note` (wikilink to the MITRE
+      note), and adding the finding under `## Engagement Usage`.
+
+   b. **Target page** (`llm-wiki/wiki/targets/{hostname_or_ip}.md`):
+      If the finding names a specific host or IP, search wiki targets.
+      If a page exists, append under `## Findings`. If not, create one
+      using the template at `llm-wiki/templates/target.md`, filling what
+      is known (hostname, IP, OS if stated).
+
+   c. **Changelog**: Append a row to `llm-wiki/log.md`:
+      `| YYYY-MM-DD | [[page_name]] | created/updated | one-line summary |`
+
+   d. **Dedup check**: Before creating any wiki page, also search
+      `Write_Ups/` for the technique or target name to avoid duplicating
+      existing narrative notes. If a Write_Up exists, link to it from the
+      wiki page rather than duplicating content.
+
+7. Confirm the action:
    ```
    Finding logged: [[note_name]]
-   Location: Notes_Mitre_ATTack_Framework/{path}
-   Action: [created new note | appended to existing]
+   MITRE: Notes_Mitre_ATTack_Framework/{path} — [created | appended]
+   Wiki:  llm-wiki/wiki/techniques/{slug} — [created | appended]
+   Wiki:  llm-wiki/wiki/targets/{target} — [created | appended | skipped]
    Tags: [tags applied]
    ```
 
-7. If the finding reveals a knowledge gap (technique worked differently
+8. If the finding reveals a knowledge gap (technique worked differently
    than documented, or no prior notes existed), flag it:
    ```
    Knowledge gap identified: [description]

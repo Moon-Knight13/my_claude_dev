@@ -24,6 +24,8 @@ with winrm", "privilege escalation linux suid").
    - First search: the exact query text
    - Second search: each matching vault_tag from the taxonomy
    - Third search: any specific tool/technique name extracted from query
+   - Fourth search: scope `llm-wiki/wiki` to find operational wiki pages
+     (techniques, targets, creds) with structured engagement data
 
 4. For each matching note, read it with `obsidian_read_note` and extract:
    - The frontmatter (tags, tactic, mitre_tactic)
@@ -51,6 +53,16 @@ with winrm", "privilege escalation linux suid").
 
    **Commands Available:**
    List any command tables found, grouped by note.
+
+   **Wiki (Operational State):**
+   | Page | Type | Key detail |
+   |------|------|------------|
+   | [[wiki_page]] | technique/target/cred | structured summary |
+
+   Notes from `llm-wiki/wiki/` have structured YAML frontmatter —
+   technique pages have `mitre_tactic` and engagement usage; target
+   pages have `hostname`, `ip`, `os`; credential pages have `username`,
+   `domain`, `type`. Present these as actionable intel.
 
    **OPSEC Notes:**
    Any OPSEC considerations from matching notes.
