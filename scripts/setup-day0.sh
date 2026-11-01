@@ -164,8 +164,8 @@ if command -v claude >/dev/null 2>&1; then
             echo "  >>  outline-readonly MCP server available but not registered."
             echo "      To activate, run:"
             echo "      claude mcp add outline-readonly -s user -t stdio \\"
-            echo "        -e OUTLINE_API_URL=https://wiki.crp.cr14.net \\"
-            echo "        -e OUTLINE_API_KEY=<your-key> \\"
+            echo "        -e OUTLINE_API_URL=\${OUTLINE_API_URL:?set to your Outline instance URL} \\"
+            echo "        -e OUTLINE_API_KEY=\${OUTLINE_API_KEY:?set to your Outline API key} \\"
             echo "        -- node $_mcp_server"
         fi
     fi
