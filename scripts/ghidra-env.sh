@@ -12,6 +12,7 @@ _jdk_dir="${GHIDRA_BASE}/jdk-${JDK_VERSION}"
 
 if [[ ! -d "$_ghidra_dir" ]]; then
   echo "Ghidra not installed. Run: scripts/install-ghidra-backend.sh" >&2
+  # shellcheck disable=SC2317
   return 1 2>/dev/null || exit 1
 fi
 
