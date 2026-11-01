@@ -1,13 +1,14 @@
-# Build gitleaks from source on a patched Go toolchain. Upstream release
-# binaries are currently compiled with go1.24.11, whose stdlib carries
-# CVE-2025-68121 (crypto/tls, CRITICAL — fixed in 1.24.13/1.25.7/1.26.0-rc.3),
-# so they trip the Trivy container-scan gate. `go install` verifies the module
-# against the Go checksum database (sum.golang.org), which replaces the
-# release-tarball sha256 pin. Revisit pinning a release binary again once
-# upstream ships one built on a fixed Go.
+# Build gitleaks from source with patched dependencies. Upstream v8.30.1 pins
+# golang.org/x/crypto v0.35.0 (indirect), which carries CVE-2026-56854 in the
+# x/crypto/ssh package. gitleaks doesn't call that path (govulncheck confirms),
+# but Trivy flags the embedded module version. Clone, bump the dep, then build.
 FROM golang:1.27.2 AS gitleaks-build
 ARG GITLEAKS_VERSION=8.30.1
-RUN CGO_ENABLED=0 go install "github.com/zricethezav/gitleaks/v8@v${GITLEAKS_VERSION}"
+RUN git clone --depth 1 --branch "v${GITLEAKS_VERSION}" \
+      https://github.com/gitleaks/gitleaks.git /build/gitleaks
+WORKDIR /build/gitleaks
+RUN go get golang.org/x/crypto@v0.58.0 && go mod tidy && \
+    CGO_ENABLED=0 go build -o /go/bin/gitleaks .
 
 FROM node:24@sha256:934240a162082fd8b8a2f90cd5114446443f1eba1c5378f6687167ca405e6584
 
@@ -108,13 +109,11 @@ RUN ARCH=$(dpkg --print-architecture) && \
 # GH_VERSION is not tracked by Dependabot (it is an ARG + wget, not a FROM), so
 # it drifts silently and must be bumped by hand. When bumping, check what the
 # release binary was actually compiled with rather than assuming the newest tag
-# is clean — 2.96.0 shipped after 2.95.0 but was still built on the unpatched
-# Go 1.26.4 and carried the same stdlib CVEs:
-#   go.mod at the tag must show `toolchain go1.26.5` or newer, and
-#   `strings gh | grep -m1 '^go1\.'` on the extracted binary must agree.
-ARG GH_VERSION=2.97.0
-ARG GH_SHA256_AMD64=a2c9b8497e1f85b1ad0dfcb78b5a622e098801b8e461e459e88e1ee12f018112
-ARG GH_SHA256_ARM64=73ea440ecad9c9e284429997ee6f93577bc6f7bc6fba357ef62c53ad8fb641a5
+# is clean — v2.103.0 verified: toolchain go1.27.3, x/crypto v0.58.0.
+#   gh api 'repos/cli/cli/contents/go.mod?ref=v<VER>' -q '.content' | base64 -d
+ARG GH_VERSION=2.103.0
+ARG GH_SHA256_AMD64=fdd768eb70f6409f80fcfa9f3a1c0adf0fc98d827ab3ce0bed2ac22762c5d786
+ARG GH_SHA256_ARM64=7f322df34e624d14f5ec0c4acb121fd6dfa14392fdbbd1066aa8e0a05ac3721e
 RUN ARCH=$(dpkg --print-architecture) && \
   case "$ARCH" in \
     amd64) EXPECTED_SHA256="$GH_SHA256_AMD64" ;; \
