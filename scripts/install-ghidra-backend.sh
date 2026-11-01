@@ -32,7 +32,7 @@ export GHIDRA_INSTALL_DIR="$GHIDRA_DIR"
 export JAVA_HOME="$JDK_DIR"
 export PATH="${JAVA_HOME}/bin:${PATH}"
 
-if [[ -f "$MARKER_FILE" ]] && grep -q "^ghidra=${GHIDRA_VERSION} jdk=${JDK_VERSION}$" "$MARKER_FILE"; then
+if [[ -f "$MARKER_FILE" ]] && grep -qF "ghidra=${GHIDRA_VERSION} jdk=${JDK_VERSION}" "$MARKER_FILE"; then
   if [[ -d "$GHIDRA_DIR" ]] && [[ -d "$JDK_DIR" ]]; then
     echo "Ghidra ${GHIDRA_VERSION} + JDK ${JDK_VERSION} already installed."
     echo "GHIDRA_INSTALL_DIR=${GHIDRA_INSTALL_DIR}"
