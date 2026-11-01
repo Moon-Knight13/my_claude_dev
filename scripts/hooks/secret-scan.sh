@@ -42,7 +42,6 @@ FINDINGS=()
 # Password/secret key-value pairs (YAML, JSON, env-var style).
 # Skip Jinja templates {{ }}, <redacted>, *** , empty values.
 _check_kv_secrets() {
-    local pattern value_pattern
     # Match: password: "value", secret = value, token: 'value', etc.
     # Captures the key name for reporting.
     while IFS= read -r line; do
