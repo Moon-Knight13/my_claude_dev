@@ -47,10 +47,12 @@ else
 fi
 
 # First allow DNS and localhost before any restrictions
-# Allow outbound DNS
+# Allow outbound DNS (UDP + TCP; TCP needed for responses >512 bytes / DNSSEC)
 iptables -A OUTPUT -p udp --dport 53 -j ACCEPT
+iptables -A OUTPUT -p tcp --dport 53 -j ACCEPT
 # Allow inbound DNS responses
 iptables -A INPUT -p udp --sport 53 -j ACCEPT
+iptables -A INPUT -p tcp --sport 53 -j ACCEPT
 # Allow localhost
 iptables -A INPUT -i lo -j ACCEPT
 iptables -A OUTPUT -o lo -j ACCEPT
