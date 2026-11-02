@@ -8,7 +8,10 @@ import os
 import sys
 from typing import Any
 
-from mcp.server import FastMCP
+try:
+    from mcp.server.mcpserver import MCPServer as FastMCP
+except ImportError:
+    from mcp.server import FastMCP
 
 from range_intel.clients.gitlab import GitLabClient
 from range_intel.clients.providentia import ProvidentiaClient
