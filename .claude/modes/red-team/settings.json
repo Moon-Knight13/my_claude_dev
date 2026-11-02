@@ -21,11 +21,11 @@
       }
     },
     "outline-readonly": {
-      "command": "npx",
-      "args": ["-y", "@anthropic-ai/outline-mcp", "--readonly"],
+      "command": "node",
+      "args": ["/workspace/mcp-servers/outline-readonly/src/server.js"],
       "env": {
-        "OUTLINE_URL": "${OUTLINE_URL}",
-        "OUTLINE_TOKEN": "${OUTLINE_TOKEN}"
+        "OUTLINE_API_URL": "${OUTLINE_API_URL}",
+        "OUTLINE_API_KEY": "${OUTLINE_API_KEY}"
       }
     },
     "obsidian-mcp": {
