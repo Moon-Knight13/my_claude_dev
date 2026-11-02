@@ -10,6 +10,7 @@ set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT="$(dirname "$HERE")/spoke-firewall.sh"
+# shellcheck disable=SC2034  # REPO_ROOT used by sourced scripts
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 
 fails=0
@@ -40,6 +41,7 @@ esac
 STUB
 chmod +x "$TMP/dig"
 
+# shellcheck disable=SC2120
 run_fw() {
     # Run spoke-firewall.sh with stubbed PATH and a fake .env
     (
@@ -50,20 +52,8 @@ run_fw() {
     )
 }
 
-write_env() {
-    cat > "$REPO_ROOT/.env.test-spoke-fw" <<EOF
-$1
-EOF
-}
-
-# Override load-env to use our test .env file
-setup_env() {
-    # Directly export vars instead of relying on load-env parsing
-    true
-}
-
 # --- 1. No spoke vars set — adds 0, exits 0 ---------------------------------
-> "$IPSET_LOG"
+true > "$IPSET_LOG"
 out="$(
     SPOKE_DEPLOYBOX_HOST="" \
     SPOKE_KALI_HOST="" \
@@ -79,7 +69,7 @@ else
 fi
 
 # --- 2. Valid IP accepted directly -------------------------------------------
-> "$IPSET_LOG"
+true > "$IPSET_LOG"
 out="$(
     SPOKE_DEPLOYBOX_HOST="" \
     SPOKE_KALI_HOST="10.200.1.15" \
@@ -95,7 +85,7 @@ else
 fi
 
 # --- 3. Hostname triggers DNS resolution ------------------------------------
-> "$IPSET_LOG"
+true > "$IPSET_LOG"
 out="$(
     SPOKE_DEPLOYBOX_HOST="" \
     SPOKE_KALI_HOST="kali.range.local" \
@@ -111,7 +101,7 @@ else
 fi
 
 # --- 4. Unresolvable hostname warns and skips --------------------------------
-> "$IPSET_LOG"
+true > "$IPSET_LOG"
 out="$(
     SPOKE_DEPLOYBOX_HOST="" \
     SPOKE_KALI_HOST="unresolvable.host" \
@@ -132,7 +122,7 @@ else
 fi
 
 # --- 5. Multiple vars — correct count ---------------------------------------
-> "$IPSET_LOG"
+true > "$IPSET_LOG"
 out="$(
     SPOKE_DEPLOYBOX_HOST="10.100.0.40" \
     SPOKE_KALI_HOST="10.200.1.15" \
@@ -148,7 +138,7 @@ else
 fi
 
 # --- 6. Idempotent — running twice produces same output ----------------------
-> "$IPSET_LOG"
+true > "$IPSET_LOG"
 out1="$(SPOKE_KALI_HOST="10.200.1.15" SPOKE_DEPLOYBOX_HOST="" RANGE_GIT_HOST="" PROVIDENTIA_HOST="" OUTLINE_HOST="" run_fw)"
 out2="$(SPOKE_KALI_HOST="10.200.1.15" SPOKE_DEPLOYBOX_HOST="" RANGE_GIT_HOST="" PROVIDENTIA_HOST="" OUTLINE_HOST="" run_fw)"
 count1=$(echo "$out1" | grep -o 'spoke-firewall:.*')
@@ -160,7 +150,7 @@ else
 fi
 
 # --- 7. Empty var skipped silently (no warning) ------------------------------
-> "$IPSET_LOG"
+true > "$IPSET_LOG"
 out="$(
     SPOKE_DEPLOYBOX_HOST="" \
     SPOKE_KALI_HOST="" \
