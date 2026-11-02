@@ -45,6 +45,19 @@ if [[ ! -f .claude/settings.local.json && -f .claude/settings.local.json.example
     echo "  ++  Created .claude/settings.local.json (machine-specific deny rules, gitignored)"
 fi
 
+# 1b. Ensure load-env.sh is sourced in interactive shells so .env vars
+#     (spoke hosts, MCP URLs/tokens) are available to Claude's MCP servers.
+#     MCP servers inherit the shell environment — without this, ${OUTLINE_URL}
+#     etc. are empty and MCP connections fail silently.
+_load_env_line='source /workspace/scripts/lib/load-env.sh 2>/dev/null'
+for _rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
+    [[ -f "$_rc" ]] || continue
+    if ! grep -qF "load-env.sh" "$_rc"; then
+        printf '\n# Load .env vars for MCP servers (spoke connectivity)\n%s\n' "$_load_env_line" >> "$_rc"
+        echo "  ++  Added load-env.sh to $(basename "$_rc")"
+    fi
+done
+
 # 2. Fill CODEOWNERS with the repo owner derived from the git remote (no gh auth
 #    needed). Only touches the file while it still holds the placeholder.
 if [[ -f .github/CODEOWNERS ]] && grep -q "@your-org/your-team" .github/CODEOWNERS; then
