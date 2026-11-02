@@ -81,6 +81,9 @@ unset -f _load_env_file
 # Derive *_URL from *_HOST when URL not explicitly set.
 # MCP servers need full URLs; .env only needs hostnames + tokens.
 [[ -n "${OUTLINE_HOST:-}" && -z "${OUTLINE_URL:-}" ]] && export OUTLINE_URL="https://${OUTLINE_HOST}"
+# Bridge to local outline-readonly MCP server var names (OUTLINE_API_URL / OUTLINE_API_KEY).
+[[ -n "${OUTLINE_URL:-}" && -z "${OUTLINE_API_URL:-}" ]] && export OUTLINE_API_URL="${OUTLINE_URL}"
+[[ -n "${OUTLINE_TOKEN:-}" && -z "${OUTLINE_API_KEY:-}" ]] && export OUTLINE_API_KEY="${OUTLINE_TOKEN}"
 [[ -n "${PROVIDENTIA_HOST:-}" && -z "${PROVIDENTIA_URL:-}" ]] && export PROVIDENTIA_URL="https://${PROVIDENTIA_HOST}"
 [[ -n "${RANGE_GIT_HOST:-}" && -z "${GITLAB_URL:-}" ]] && export GITLAB_URL="https://${RANGE_GIT_HOST}"
 [[ -n "${SPOKE_KALI_HOST:-}" && -z "${TUONI_URL:-}" ]] && export TUONI_URL="https://${SPOKE_KALI_HOST}:${SPOKE_KALI_C2_WEB_PORT:-8443}"
