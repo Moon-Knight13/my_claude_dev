@@ -52,7 +52,10 @@
       "args": ["-m", "tuoni_mcp"],
       "env": {
         "TUONI_URL": "${TUONI_URL}",
-        "TUONI_TOKEN": "${TUONI_TOKEN}"
+        "TUONI_USERNAME": "${TUONI_USERNAME}",
+        "TUONI_PASSWORD": "${TUONI_PASSWORD}",
+        "TUONI_VERIFY_TLS": "false",
+        "TUONI_MCP_PROFILES": "agent-ops,access,discovery,authoring,administration"
       }
     },
     "rea-mcp": {
