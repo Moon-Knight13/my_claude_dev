@@ -1,4 +1,7 @@
 {
+  "_comment": "Base settings — always active regardless of mode. Hooks and guards live here. Mode-specific MCP servers are merged on top by /mode skill.",
+  "_pii_shield_note": "PII-Shield (gregmos/PII-Shield) anonymizes content before it reaches Claude. Install manually: Settings > Extensions > drag in the .mcpb file. See docs/TEMPLATE_GUIDE.md#pii--privacy-controls for details.",
+  "_statusline_note": "The caveman statusline badge is auto-configured by scripts/install-caveman.sh at container start into user-level settings (~/.claude/settings.json), because the plugin script lives at a hash-versioned cache path. Do not hardcode a statusLine here.",
   "mcpServers": {
     "local-ollama": {
       "command": "npx",
@@ -11,18 +14,56 @@
         "OLLAMA_MODEL": "qwen2.5-coder:7b"
       }
     },
-    "rea-mcp": {
-      "command": "npx",
-      "args": ["-y", "rea-agents@6.8.0", "mcp"]
+    "range-intel": {
+      "command": "python3",
+      "args": ["-m", "range_intel.server"],
+      "cwd": "/workspace/mcp-servers/range-intel",
+      "env": {
+        "PYTHONPATH": "/workspace/mcp-servers/range-intel/src",
+        "PROVIDENTIA_URL": "${PROVIDENTIA_URL}",
+        "PROVIDENTIA_TOKEN": "${PROVIDENTIA_TOKEN}",
+        "GITLAB_URL": "${GITLAB_URL}",
+        "GITLAB_TOKEN": "${GITLAB_TOKEN}",
+        "GITLAB_PROJECT": "${GITLAB_PROJECT}"
+      }
+    },
+    "outline-readonly": {
+      "command": "node",
+      "args": ["/workspace/mcp-servers/outline-readonly/src/server.js"],
+      "env": {
+        "OUTLINE_API_URL": "${OUTLINE_API_URL}",
+        "OUTLINE_API_KEY": "${OUTLINE_API_KEY}"
+      }
     },
     "obsidian-mcp": {
       "command": "npx",
       "args": ["-y", "obsidian-mcp@2.0.1", "serve", "--vault", "my_notes=/home/node/vault"]
+    },
+    "hacktricks-mcp": {
+      "command": "npx",
+      "args": ["-y", "hacktricks-mcp@1.3.0"]
+    },
+    "mitre-mcp": {
+      "command": "npx",
+      "args": ["-y", "mitre-attack-mcp@1.0.1"]
+    },
+    "tuoni-mcp": {
+      "command": "python3",
+      "args": ["-m", "tuoni_mcp"],
+      "env": {
+        "TUONI_URL": "${TUONI_URL}",
+        "TUONI_TOKEN": "${TUONI_TOKEN}"
+      }
+    },
+    "rea-mcp": {
+      "command": "npx",
+      "args": ["-y", "rea-agents@6.8.0", "mcp"]
+    },
+    "lolbins-mcp": {
+      "command": "npx",
+      "args": ["-y", "living-off-the-land-lolbins-mcp-server@0.1.0"]
     }
   },
-  "_pii_shield_note": "PII-Shield (gregmos/PII-Shield) anonymizes content before it reaches Claude. Install manually: Settings > Extensions > drag in the .mcpb file. See docs/TEMPLATE_GUIDE.md#pii--privacy-controls for details.",
-  "_statusline_note": "The caveman statusline badge is auto-configured by scripts/install-caveman.sh at container start into user-level settings (~/.claude/settings.json), because the plugin script lives at a hash-versioned cache path. Do not hardcode a statusLine here.",
-  "_comment": "Base settings — always active regardless of mode. Hooks and guards live here. Mode-specific MCP servers are merged on top by /mode skill.",
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -55,5 +96,6 @@
         ]
       }
     ]
-  }
+  },
+  "_mode_note": "Active mode is set by /mode skill. All MCP servers stay registered; servers that lack env vars simply fail to start and are skipped."
 }

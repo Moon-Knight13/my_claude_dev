@@ -16,7 +16,8 @@
   "runArgs": [
     "--cap-add=NET_ADMIN",
     "--cap-add=NET_RAW",
-    "--add-host=host.docker.internal:host-gateway"
+    "--add-host=host.docker.internal:host-gateway",
+    "--env-file", "${localWorkspaceFolder}/.env"
   ],
   "customizations": {
     "vscode": {
@@ -64,6 +65,7 @@
   },
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
   "workspaceFolder": "/workspace",
+  "initializeCommand": "[ -f .env ] || cp .env.example .env",
   "postStartCommand": "sudo /usr/local/bin/init-firewall.sh && for s in scripts/install-caveman.sh scripts/install-bmad.sh scripts/bootstrap-bmad.sh scripts/bootstrap-precommit.sh scripts/install-claude-plugins.sh scripts/setup-day0.sh scripts/project-setup.sh; do echo \"--- Running $s ---\"; bash \"$s\" || echo \"WARNING: $s failed (exit $?) — continuing\"; done",
   "waitFor": "postStartCommand"
 }
