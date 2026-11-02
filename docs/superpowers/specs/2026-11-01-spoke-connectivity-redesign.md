@@ -288,7 +288,7 @@ not connected.
 |---------|--------|----------|
 | Host VPN drops | Lose all range access | Obsidian cache for intel; wait for VPN reconnect |
 | Tuoni server crashes | Lose all C2 | SSH to Kali (IP in ipset), restart Tuoni |
-| Deploybox reclaimed | Lose green-dev tools | Red-team unaffected; green-dev waits for reallocation |
+| Deploybox reclaimed | Lose catapult/ansible deploy capability | Red-team unaffected; GitLab still reachable (own IP in ipset); green-dev catapult waits for reallocation |
 | Kali unreachable | Lose C2 + Kali tools | Obsidian for intel; escalate to range ops |
 | Obsidian MCP fails | Lose notes | Local filesystem fallback; Obsidian is just files |
 | Spoke IP changes | ipset stale | Re-run `spoke-firewall.sh` after updating `.env` |
