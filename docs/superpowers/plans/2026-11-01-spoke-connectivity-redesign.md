@@ -37,7 +37,7 @@
 - Create: `scripts/tests/test-spoke-firewall.sh`
 
 **Interfaces:**
-- Consumes: `.env` vars via `scripts/lib/load-env.sh` (`SPOKE_KALI_HOST`, `SPOKE_DEPLOYBOX_HOST`, `RANGE_GIT_HOST`)
+- Consumes: `.env` vars via `scripts/lib/load-env.sh` (`SPOKE_KALI_HOST`, `SPOKE_DEPLOYBOX_HOST`, `RANGE_GIT_HOST`, `PROVIDENTIA_HOST`, `OUTLINE_HOST`)
 - Produces: spoke IPs added to `allowed-domains` ipset; exit 0 with count of IPs added
 
 - [ ] **Step 1: Write failing tests for `spoke-firewall.sh`**
@@ -63,7 +63,7 @@ Expected: all FAIL (script does not exist)
 Structure (~30 lines):
 ```
 load_env()        — source load-env.sh
-for each spoke var (SPOKE_DEPLOYBOX_HOST, SPOKE_KALI_HOST, RANGE_GIT_HOST):
+for each spoke var (SPOKE_DEPLOYBOX_HOST, SPOKE_KALI_HOST, RANGE_GIT_HOST, PROVIDENTIA_HOST, OUTLINE_HOST):
   skip if empty
   validate IP format
   if hostname: resolve via dig, fail gracefully
@@ -103,7 +103,7 @@ DCM27-Chris.M #UseTheRobotsToDestroyTheRobots"
 **Files:**
 - Modify: `.devcontainer/init-firewall.sh` (add spoke-firewall call)
 - Modify: `scripts/check-health.sh` (spoke section)
-- Modify: `.env.example` (document spoke IP requirements)
+- Modify: `.env.example` (add `PROVIDENTIA_HOST`, `OUTLINE_HOST`; document spoke IP requirements)
 - Create or modify: `scripts/tests/test-spoke-firewall-integration.sh`
 
 **Interfaces:**
@@ -129,12 +129,14 @@ Note: runs AFTER ipset creation and firewall rules — Review Focus #1 satisfied
 Replace tunnel checks with direct connectivity probes:
 ```bash
 # Spoke connectivity — direct IP check
-for var in SPOKE_DEPLOYBOX_HOST SPOKE_KALI_HOST RANGE_GIT_HOST; do
+for var in SPOKE_DEPLOYBOX_HOST SPOKE_KALI_HOST RANGE_GIT_HOST PROVIDENTIA_HOST OUTLINE_HOST; do
     ip="${!var:-}"
     [[ -z "$ip" ]] && continue
     if ipset test allowed-domains "$ip" 2>/dev/null; then
-        # Try TCP connect to verify reachability
-        if timeout 3 bash -c "echo >/dev/tcp/$ip/22" 2>/dev/null; then
+        # Try TCP connect to verify reachability (port 443 for services, 22 for spokes)
+        probe_port=443
+        [[ "$var" == SPOKE_* ]] && probe_port=22
+        if timeout 3 bash -c "echo >/dev/tcp/$ip/$probe_port" 2>/dev/null; then
             ok "Spoke $var ($ip) reachable"
         else
             warn "Spoke $var ($ip) in firewall but unreachable" "Check VPN"

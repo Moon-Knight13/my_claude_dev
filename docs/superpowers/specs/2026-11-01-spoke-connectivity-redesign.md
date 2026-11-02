@@ -122,7 +122,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib/load-env.sh"
 
 added=0
-for var in SPOKE_DEPLOYBOX_HOST SPOKE_KALI_HOST RANGE_GIT_HOST; do
+for var in SPOKE_DEPLOYBOX_HOST SPOKE_KALI_HOST RANGE_GIT_HOST PROVIDENTIA_HOST OUTLINE_HOST; do
     ip="${!var:-}"
     [[ -z "$ip" ]] && continue
     # Validate IP format
@@ -283,7 +283,7 @@ not connected.
 
 ### Modified Files
 - `.devcontainer/init-firewall.sh` — add call to `spoke-firewall.sh` at end (if .env exists)
-- `.env.example` — document spoke IP requirements for firewall
+- `.env.example` — add `PROVIDENTIA_HOST`, `OUTLINE_HOST`; document spoke IP requirements for firewall
 - `scripts/check-health.sh` — spoke section checks direct connectivity (curl/ping)
 - `scripts/validate-engagement.sh` — add `kali_agent_id`, `cache_timestamp` fields
 - `docs/planning/prd-v2.md` — amend FR-K2, add FR-K5, amend NFR-O5
