@@ -194,6 +194,28 @@ Where `PROVIDENTIA_URL` and `GITLAB_URL` resolve to range IPs that are
 in the ipset. Same env var pattern as current config — no settings.json
 changes needed for green-dev or red-dev modes.
 
+### SSH Key Distribution
+
+Container generates an SSH keypair at first setup (`setup-container-ssh.sh`).
+This key must be added to each spoke platform before SSH access works.
+Bootstrap should check and prompt:
+
+| Platform | How to add key | Check command |
+|----------|---------------|---------------|
+| Deploy box | `ssh-copy-id gt@<deploybox>` from host (has VPN + vault creds) | `ssh -o BatchMode=yes deploybox whoami` |
+| Kali | `ssh-copy-id rt@<kali>` from host, or via Tuoni file upload | `ssh -o BatchMode=yes kali whoami` |
+| Range GitLab | Add pubkey via GitLab UI or API (`/api/v4/user/keys`) | `ssh -T -p 10022 git@<gitlab>` |
+
+`spoke-firewall.sh` makes IPs reachable. SSH key distribution makes them
+*usable*. Health check should distinguish:
+- IP unreachable (VPN/firewall) vs key not accepted (auth)
+
+Bootstrap flow:
+1. Run `spoke-firewall.sh` — IPs in ipset
+2. Check SSH auth per spoke — `ssh -o BatchMode=yes -o ConnectTimeout=3`
+3. If auth fails: print pubkey, prompt operator to add it to platform
+4. Re-check after operator confirms
+
 ### Tuoni Self-Agent on Kali
 
 (Unchanged from previous design — this is about execution model, not

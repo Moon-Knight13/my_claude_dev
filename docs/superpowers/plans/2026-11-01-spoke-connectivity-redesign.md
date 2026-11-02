@@ -129,22 +129,58 @@ Note: runs AFTER ipset creation and firewall rules — Review Focus #1 satisfied
 Replace tunnel checks with direct connectivity probes:
 ```bash
 # Spoke connectivity — direct IP check
-for var in SPOKE_DEPLOYBOX_HOST SPOKE_KALI_HOST RANGE_GIT_HOST PROVIDENTIA_HOST OUTLINE_HOST; do
+declare -A SPOKE_PROBE_PORTS=(
+    [SPOKE_DEPLOYBOX_HOST]=22
+    [SPOKE_KALI_HOST]=22
+    [RANGE_GIT_HOST]="${RANGE_GIT_SSH_PORT:-10022}"
+    [PROVIDENTIA_HOST]=443
+    [OUTLINE_HOST]=443
+)
+for var in "${!SPOKE_PROBE_PORTS[@]}"; do
     ip="${!var:-}"
     [[ -z "$ip" ]] && continue
+    probe_port="${SPOKE_PROBE_PORTS[$var]}"
     if ipset test allowed-domains "$ip" 2>/dev/null; then
-        # Try TCP connect to verify reachability (port 443 for services, 22 for spokes)
-        probe_port=443
-        [[ "$var" == SPOKE_* ]] && probe_port=22
         if timeout 3 bash -c "echo >/dev/tcp/$ip/$probe_port" 2>/dev/null; then
-            ok "Spoke $var ($ip) reachable"
+            ok "$var ($ip:$probe_port) reachable"
         else
-            warn "Spoke $var ($ip) in firewall but unreachable" "Check VPN"
+            warn "$var ($ip:$probe_port) in firewall but unreachable" "Check VPN"
         fi
     else
-        warn "Spoke $var ($ip) NOT in firewall allow-list" "Run spoke-firewall.sh"
+        warn "$var ($ip) NOT in firewall allow-list" "Run spoke-firewall.sh"
     fi
 done
+```
+
+- [ ] **Step 2b: Add SSH key distribution check to health**
+
+After connectivity probe, check SSH auth for SSH-capable spokes:
+```bash
+# SSH auth check (spokes with SSH access)
+for var in SPOKE_DEPLOYBOX_HOST SPOKE_KALI_HOST; do
+    ip="${!var:-}"
+    [[ -z "$ip" ]] && continue
+    user_var="${var/HOST/USER}"
+    user="${!user_var:-}"
+    [[ -z "$user" ]] && continue
+    if ssh -o BatchMode=yes -o ConnectTimeout=3 -o StrictHostKeyChecking=no \
+           "$user@$ip" whoami >/dev/null 2>&1; then
+        ok "SSH auth to $var ($user@$ip)"
+    else
+        warn "SSH auth failed for $var ($user@$ip)" \
+             "Add container pubkey: cat ~/.ssh/id_ed25519.pub"
+    fi
+done
+# GitLab SSH check (different port)
+if [[ -n "${RANGE_GIT_HOST:-}" ]]; then
+    if ssh -o BatchMode=yes -o ConnectTimeout=3 -p "${RANGE_GIT_SSH_PORT:-10022}" \
+           "git@${RANGE_GIT_HOST}" 2>&1 | grep -qi "welcome\|success"; then
+        ok "GitLab SSH auth (${RANGE_GIT_HOST}:${RANGE_GIT_SSH_PORT:-10022})"
+    else
+        warn "GitLab SSH auth failed" \
+             "Add container pubkey to GitLab profile SSH keys"
+    fi
+fi
 ```
 
 - [ ] **Step 3: Update `.env.example` spoke section**
@@ -200,15 +236,20 @@ description: "Verify Tuoni self-agent on Kali + deploy plugins. Run before engag
 
 Skill body — procedural steps:
 
-1. **Check Tuoni API** — `tuoni_status` or health endpoint. If unreachable, verify spoke IP in firewall (`ipset test allowed-domains <kali-ip>`) and VPN connectivity.
-2. **List agents** — `tuoni_agents_list`. Look for agent with hostname matching Kali.
-3. **If no self-agent:**
+1. **Check firewall** — verify Kali IP in ipset (`ipset test allowed-domains <kali-ip>`). If missing, run `spoke-firewall.sh`.
+2. **Check SSH auth** — `ssh -o BatchMode=yes -o ConnectTimeout=3 kali whoami`. If fails:
+   - Print container pubkey (`cat ~/.ssh/id_ed25519.pub`)
+   - Prompt operator: "Add this key to rt@kali — paste into authorized_keys or use ssh-copy-id from host"
+   - Wait for confirmation, re-check
+3. **Check Tuoni API** — `tuoni_status` or health endpoint. If unreachable, SSH to Kali and check Tuoni service status.
+4. **List agents** — `tuoni_agents_list`. Look for agent with hostname matching Kali.
+5. **If no self-agent:**
    - List listeners — `tuoni_listeners_list`. Find or create localhost listener.
    - Generate payload for Kali (Linux, matching arch).
-   - Deploy payload on Kali. Use SSH to Kali (direct, IP in firewall) to deploy.
-4. **Verify self-agent** — `tuoni_send_command` to Kali agent: `whoami`, `ip addr`.
-5. **Deploy plugins** — `tuoni_upload_file` to upload plugin JARs if not present.
-6. **Record agent ID** — update engagement YAML `kali_agent_id` field.
+   - Deploy payload on Kali via SSH or Tuoni file upload.
+6. **Verify self-agent** — `tuoni_send_command` to Kali agent: `whoami`, `ip addr`.
+7. **Deploy plugins** — `tuoni_upload_file` to upload plugin JARs if not present.
+8. **Record agent ID** — update engagement YAML `kali_agent_id` field.
 
 - [ ] **Step 2: Write pre-engagement-cache skill**
 
