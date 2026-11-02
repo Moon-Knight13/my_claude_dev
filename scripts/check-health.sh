@@ -206,7 +206,7 @@ run_spoke() {
     for var in SPOKE_DEPLOYBOX_HOST SPOKE_KALI_HOST RANGE_GIT_HOST PROVIDENTIA_HOST OUTLINE_HOST; do
         ip="${!var:-}"
         [[ -z "$ip" ]] && continue
-        ((spoke_total++))
+        ((spoke_total++)) || true
         probe_port="${PROBE_PORTS[$var]}"
 
         if command -v ipset >/dev/null 2>&1 && ! ipset test allowed-domains "$ip" 2>/dev/null; then
@@ -216,7 +216,7 @@ run_spoke() {
 
         if timeout 3 bash -c "echo >/dev/tcp/$ip/$probe_port" 2>/dev/null; then
             ok "$var ($ip:$probe_port) reachable"
-            ((spoke_up++))
+            ((spoke_up++)) || true
         else
             warn "$var ($ip:$probe_port) unreachable" "Check VPN connection"
         fi
