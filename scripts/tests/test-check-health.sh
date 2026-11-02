@@ -66,6 +66,11 @@ cp -r "$REPO_ROOT/scripts/lib/"*.sh "$SANDBOX/scripts/lib/" 2>/dev/null || true
 cp "$HEALTH" "$SANDBOX/scripts/check-health.sh"
 [[ -f "$REPO_ROOT/template.conf" ]] && cp "$REPO_ROOT/template.conf" "$SANDBOX/"
 echo '{"_mode":"platform-ops","mcpServers":{"local-ollama":{"command":"npx","args":["-y","ollama-mcp"]}}}' > "$SANDBOX/.claude/settings.json"
+# Fake spoke hosts so the spoke section has something to probe (and fail on).
+cat > "$SANDBOX/.env" <<'DOT'
+SPOKE_DEPLOYBOX_HOST=192.0.2.1
+SPOKE_KALI_HOST=192.0.2.2
+DOT
 
 run_health() {
     local section="${1:-all}"
