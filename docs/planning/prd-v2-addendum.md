@@ -27,26 +27,39 @@ All use file replacement, not symlinks or env vars. Session restart expected.
 templates. v2 subagents receive mode instructions via prompt injection (no file
 rewrite needed).
 
-## Spoke Connectivity — SSH Tunnels via host.docker.internal
+## Spoke Connectivity — Specific-IP Firewall Allow via Docker Bridge NAT
 
 **Problem:** Devcontainer has its own network namespace + deny-by-default iptables
-firewall. VPN runs on host OS, container cannot reach range network.
+firewall. VPN runs on host OS, container cannot reach range network by default.
 
-**Solution:** SSH tunnels through host. Container connects to
-`host.docker.internal` (resolves to 172.17.0.1, Docker bridge gateway). Host
-manages tunnels to VPN-side targets.
+**Solution (current, revised 2026-11-02):** Specific-IP firewall allow.
+`spoke-firewall.sh` reads spoke IPs from `.env` and adds them to `allowed-domains`
+ipset. Docker bridge NAT routes container traffic through host to VPN-connected
+range hosts. MCP servers connect to native spoke addresses — no port mapping
+or tunnels needed.
+
+**Previous approach (superseded 2026-11-02):** SSH tunnels through
+`host.docker.internal`. Rejected — operational cost (tunnel lifecycle, port
+mapping, health monitoring, SSH permission rules, PID files) not justified by
+marginal security benefit of encrypting the container-to-host hop (same physical
+machine). Tuoni self-agent already has full range access from Kali, so tunnel
+encryption added defense-in-depth for one local hop only.
 
 **Evaluated alternatives:**
 | Option | Verdict |
 |--------|---------|
 | Host networking (`networkMode: host`) | Destroys firewall isolation. Rejected |
-| Docker bridge routing to VPN | Brittle, breaks on VPN reconnect. Rejected |
+| Docker bridge NAT + specific-IP ipset | **Selected.** Per-host granularity, minimal code |
+| SSH tunnels through host | Operational cost too high for marginal benefit. Superseded |
 | VPN client inside container | Overkill, conflicts with host VPN. Rejected |
-| socat on host | Viable but no encryption. SSH preferred |
+| socat on host | Viable but no encryption. Rejected |
+| Full VPN subnet allow | Opens entire range. Rejected — per-IP only |
 
-**Firewall change:** Added port 22 to host gateway allow-list in
-`init-firewall.sh`. Container can SSH to host only — cannot reach range directly.
-Host controls what is tunneled.
+**Firewall change:** `init-firewall.sh` creates `allowed-domains` ipset with
+internet infrastructure IPs (GitHub, npm, Anthropic). `spoke-firewall.sh` adds
+spoke IPs from `.env` after ipset creation. Container reaches allowed IPs
+directly through Docker bridge NAT. Port 22 on host gateway retained for SSH
+shell access to spokes (ProxyJump).
 
 ## Obsidian Integration — LLM Wiki / Second Brain Pattern
 

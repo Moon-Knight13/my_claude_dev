@@ -153,6 +153,61 @@ EMPTY="$TMPDIR/empty.yaml"
 touch "$EMPTY"
 run_test "empty file fails" "$EMPTY" 1
 
+# kali_agent_id accepted (optional)
+KALI_ID="$TMPDIR/kali-id.yaml"
+cat > "$KALI_ID" << 'EOF'
+metadata:
+  id: test-kali
+  operator: tester
+phase: recon
+targets: []
+agents: []
+cred_refs: []
+findings: []
+persistence: []
+lateral_moves: []
+handoff: ""
+kali_agent_id: "a1b2c3d4"
+EOF
+run_test "kali_agent_id accepted" "$KALI_ID" 0
+
+# cache_timestamp accepted (optional)
+CACHE_TS="$TMPDIR/cache-ts.yaml"
+cat > "$CACHE_TS" << 'EOF'
+metadata:
+  id: test-cache
+  operator: tester
+phase: recon
+targets: []
+agents: []
+cred_refs: []
+findings: []
+persistence: []
+lateral_moves: []
+handoff: ""
+cache_timestamp: "2026-11-02T14:30:00Z"
+EOF
+run_test "cache_timestamp accepted" "$CACHE_TS" 0
+
+# Both fields together
+BOTH="$TMPDIR/both.yaml"
+cat > "$BOTH" << 'EOF'
+metadata:
+  id: test-both
+  operator: tester
+phase: recon
+targets: []
+agents: []
+cred_refs: []
+findings: []
+persistence: []
+lateral_moves: []
+handoff: ""
+kali_agent_id: "abc123"
+cache_timestamp: "2026-11-02T14:30:00Z"
+EOF
+run_test "both new fields accepted together" "$BOTH" 0
+
 echo ""
 echo "Results: $PASS passed, $FAIL failed"
 exit "$FAIL"

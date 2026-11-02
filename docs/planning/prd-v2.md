@@ -195,13 +195,15 @@ Cross-cutting features that every mode relies on.
 
 ## 7. Spoke and Data Source Infrastructure
 
-**FR-K1:** Deploy box spoke — SSH tunnel via `host.docker.internal`. Host manages tunnel (host VPN resolves DNS, routes to range), container connects to `host.docker.internal:<forwarded-port>`. ctp-bridge executes catapult commands through tunnel. Catapult container sees a shell session, transparent to whether local or tunneled. Preserves devcontainer deny-by-default firewall — only explicitly tunneled hosts are reachable. Requires `--add-host=host.docker.internal:host-gateway` in devcontainer.json.
+**FR-K1:** Deploy box spoke — deploy box IP added to container firewall allow-list (`allowed-domains` ipset) for direct TCP access via Docker bridge NAT. Host VPN resolves DNS and routes to range; container traffic to allowed IPs routes through host automatically. ctp-bridge executes catapult commands through SSH ProxyJump to deploy box. Preserves devcontainer deny-by-default firewall — only specific spoke IPs are reachable, not the full VPN subnet.
 
-**FR-K2:** Kali/Tuoni spoke — tuoni-mcp over HTTPS, tunneled through `host.docker.internal:<tuoni-port>` to Tuoni server via host VPN. Primary weapons platform. MCP tools already working (79 tools); tunnel infrastructure needed.
+**FR-K2:** Kali/Tuoni spoke — tuoni-mcp over HTTPS to Tuoni server via Docker bridge NAT through host VPN. Container reaches Tuoni API directly — Kali spoke IP in container firewall allow-list (`allowed-domains` ipset). Primary weapons platform. Tuoni self-agent on Kali enables tool execution (nmap, proxychains, plugins) through tuoni-mcp — no separate SSH spoke to Kali required for normal operations. SSH to Kali retained for interactive shell fallback only. MCP tools already working (79 tools).
 
 **FR-K3a:** Visual spoke (operator) — RDP/VNC/SOCKS proxy tunneled through host for manual operator access to target boxes (GUI-only admin panels, visual confirmation). MVP requirement — many operational steps require visual/GUI interaction that CLI cannot reach.
 
 **FR-K3b:** Visual spoke (AI computer-use) — AI-driven screen interaction through visual spoke for automated GUI operations. Deferred to v1.5 pending computer-use capability maturity.
+
+**FR-K5:** Engagement resilience — red-team mode operates with zero dependency on deploy box. Critical intel pre-cached in Obsidian before engagement start (via `/pre-engagement-cache` skill). Tuoni MCP (C2 + Kali tool execution) and Obsidian MCP (cached intel + tactical notes) are the only hard dependencies during live engagement. Deploy box loss affects catapult/ansible only; GitLab and other range services with IPs in the firewall allow-list remain reachable.
 
 **FR-K4:** Obsidian vault (local data source) — not a remote spoke; included here as an external data source outside container. Local on host laptop (`~/Documents/my_notes`). MCP runs local in devcontainer, no remote spoke needed. Vault follows LLM Wiki / second brain pattern (Karpathy):
 
@@ -263,7 +265,7 @@ Phase-based skills with entry/exit criteria, natural-language OS conditionals, e
 | NFR-O2 | Failover: Opus 4.6 → OpenCode + local model → CLI helpers |
 | NFR-O3 | Bootstrap under 15 minutes: clone → .env → setup → first mode [ASSUMPTION] |
 | NFR-O4 | Session restart on mode switch acceptable (CLAUDE.md not hot-reloaded) |
-| NFR-O5 | Spoke connectivity failure degrades gracefully — mode still usable for local work |
+| NFR-O5 | Spoke connectivity failure degrades gracefully. VPN loss: Obsidian cache for intel, wait for reconnect. Tuoni crash: SSH to Kali, restart service. Deploy box loss: red-team unaffected, GitLab still reachable, catapult waits for reallocation. IP change: update `.env`, re-run `spoke-firewall.sh`. Mode still usable for local work |
 
 ### Data
 

@@ -187,29 +187,82 @@ run_spoke() {
     echo "Spoke Preflight"
     echo "---------------"
 
-    for host in hub deploybox kali; do
-        if ssh -o ConnectTimeout=3 -o BatchMode=yes "$host" echo ok >/dev/null 2>&1; then
-            ok "SSH to $host"
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    # shellcheck source=scripts/lib/load-env.sh
+    source "$SCRIPT_DIR/lib/load-env.sh"
+
+    # Per-var probe ports: SSH spokes on 22, GitLab on its custom port, services on 443
+    declare -A PROBE_PORTS=(
+        [SPOKE_DEPLOYBOX_HOST]=22
+        [SPOKE_KALI_HOST]=22
+        [RANGE_GIT_HOST]="${RANGE_GIT_SSH_PORT:-10022}"
+        [PROVIDENTIA_HOST]=443
+        [OUTLINE_HOST]=443
+    )
+
+    # Firewall + connectivity check per spoke
+    spoke_up=0
+    spoke_total=0
+    for var in SPOKE_DEPLOYBOX_HOST SPOKE_KALI_HOST RANGE_GIT_HOST PROVIDENTIA_HOST OUTLINE_HOST; do
+        ip="${!var:-}"
+        [[ -z "$ip" ]] && continue
+        ((spoke_total++))
+        probe_port="${PROBE_PORTS[$var]}"
+
+        if command -v ipset >/dev/null 2>&1 && ! ipset test allowed-domains "$ip" 2>/dev/null; then
+            warn "$var ($ip) NOT in firewall" "Run: bash scripts/spoke-firewall.sh"
+            continue
+        fi
+
+        if timeout 3 bash -c "echo >/dev/tcp/$ip/$probe_port" 2>/dev/null; then
+            ok "$var ($ip:$probe_port) reachable"
+            ((spoke_up++))
         else
-            warn "SSH to $host unreachable" "Check ~/.ssh/config and network"
+            warn "$var ($ip:$probe_port) unreachable" "Check VPN connection"
         fi
     done
 
-    modes_available=""
-    if ssh -o ConnectTimeout=3 -o BatchMode=yes hub echo ok >/dev/null 2>&1; then
-        modes_available="platform-ops"
-        if ssh -o ConnectTimeout=3 -o BatchMode=yes deploybox echo ok >/dev/null 2>&1; then
-            modes_available="$modes_available green-dev"
+    # SSH auth check for SSH-capable spokes
+    declare -A SSH_USERS=(
+        [SPOKE_DEPLOYBOX_HOST]="${SPOKE_DEPLOYBOX_USER:-gt}"
+        [SPOKE_KALI_HOST]="${SPOKE_KALI_USER:-rt}"
+    )
+    for var in SPOKE_DEPLOYBOX_HOST SPOKE_KALI_HOST; do
+        ip="${!var:-}"
+        [[ -z "$ip" ]] && continue
+        user="${SSH_USERS[$var]}"
+        if ssh -o BatchMode=yes -o ConnectTimeout=3 -o StrictHostKeyChecking=accept-new \
+               "$user@$ip" whoami >/dev/null 2>&1; then
+            ok "SSH auth $var ($user@$ip)"
+        else
+            warn "SSH auth failed $var ($user@$ip)" "Add pubkey: cat ~/.ssh/id_ed25519.pub"
         fi
-        if ssh -o ConnectTimeout=3 -o BatchMode=yes kali echo ok >/dev/null 2>&1; then
-            modes_available="$modes_available red-team red-dev purple"
+    done
+
+    # GitLab SSH auth (custom port)
+    if [[ -n "${RANGE_GIT_HOST:-}" ]]; then
+        if ssh -o BatchMode=yes -o ConnectTimeout=3 -o StrictHostKeyChecking=accept-new \
+               -p "${RANGE_GIT_SSH_PORT:-10022}" "git@${RANGE_GIT_HOST}" 2>&1 | grep -qi "welcome\|success\|gitlab"; then
+            ok "GitLab SSH auth (${RANGE_GIT_HOST}:${RANGE_GIT_SSH_PORT:-10022})"
+        else
+            warn "GitLab SSH auth failed" "Add pubkey to GitLab profile SSH keys"
         fi
     fi
 
-    if [[ -n "$modes_available" ]]; then
-        ok "Available modes: $modes_available"
-    else
-        warn "No range connectivity" "Only platform-ops available"
+    # Determine available modes from connectivity
+    modes_available="platform-ops"
+    if [[ -n "${SPOKE_DEPLOYBOX_HOST:-}" ]] && timeout 3 bash -c "echo >/dev/tcp/${SPOKE_DEPLOYBOX_HOST}/22" 2>/dev/null; then
+        modes_available="$modes_available green-dev"
+    fi
+    if [[ -n "${SPOKE_KALI_HOST:-}" ]] && timeout 3 bash -c "echo >/dev/tcp/${SPOKE_KALI_HOST}/22" 2>/dev/null; then
+        modes_available="$modes_available red-team red-dev purple"
+    fi
+    ok "Available modes: $modes_available"
+
+    if [[ "$spoke_total" -eq 0 ]]; then
+        warn "No spoke hosts configured" "Set SPOKE_* vars in .env"
+    elif [[ "$spoke_up" -eq 0 ]]; then
+        warn "No spokes reachable" "Check VPN and spoke-firewall.sh"
     fi
 
     echo ""

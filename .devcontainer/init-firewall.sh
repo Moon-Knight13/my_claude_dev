@@ -194,6 +194,13 @@ iptables -A OUTPUT -m set --match-set allowed-domains dst -j ACCEPT
 # Explicitly REJECT all other outbound traffic for immediate feedback
 iptables -A OUTPUT -j REJECT --reject-with icmp-admin-prohibited
 
+# Add spoke IPs to allow-list if .env exists (range spoke connectivity)
+SPOKE_FW="$(cd "$(dirname "$0")/.." && pwd)/scripts/spoke-firewall.sh"
+if [[ -x "$SPOKE_FW" ]] && [[ -f "$(cd "$(dirname "$0")/.." && pwd)/.env" ]]; then
+    echo "Adding spoke IPs to allow-list..."
+    bash "$SPOKE_FW" || echo "WARNING: spoke-firewall.sh failed — spoke connectivity may be unavailable"
+fi
+
 echo "Firewall configuration complete"
 echo "Verifying firewall rules..."
 if curl --connect-timeout 5 https://example.com >/dev/null 2>&1; then
