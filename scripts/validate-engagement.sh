@@ -103,6 +103,29 @@ if ((lat_count > 0 && cred_count > 0)); then
   done
 fi
 
+# Optional: kali_agent_id (Tuoni self-agent on Kali)
+kali_id="$(_yq '.kali_agent_id // ""' "$FILE")"
+if [[ -n "$kali_id" ]]; then
+  echo "INFO: kali_agent_id: $kali_id"
+fi
+
+# Optional: cache_timestamp (pre-engagement intel cache)
+cache_ts="$(_yq '.cache_timestamp // ""' "$FILE")"
+if [[ -n "$cache_ts" ]]; then
+  cache_epoch=$(date -d "$cache_ts" +%s 2>/dev/null || echo 0)
+  now_epoch=$(date +%s)
+  if [[ "$cache_epoch" -gt 0 ]]; then
+    age_hours=$(( (now_epoch - cache_epoch) / 3600 ))
+    if [[ $age_hours -gt 24 ]]; then
+      warn "cache_timestamp is ${age_hours}h old — consider refreshing with /pre-engagement-cache"
+    else
+      echo "INFO: cache_timestamp: $cache_ts (${age_hours}h ago)"
+    fi
+  else
+    warn "cache_timestamp '$cache_ts' — could not parse as date"
+  fi
+fi
+
 if ((ERRORS > 0)); then
   echo "Validation failed: $ERRORS error(s)"
   exit 1
