@@ -76,6 +76,10 @@ EOF
     fi
 
     local git_host="${RANGE_GIT_HOST:-}"
+    # Strip scheme and trailing slash so a URL pasted as host still works.
+    git_host="${git_host#https://}"
+    git_host="${git_host#http://}"
+    git_host="${git_host%/}"
     local git_user="${RANGE_GIT_USER:-}"
     local git_port="${RANGE_GIT_SSH_PORT:-10022}"
     if [[ -n "$git_host" && -n "$git_user" ]]; then

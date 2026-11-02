@@ -80,6 +80,15 @@ unset -f _load_env_file
 
 # Derive *_URL from *_HOST when URL not explicitly set.
 # MCP servers need full URLs; .env only needs hostnames + tokens.
+# Strip scheme/slash from *_HOST vars so a pasted URL doesn't double-wrap.
+for _host_var in OUTLINE_HOST PROVIDENTIA_HOST RANGE_GIT_HOST; do
+    _v="${!_host_var:-}"
+    if [[ -n "$_v" ]]; then
+        _v="${_v#https://}"; _v="${_v#http://}"; _v="${_v%/}"
+        export "$_host_var=$_v"
+    fi
+done
+unset _host_var _v
 [[ -n "${OUTLINE_HOST:-}" && -z "${OUTLINE_URL:-}" ]] && export OUTLINE_URL="https://${OUTLINE_HOST}"
 # Bridge to local outline-readonly MCP server var names (OUTLINE_API_URL / OUTLINE_API_KEY).
 [[ -n "${OUTLINE_URL:-}" && -z "${OUTLINE_API_URL:-}" ]] && export OUTLINE_API_URL="${OUTLINE_URL}"

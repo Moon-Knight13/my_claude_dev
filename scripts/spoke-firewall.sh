@@ -26,6 +26,11 @@ for var in "${SPOKE_VARS[@]}"; do
     host="${!var:-}"
     [[ -z "$host" ]] && continue
 
+    # Strip scheme and trailing slash so a URL pasted as host still works.
+    host="${host#https://}"
+    host="${host#http://}"
+    host="${host%/}"
+
     ip="$host"
     if [[ ! "$ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
         resolved=$(dig +short A "$host" 2>/dev/null | grep -E '^[0-9]+\.' | head -1)
