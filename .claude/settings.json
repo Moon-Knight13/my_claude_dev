@@ -15,25 +15,16 @@
       }
     },
     "range-intel": {
-      "command": "python3",
-      "args": ["-m", "range_intel.server"],
+      "command": "/workspace/scripts/mcp-wrapper.sh",
+      "args": ["python3", "-m", "range_intel.server"],
       "cwd": "/workspace/mcp-servers/range-intel",
       "env": {
-        "PYTHONPATH": "/workspace/mcp-servers/range-intel/src",
-        "PROVIDENTIA_URL": "${PROVIDENTIA_URL}",
-        "PROVIDENTIA_TOKEN": "${PROVIDENTIA_TOKEN}",
-        "GITLAB_URL": "${GITLAB_URL}",
-        "GITLAB_TOKEN": "${GITLAB_TOKEN}",
-        "GITLAB_PROJECT": "${GITLAB_PROJECT}"
+        "PYTHONPATH": "/workspace/mcp-servers/range-intel/src"
       }
     },
     "outline-readonly": {
-      "command": "node",
-      "args": ["/workspace/mcp-servers/outline-readonly/src/server.js"],
-      "env": {
-        "OUTLINE_API_URL": "${OUTLINE_API_URL}",
-        "OUTLINE_API_KEY": "${OUTLINE_API_KEY}"
-      }
+      "command": "/workspace/scripts/mcp-wrapper.sh",
+      "args": ["node", "/workspace/mcp-servers/outline-readonly/src/server.js"]
     },
     "obsidian-mcp": {
       "command": "npx",
@@ -48,12 +39,9 @@
       "args": ["-y", "mitre-attack-mcp@1.0.1"]
     },
     "tuoni-mcp": {
-      "command": "python3",
-      "args": ["-m", "tuoni_mcp"],
+      "command": "/workspace/scripts/mcp-wrapper.sh",
+      "args": ["python3", "-m", "tuoni_mcp"],
       "env": {
-        "TUONI_URL": "${TUONI_URL}",
-        "TUONI_USERNAME": "${TUONI_USERNAME}",
-        "TUONI_PASSWORD": "${TUONI_PASSWORD}",
         "TUONI_VERIFY_TLS": "false",
         "TUONI_MCP_PROFILES": "agent-ops,access,discovery,authoring,administration"
       }
