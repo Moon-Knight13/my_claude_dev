@@ -41,6 +41,42 @@ Targeting → Recon → Initial Access → Discovery → Priv Esc → Cred Harve
 7. Reference MCPs (HackTricks, MITRE, LOLBins) — only when above insufficient
 8. Web research — last resort
 
+### Engagement YAML Gate (MANDATORY)
+
+Before ANY offensive operation, engagement YAML MUST exist in `engagements/`.
+If it does not exist when entering red-team mode or invoking any kill-chain skill:
+1. Auto-invoke `engagement-state` skill to create it
+2. Auto-invoke `pre-engagement-cache` skill to warm intel
+3. Load reference MCP tool schemas (HackTricks, MITRE, CVE, LOLBins) via ToolSearch
+
+No recon, scanning, exploitation, or lateral movement without engagement state tracking.
+
+### Plugin-First Policy (MANDATORY)
+
+Use tuoni-plugins (TSE DynamicAlias modules) for all target operations before
+falling back to raw sh commands. Available plugins:
+
+- **net-recon**: routing_recon, web_fingerprint, Discovery integration
+- **cred-dump**: 4 Linux + 8 Windows credential modules
+- **persist-swarm**: cron, systemd, authorized_keys (recon_only mode available)
+- **lateral-wmi**: rsh, ssh, wmi methods (auto-tries rsh on Linux)
+- **ad-enum**: workgroup/domain detection, user/group enum
+- **collect-intel**: sweep config dirs for keys/tokens
+- **get-system**: priv esc enumeration (recon_only mode available)
+
+Raw sh commands only when no plugin covers the action or plugin fails.
+
+### Fork Agent Parallelism
+
+For multi-target operations, use Claude fork agents for parallel execution:
+- Parallel recon: one fork per target host
+- Parallel discovery: one fork per compromised agent
+- Parallel persistence: deploy persist-swarm on multiple hosts simultaneously
+- Parallel cred harvest: run cred-dump on all compromised hosts
+
+Sequential operations (target approval, lateral decisions, exploitation) remain
+with the coordinator.
+
 ### Engagement State
 - Engagement YAML tracks all state: targets, phase, agents, cred refs
 - Credentials stored as REFS ONLY — never plaintext in YAML or Obsidian

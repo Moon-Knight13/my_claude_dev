@@ -125,16 +125,22 @@ async def range_environments() -> str:
 
 
 @mcp.tool()
-async def range_targets(env: str, team: int, tag: str = "", role: str = "") -> str:
+async def range_targets(
+    env: str, team: int, tag: str = "", role: str = "",
+    offset: int = 0, limit: int = 50,
+) -> str:
     """List hosts for a team in an environment, enriched with documented vulnerabilities.
 
     Returns merged targets with IPs, vulns, and MITRE mappings.
+    Results are paginated — use offset/limit to page through large inventories.
 
     Args:
         env: Environment ID (e.g. 'dcm')
         team: Team number to resolve instance IPs
         tag: Filter by tag name (optional)
         role: Filter by host role (optional)
+        offset: Starting index for pagination (default 0)
+        limit: Max hosts to return per page (default 50)
     """
     assert _prov is not None
     hosts = await _prov.inventory(env)
@@ -155,11 +161,17 @@ async def range_targets(env: str, team: int, tag: str = "", role: str = "") -> s
 
         targets.append(target)
 
+    total = len(targets)
+    page = targets[offset:offset + limit]
+
     summary = {
         "environment": env,
         "team": team,
-        "total_hosts": len(targets),
-        "with_vulns": sum(1 for t in targets if t.vulns),
+        "total_hosts": total,
+        "offset": offset,
+        "limit": limit,
+        "has_more": offset + limit < total,
+        "with_vulns": sum(1 for t in page if t.vulns),
         "targets": [
             {
                 "host_id": t.host_id,
@@ -174,10 +186,59 @@ async def range_targets(env: str, team: int, tag: str = "", role: str = "") -> s
                 "match_method": t.match_method,
                 "tags": t.tags,
             }
-            for t in targets
+            for t in page
         ],
     }
     return json.dumps(summary, indent=2)
+
+
+@mcp.tool()
+async def range_targets_summary(
+    env: str, team: int, tag: str = "", role: str = "",
+) -> str:
+    """Lightweight host listing — IDs, roles, IPs, and tags only (no vuln enrichment).
+
+    Use this instead of range_targets when you need a quick inventory overview
+    without hitting MCP token limits on large environments.
+
+    Args:
+        env: Environment ID (e.g. 'dcm')
+        team: Team number to resolve instance IPs
+        tag: Filter by tag name (optional)
+        role: Filter by host role (optional)
+    """
+    assert _prov is not None
+    hosts = await _prov.inventory(env)
+
+    results: list[dict[str, Any]] = []
+    for host in hosts:
+        if tag and tag not in host.tags:
+            continue
+        if role and host.role != role:
+            continue
+
+        instance = None
+        for inst in host.instances:
+            if inst.team_nr == team:
+                instance = inst
+                break
+        if instance is None:
+            continue
+
+        results.append({
+            "host_id": host.id,
+            "spec_name": host.spec_name,
+            "role": host.role,
+            "connection_address": instance.connection_address,
+            "tags": host.tags,
+        })
+
+    return json.dumps({
+        "environment": env,
+        "team": team,
+        "total_hosts": len(results),
+        "hosts": results,
+    }, indent=2)
 
 
 @mcp.tool()

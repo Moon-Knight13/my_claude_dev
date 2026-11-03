@@ -23,9 +23,36 @@ Active in: **red-team** mode only.
 - All enumeration through tuoni-mcp agent commands.
 - Minimize command volume — defenders monitor for enumeration bursts.
 
+## Plugin-First Policy (ENFORCED)
+
+Use tuoni-plugins before raw sh commands. Plugin benefits: structured output,
+Tuoni Discovery tab auto-population, consistent OPSEC, audit trail.
+
+| Action | Plugin | Module/Config | Instead of |
+|--------|--------|---------------|------------|
+| OSPF/routing dump | net-recon | routing_recon | `vtysh -c "show ip ospf"` |
+| Web service fingerprint | net-recon | web_fingerprint | `curl`/`nmap` on HTTP |
+| Host/service discovery | net-recon | (default) + discovery=true | manual port scan + `arp -a` |
+| Network interface enum | net-recon | (default) | `ip addr; ip route` |
+
+Raw `sh` commands only when: no plugin covers the action, or plugin fails and
+operator approves fallback.
+
+## Fork Agent Parallelism
+
+When discovering on multiple hosts simultaneously, use fork agents:
+- One fork per target host (each runs plugin commands on its agent)
+- Coordinator merges Discovery results and updates engagement YAML
+- Sequential within each host; parallel across hosts
+
 ## Procedure
 
 ### Step 1: Host Enumeration
+
+**Preferred: use tuoni-plugins.** Run net-recon module via tuoni command
+workflow (commands_search → command_describe → command_prepare →
+operation_execute). Falls back to raw commands below only when plugin
+unavailable or fails.
 
 Execute via tuoni agent commands (native OS tools only):
 

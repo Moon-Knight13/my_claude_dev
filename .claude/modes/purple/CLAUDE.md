@@ -33,6 +33,16 @@ validation ON TOP of red-team operations, not instead of OPSEC.
 #### Deployment Order (RT-DEP)
 - **RT-DEP-001:** ISPs → routers → firewalls → per-enclave: DCs, proxy, mail, workstations.
 
+### Engagement YAML Gate (MANDATORY — inherited from red-team)
+
+Same gate as red-team: engagement YAML must exist before any offensive step.
+Purple mode extends the YAML with `detection_scores` per technique.
+
+### Plugin-First Policy (MANDATORY — inherited from red-team)
+
+Same as red-team. Purple adds: after each plugin execution, pause for detection
+window before querying SIEM/EDR for the technique.
+
 ### Purple Workflow
 
 Every offensive step follows this pattern:

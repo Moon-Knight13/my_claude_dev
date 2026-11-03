@@ -11,6 +11,17 @@ engagement file.
 
 ## Operations
 
+### Mandatory Auto-Creation Gate
+
+This skill MUST be invoked automatically when:
+- Session enters red-team, purple, or red-dev mode
+- Operator names a target scope and no engagement YAML exists
+- Any kill-chain skill (recon, initial-access, discovery, cred-harvest, persist-swarm, lateral-move) is invoked and no engagement YAML exists
+
+If no engagement YAML exists, CREATE ONE before allowing any other skill to proceed. Prompt operator for engagement ID if not obvious from context.
+
+After creation, auto-invoke `pre-engagement-cache` skill to warm Providentia data per-host (not bulk) and load reference MCP tool schemas via ToolSearch.
+
 ### Create Engagement
 
 Trigger: operator says "new engagement", "start engagement", or no engagement

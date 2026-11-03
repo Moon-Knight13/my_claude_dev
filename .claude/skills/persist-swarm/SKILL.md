@@ -30,6 +30,20 @@ until BOTH beacons are confirmed active.
 - RT-SIG-004: right-sized binary padding
 - RT-SIG-001: `root` agent identity
 
+## Plugin-First Policy (ENFORCED)
+
+Use `persist-swarm` tuoni-plugin for deployment:
+
+| Action | Plugin Config | Instead of |
+|--------|--------------|------------|
+| Enumerate persistence options | recon_only=true | Manual crontab/systemctl check |
+| Deploy cron persistence | method=cron | Manual `crontab -e` |
+| Deploy systemd persistence | method=systemd | Manual unit file creation |
+| Deploy SSH key persistence | method=authorized_keys | Manual key injection |
+
+Plugin handles: cover filenames, payload staging, mechanism installation,
+verification. Use raw commands only when plugin fails and operator approves.
+
 ## Procedure
 
 ### Step 1: Assess host environment

@@ -39,6 +39,19 @@ Sequence on every new host:
 - RT-TGT-002: no tools uploaded to target
 - RT-DEP-001: deployment order (ISPs > routers > firewalls > per-enclave)
 
+## Plugin-First Policy (ENFORCED)
+
+Use `lateral-wmi` tuoni-plugin (renamed from lateral-move):
+
+| Action | Plugin Config | Instead of |
+|--------|--------------|------------|
+| Linux rsh lateral | method=rsh | Manual `rsh -l root` |
+| Linux SSH lateral | method=ssh | Manual SSH commands |
+| Windows WMI lateral | method=wmi | Manual WMI/WinRM |
+
+Plugin auto-tries rsh first on Linux. Credentials pulled from Tuoni
+credential store — requires creds stored via `tuoni_credential_add` first.
+
 ## Phases
 
 ### Phase 1: Target Selection

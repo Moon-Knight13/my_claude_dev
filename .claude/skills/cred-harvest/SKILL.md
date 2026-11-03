@@ -40,6 +40,21 @@ Active in: **red-team** mode only.
 - All harvesting commands run through tuoni agent on target
 - Heavy processing (hash cracking) on Kali only
 
+## Plugin-First Policy (ENFORCED)
+
+Use tuoni-plugins for credential operations:
+
+| Action | Plugin | Instead of |
+|--------|--------|------------|
+| Shadow/SSH/config/history dump | cred-dump (4 Linux modules) | `cat /etc/shadow` |
+| Windows SAM/LSA/DPAPI/vault | cred-dump (8 Windows modules) | Manual registry/file reads |
+| Auto-store to Tuoni creds | cred-dump (built-in) | Manual `tuoni_credential_add` |
+
+After any successful credential recovery:
+1. Immediately store in Tuoni via `tuoni_credential_add`
+2. Record ref in engagement YAML (tuoni_cred_id only, never plaintext)
+3. Write Obsidian ref page: `wiki/<hostname>-creds.md`
+
 ## Phases
 
 ### Phase 1: Credential Source Research

@@ -56,6 +56,13 @@ is insufficient for the question.
 
 Query ALL Tier 1 + Tier 2 sources. Build target profile:
 
+**Providentia query strategy:** Use `range_host(env, host_id, team)` for
+individual host lookups. Use `range_targets_summary(env, team)` for inventory
+overview (lightweight, no vuln enrichment). Avoid `range_targets` without
+filters on large environments (>50 hosts) — use tag/role filters or pagination
+(`offset`/`limit`). If bulk query exceeds MCP token limit, fall back to
+per-host queries iterated over known host IDs.
+
 ```
 Target: <hostname>
 OS: <from Providentia>
