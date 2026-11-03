@@ -7,16 +7,19 @@
 # .env vars flow consistently — no stale baked-in values.
 #
 # Usage:
-#   setup-mcp-servers.sh              # all servers (no mode filter)
-#   setup-mcp-servers.sh red-team     # only servers in red-team manifest
+#   setup-mcp-servers.sh              # all servers → .mcp.json
+#   setup-mcp-servers.sh red-team     # red-team servers → .mcp-red-team.json
 #   setup-mcp-servers.sh --list       # print catalog server names
 #
-# Idempotent: overwrites .mcp.json each run. .mcp.json is gitignored.
+# When a mode is specified, output goes to .mcp-<mode>.json (parallel-safe).
+# When no mode is specified (or "all"), output goes to .mcp.json.
+#
+# Idempotent: overwrites target file each run. All .mcp*.json are gitignored.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-MCP_FILE="$PROJECT_DIR/.mcp.json"
+MCP_FILE=""  # set below based on mode
 MCP_PKG_DIR="$PROJECT_DIR/.mcp-packages"
 MODES_DIR="$PROJECT_DIR/.claude/modes"
 
@@ -106,6 +109,13 @@ if [[ "$MODE" != "all" && -z "${MODE_SERVERS[$MODE]+x}" ]]; then
     echo "Unknown mode: $MODE" >&2
     echo "Available: ${!MODE_SERVERS[*]}" >&2
     exit 1
+fi
+
+# Per-mode output file (parallel-safe); "all" goes to .mcp.json
+if [[ "$MODE" == "all" ]]; then
+    MCP_FILE="$PROJECT_DIR/.mcp.json"
+else
+    MCP_FILE="$PROJECT_DIR/.mcp-${MODE}.json"
 fi
 
 SERVER_LIST="${MODE_SERVERS[$MODE]}"

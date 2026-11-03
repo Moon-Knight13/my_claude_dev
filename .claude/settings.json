@@ -1,5 +1,5 @@
 {
-  "_comment": "Base settings — always active regardless of mode. Hooks and guards live here. Mode-specific MCP servers are merged on top by /mode skill.",
+  "_comment": "Base settings — always active regardless of mode. Hooks and guards live here. MCP servers are in .mcp-<mode>.json, selected at launch by start-mode.sh.",
   "_pii_shield_note": "PII-Shield (gregmos/PII-Shield) anonymizes content before it reaches Claude. Install manually: Settings > Extensions > drag in the .mcpb file. See docs/TEMPLATE_GUIDE.md#pii--privacy-controls for details.",
   "_statusline_note": "The caveman statusline badge is auto-configured by scripts/install-caveman.sh at container start into user-level settings (~/.claude/settings.json), because the plugin script lives at a hash-versioned cache path. Do not hardcode a statusLine here.",
   "_mcp_note": "MCP servers live in .mcp.json (Claude Code reads them from there, not here). This file is for hooks, permissions, and mode notes only.",
@@ -36,5 +36,5 @@
       }
     ]
   },
-  "_mode_note": "Active mode is set by /mode skill."
+  "_mode_note": "Active mode is set at launch by scripts/start-mode.sh. See /mode for info."
 }
