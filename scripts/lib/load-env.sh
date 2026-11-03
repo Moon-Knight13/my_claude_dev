@@ -97,6 +97,15 @@ unset _host_var _v
 [[ -n "${RANGE_GIT_HOST:-}" && -z "${GITLAB_URL:-}" ]] && export GITLAB_URL="https://${RANGE_GIT_HOST}"
 [[ -n "${SPOKE_KALI_HOST:-}" && -z "${TUONI_URL:-}" ]] && export TUONI_URL="https://${SPOKE_KALI_HOST}:${SPOKE_KALI_C2_WEB_PORT:-8443}"
 
+# Enforce https:// on URL vars — catches bare hostnames set directly in .env.
+for _url_var in PROVIDENTIA_URL OUTLINE_API_URL OUTLINE_URL GITLAB_URL TUONI_URL; do
+    _v="${!_url_var:-}"
+    if [[ -n "$_v" && "$_v" != https://* && "$_v" != http://* ]]; then
+        export "$_url_var=https://$_v"
+    fi
+done
+unset _url_var _v
+
 # Ghidra / JDK defaults for rea-mcp (set by install-ghidra-backend.sh).
 [[ -z "${GHIDRA_INSTALL_DIR:-}" ]] && export GHIDRA_INSTALL_DIR="/home/node/.local/share/ghidra/ghidra_12.1.4_PUBLIC"
 [[ -z "${JAVA_HOME:-}" ]] && export JAVA_HOME="/home/node/.local/share/ghidra/jdk-21.0.7+6"
