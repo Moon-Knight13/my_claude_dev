@@ -2,6 +2,31 @@
 set -euo pipefail  # Exit on error, undefined vars, and pipeline failures
 IFS=$'\n\t'       # Stricter word splitting
 
+# ── Permissive mode: allow all outbound, skip restrictive rules ──────────────
+# Container process/filesystem isolation still protects the host.
+# Set FIREWALL_MODE=permissive in .env to enable (for spoke/MCP debugging).
+FIREWALL_MODE="${FIREWALL_MODE:-strict}"
+if [[ "$FIREWALL_MODE" == "permissive" ]]; then
+    echo "=========================================="
+    echo "  FIREWALL MODE: PERMISSIVE"
+    echo "  All outbound traffic allowed."
+    echo "  Container isolation still active."
+    echo "  Set FIREWALL_MODE=strict to re-enable."
+    echo "=========================================="
+    iptables -F 2>/dev/null || true
+    iptables -X 2>/dev/null || true
+    iptables -P INPUT ACCEPT
+    iptables -P FORWARD DROP
+    iptables -P OUTPUT ACCEPT
+    iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+    iptables -A INPUT -i lo -j ACCEPT
+    iptables -A OUTPUT -o lo -j ACCEPT
+    echo "Firewall configuration complete (permissive)"
+    exit 0
+fi
+
+# ── Strict mode (default) ───────────────────────────────────────────────────
+
 # 1. Extract Docker DNS info BEFORE any flushing
 DOCKER_DNS_RULES=$(iptables-save -t nat | grep "127\.0\.0\.11" || true)
 
