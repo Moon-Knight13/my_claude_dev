@@ -20,6 +20,7 @@ secrets.*
 .claude/cache/
 .claude/history/
 .claude/statsig/
+.claude/.active-mode
 .ai/
 
 # BMAD generated output (installed at container start by scripts/install-bmad.sh;

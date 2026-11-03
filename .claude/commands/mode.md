@@ -1,12 +1,12 @@
 ---
 name: mode
-description: "Switch operational mode. Usage: /mode <mode-name> — rewrites CLAUDE.md + settings.json from mode templates. Requires session restart."
+description: "Switch operational mode. Usage: /mode <mode-name> — rewrites CLAUDE.md + .mcp.json from mode templates. Requires session restart."
 ---
 
 # Mode Switching
 
 Switch the session to a different operational mode. Each mode configures
-different MCP servers, permissions, OPSEC rules, and documentation pipelines.
+different MCP servers, OPSEC rules, and documentation pipelines.
 
 ## Available Modes
 
@@ -24,27 +24,35 @@ When the operator invokes `/mode <name>`:
 
 ### 1. Validate
 
-Read the mode template directory at `.claude/modes/<name>/`. Check:
-- Directory exists
-- `CLAUDE.md` fragment exists and is non-empty
-- `settings.json` fragment exists and is valid JSON
-
+Check `.claude/modes/<name>/` exists with `CLAUDE.md` and `settings.json`.
 If validation fails, report what is missing and refuse the switch.
 
-### 2. Merge Settings
+### 2. Generate .mcp.json
 
-Read `.claude/modes/base/settings.json` (hooks, guards, base MCP servers).
-Read `.claude/modes/<name>/settings.json` (mode-specific MCP servers).
+Run `setup-mcp-servers.sh` with the mode name to generate `.mcp.json` with
+only the servers that mode needs. Server configs are centralized in the
+script's catalog — modes do not define server configs.
 
-Merge:
-- Base `hooks` are ALWAYS preserved (guards must stay active in all modes)
-- Base `mcpServers` are included (local-ollama always available)
-- Mode `mcpServers` are added on top (may override base if same key)
-- Base meta fields (`_pii_shield_note`, `_statusline_note`) preserved
+```bash
+bash scripts/setup-mcp-servers.sh "$MODE_NAME"
+```
 
-Write merged result to `.claude/settings.json`.
+### 3. Merge Settings
 
-### 3. Merge CLAUDE.md
+Read `.claude/modes/base/settings.json` (hooks, guards — always active).
+Read `.claude/modes/<name>/settings.json` (mode metadata).
+
+Merge: base hooks are ALWAYS preserved. Mode metadata (`_mode`, `_description`)
+is added. No MCP servers in settings — those are in `.mcp.json`.
+
+```bash
+jq -n \
+  --slurpfile base .claude/modes/base/settings.json \
+  --slurpfile mode ".claude/modes/$MODE_NAME/settings.json" \
+  '$base[0] * $mode[0]' > .claude/settings.json
+```
+
+### 4. Merge CLAUDE.md
 
 Read `.claude/modes/base/CLAUDE.md` (workflow contract — always active).
 Read `.claude/modes/<name>/CLAUDE.md` (mode-specific instructions).
@@ -52,56 +60,30 @@ Read `.claude/modes/<name>/CLAUDE.md` (mode-specific instructions).
 Concatenate: base CLAUDE.md + blank line + mode CLAUDE.md.
 Write to `CLAUDE.md` at repository root.
 
-### 4. Report and Restart
-
-Tell the operator:
-- Which mode was applied
-- Which MCP servers are now active
-- Any OPSEC rules now in effect
-- **They must restart the session** for CLAUDE.md changes to take effect
-
-Do NOT attempt to restart the session programmatically. The operator
-restarts manually (exit + re-enter, or `/clear`).
-
-## Implementation
-
-Execute these steps using Bash (read JSON, merge with jq) and Write tool.
-Validate before writing — never write a broken config.
-
-```bash
-# Validate mode exists
-MODE_DIR=".claude/modes/$MODE_NAME"
-if [[ ! -d "$MODE_DIR" ]]; then
-  echo "Mode '$MODE_NAME' not found. Available: $(ls .claude/modes/ | grep -v base)"
-  exit 1
-fi
-
-# Validate files
-[[ -s "$MODE_DIR/CLAUDE.md" ]] || { echo "Missing CLAUDE.md in $MODE_DIR"; exit 1; }
-jq empty "$MODE_DIR/settings.json" 2>/dev/null || { echo "Invalid settings.json in $MODE_DIR"; exit 1; }
-```
-
-### Settings merge (jq)
-
-```bash
-jq -n \
-  --slurpfile base .claude/modes/base/settings.json \
-  --slurpfile mode ".claude/modes/$MODE_NAME/settings.json" '
-  $base[0] + {
-    mcpServers: (($base[0].mcpServers // {}) + ($mode[0].mcpServers // {})),
-    _mode: $mode[0]._mode,
-    _description: $mode[0]._description
-  }
-'
-```
-
-### CLAUDE.md merge
-
 ```bash
 cat .claude/modes/base/CLAUDE.md > CLAUDE.md
 echo "" >> CLAUDE.md
 cat ".claude/modes/$MODE_NAME/CLAUDE.md" >> CLAUDE.md
 ```
+
+### 5. Write mode state file
+
+Write current mode to `.claude/.active-mode` for statusline and other scripts.
+
+```bash
+echo "$MODE_NAME" > .claude/.active-mode
+```
+
+### 6. Report and Restart
+
+Tell the operator:
+- Which mode was applied
+- Which MCP servers are now active (from `setup-mcp-servers.sh` output)
+- Any OPSEC rules now in effect
+- **They must restart the session** for CLAUDE.md changes to take effect
+
+Do NOT attempt to restart the session programmatically. The operator
+restarts manually (exit + re-enter, or `/clear`).
 
 ## Safety
 

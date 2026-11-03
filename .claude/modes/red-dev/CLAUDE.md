@@ -45,9 +45,9 @@ Every completed exploit produces:
 - `techniques/<CVE-or-name>/pickup-card.md` — red-team operational summary
 
 ### Available MCP Servers
-- eip-mcp — CVE details, EPSS scores, exploit availability
+- tuoni-mcp — test payload deployment (test range only)
+- rea-mcp — reverse engineering: binary analysis, decompilation, protocol RE
 - hacktricks-mcp — attack technique research
 - mitre-mcp — ATT&CK technique mapping
 - obsidian-mcp — technique notes read/write
-- tuoni-mcp — test payload deployment (test range only)
-- local-ollama — code assistance
+- lolbins-mcp — living-off-the-land binary abuse reference

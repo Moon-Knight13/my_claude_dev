@@ -82,7 +82,7 @@ Total per technique: 0-12. Engagement total: average across all techniques.
 3. Wiki repo-docs / vulns-docs
 4. Tuoni Discovery — live C2 state
 5. Obsidian — tactical notes
-6. Reference MCPs (HackTricks, MITRE, GTFOBins, eip-mcp)
+6. Reference MCPs (HackTricks, MITRE, LOLBins)
 7. Web research — last resort
 
 ### State Writes
@@ -110,5 +110,4 @@ findings:
 - obsidian-mcp — tactical notes
 - hacktricks-mcp — attack techniques
 - mitre-mcp — ATT&CK mapping
-- gtfobins-mcp — Unix binary abuse
-- local-ollama — code assistance
+- lolbins-mcp — living-off-the-land binary abuse

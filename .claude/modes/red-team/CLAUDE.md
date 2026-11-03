@@ -38,7 +38,7 @@ Targeting → Recon → Initial Access → Discovery → Priv Esc → Cred Harve
 4. Wiki vulns-docs collection — vulnerability research, prior findings
 5. Tuoni Discovery — live C2 state (queried fresh, never cached)
 6. Obsidian notes — operator tactical knowledge
-7. Reference MCPs (HackTricks, MITRE, GTFOBins, eip-mcp) — only when above insufficient
+7. Reference MCPs (HackTricks, MITRE, LOLBins) — only when above insufficient
 8. Web research — last resort
 
 ### Engagement State
@@ -64,5 +64,4 @@ Proxychains on Kali routes through C2 tunnel to reach internal targets.
 - obsidian-mcp — tactical notes read/write
 - hacktricks-mcp — attack technique research
 - mitre-mcp — ATT&CK technique mapping
-- gtfobins-mcp — Unix binary abuse
-- local-ollama — code assistance
+- lolbins-mcp — living-off-the-land binary abuse (Windows + Linux)
