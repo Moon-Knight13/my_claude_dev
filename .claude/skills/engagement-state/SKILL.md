@@ -1,0 +1,193 @@
+---
+name: engagement-state
+description: "Create, update, query, and resume engagement state (YAML). Triggers: 'engagement', 'state', 'resume engagement', 'what targets', 'new engagement', 'add target', 'record technique', 'what creds'."
+---
+
+# Engagement State Management
+
+Manage engagement state across sessions. State lives in `engagements/<id>.yaml`
+(gitignored). Every red-team, purple, and red-dev session operates against an
+engagement file.
+
+## Operations
+
+### Create Engagement
+
+Trigger: operator says "new engagement", "start engagement", or no engagement
+file exists when entering red-team/purple/red-dev mode.
+
+1. Ask operator for engagement ID (short slug, e.g. `dcm27-t10-nov`).
+2. Read `.env` for `OPERATOR_CALLSIGN` and `OPERATOR_TEAM`.
+3. Query `tuoni_agents_list` for current agent inventory.
+4. Write `engagements/<id>.yaml`:
+
+```yaml
+engagement_id: <id>
+start_date: <YYYY-MM-DD>
+operator: <callsign>
+team: <team>
+mode: <active-mode>
+status: active
+
+targets: []
+# Targets added ONLY after explicit operator approval (RT-TGT-001).
+# Each entry: {host, ip, role, approved_by, approved_at, status}
+
+agents:
+  # Populated from tuoni_agents_list. Refreshed each session.
+  # Each entry: {agent_id, hostname, ip, os, integrity, listener, first_seen, last_seen}
+
+credentials: []
+# REFS ONLY — never plaintext passwords, hashes, or keys.
+# Each entry: {ref_id, tuoni_cred_id, type, username, domain, source_host, source_technique, notes}
+# ref_id is a local slug for cross-referencing in findings.
+
+findings: []
+# Each entry: {id, target, technique_id, technique_name, result, timestamp, notes}
+# result: success | partial | failed | blocked
+
+techniques_tried: []
+# Per-target technique log. Each: {target, technique_id, technique_name, phase, result, agent_id, timestamp}
+
+next_steps: []
+# Operator-curated task list. Each: {priority, target, action, notes}
+
+# Purple mode extension (present only in purple engagements)
+# detection_scores: []
+# Each: {technique_id, technique_name, target, time_to_detect, alert_fidelity,
+#         action_completeness, payload_uniqueness, total, notes}
+```
+
+5. Ensure `engagements/` directory exists and is in `.gitignore`.
+6. Report: engagement created, agent count, ready for target approval.
+
+### Add Targets
+
+Trigger: operator approves targets ("approve target <host>", "add target",
+"these hosts are in scope").
+
+**RT-TGT-001 ENFORCED:** Do NOT add targets without explicit operator approval
+in the current message. Discovered hosts are NOT automatically in scope.
+
+1. Confirm operator explicitly named the targets in this message.
+2. For each target, query `range_targets` or `range_host` via range-intel for
+   ground truth (IP, role, OS, services).
+3. Append to `targets` list with `approved_by: operator`, `approved_at: <now>`,
+   `status: active`.
+4. Report: targets added, total scope count.
+
+### Record Technique Outcome
+
+Trigger: after executing an offensive technique, "record technique",
+"log finding", or automatically at end of each kill chain step.
+
+1. Append to `techniques_tried` with target, technique ID (MITRE ATT&CK where
+   applicable), phase, result, agent used, timestamp.
+2. If result is `success` or `partial`, also append to `findings`.
+3. If credentials were obtained, add credential REF (see below).
+4. Write updated YAML.
+
+### Add Credential Reference
+
+Trigger: credentials harvested during engagement.
+
+**REFS ONLY — never store plaintext passwords, hashes, tickets, or keys in
+the engagement YAML or Obsidian notes.**
+
+1. Store actual credential in Tuoni credential store via `tuoni_credential_add`.
+2. Record in engagement YAML `credentials` list:
+   - `tuoni_cred_id`: ID from Tuoni store
+   - `type`: password | hash | ticket | key | token
+   - `username`, `domain`: identity info (these are not secrets)
+   - `source_host`, `source_technique`: provenance
+   - `notes`: brief context
+3. Credential refs can be cross-referenced by `ref_id` in findings and
+   technique logs.
+
+### Record Detection Score (Purple Mode)
+
+Trigger: after detection validation step in purple mode.
+
+1. Append to `detection_scores` (create list if first score):
+   - `technique_id`, `technique_name`, `target`
+   - `time_to_detect`: 0-3 (0=not detected, 1=>10min, 2=1-10min, 3=<1min)
+   - `alert_fidelity`: 0-3 (0=no alert, 1=generic, 2=correct category, 3=exact)
+   - `action_completeness`: 0-3 (0=no response, 1=logged, 2=alert+ticket, 3=auto-block)
+   - `payload_uniqueness`: 0-3 (0=known sig, 1=modified, 2=custom+detected, 3=custom+missed)
+   - `total`: sum of above (0-12)
+   - `notes`: detection details
+2. Report running average score across all techniques.
+
+### Query Engagement
+
+Trigger: "what targets", "what creds", "what techniques worked on <host>",
+"engagement status", "scope check".
+
+Read engagement YAML and answer the query:
+- **Targets**: list with status, IP, role
+- **Credentials**: list refs with username, type, source (never actual creds)
+- **Techniques on host**: filter `techniques_tried` by target
+- **Findings**: filter by result=success/partial
+- **Next steps**: current task list
+- **Detection scores** (purple): per-technique and average
+- **Status summary**: target count, agent count, finding count, cred ref count
+
+### Cross-Session Resume
+
+Trigger: session start in red-team/purple/red-dev mode, operator says "resume",
+or skill detects existing engagement file.
+
+1. Find most recent engagement YAML in `engagements/` (by `start_date` or
+   file modification time). If multiple, ask operator which to resume.
+2. Read engagement YAML.
+3. Refresh agent list from `tuoni_agents_list` — update `agents` section,
+   flag agents that disappeared since last session.
+4. Summarize state to operator:
+   - Engagement ID, start date, mode
+   - Active targets (count + list)
+   - Live agents (count, any lost since last session)
+   - Credential refs (count)
+   - Last technique tried + result
+   - Next steps from previous session
+5. Ask operator: "Resume this engagement? Any scope changes?"
+
+### Update Next Steps
+
+Trigger: "next steps", "plan next", "what's next", or end of session.
+
+1. Read current `next_steps` from engagement YAML.
+2. Based on conversation context, update the list:
+   - Mark completed items
+   - Add new items from current session findings
+   - Prioritize by kill chain phase and opportunity
+3. Write updated YAML.
+4. At session end, remind operator of top 3 next steps.
+
+## Documentation Pipeline
+
+When findings accumulate, write structured documentation:
+
+- **Obsidian raw/**: immutable intake dumps (scan output, command output).
+  Write via `obsidian_create_note` with timestamp prefix. Never modify after
+  creation.
+- **Obsidian wiki/**: AI-maintained structured pages. One page per target
+  (host profile, findings, techniques, cred refs). One page per technique
+  used (procedure, targets, results, detection notes). Update via
+  `obsidian_edit_note` as findings grow.
+
+## File Locations
+
+- `engagements/<id>.yaml` — engagement state (gitignored)
+- `engagements/` directory — created automatically, added to `.gitignore`
+- Obsidian vault — tactical documentation (via obsidian-mcp)
+- Tuoni credential store — actual credentials (via tuoni-mcp)
+
+## Safety
+
+- **RT-TGT-001**: never add targets without explicit operator approval in
+  the current message. "I found host X" is NOT approval.
+- **Credentials**: REFS ONLY in YAML and Obsidian. Actual values in Tuoni
+  cred store only.
+- **No secrets in engagement YAML**: no passwords, hashes, keys, tokens.
+  Only metadata and references.
+- **Gitignored**: `engagements/` must be in `.gitignore`. Verify on create.

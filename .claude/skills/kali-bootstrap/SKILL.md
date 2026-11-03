@@ -15,6 +15,17 @@ to red-team.
 - Host VPN connected to range
 - Container firewall initialized (`spoke-firewall.sh` ran at startup)
 
+## SSH vs Tuoni user context
+
+Two users, two paths — do not confuse them:
+
+- **SSH to Kali** (`rt` user): container→kali management path. Uses the
+  `kali` SSH alias (configured as `User rt` in `~/.ssh/config`). This is
+  NOT outbound from Kali to targets, so `rt` is acceptable here.
+- **Tuoni self-agent** (`root`): runs as root on Kali. All commands
+  executed through the agent run as root. Per RT-SIG-001, outbound C2
+  and lateral movement MUST use `root`, never `rt`-prefixed usernames.
+
 ## Procedure
 
 ### Step 1: Firewall Check
@@ -30,16 +41,15 @@ If still failing: check `.env` has correct `SPOKE_KALI_HOST`.
 
 ### Step 2: SSH Auth Check
 
-Test SSH authentication to Kali:
+Test SSH authentication to Kali via the configured SSH alias:
 
 ```bash
-ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new \
-    "${SPOKE_KALI_USER:-rt}@${SPOKE_KALI_HOST}" whoami
+ssh -o BatchMode=yes -o ConnectTimeout=5 kali whoami
 ```
 
 If auth fails:
 1. Print container pubkey: `cat ~/.ssh/id_ed25519.pub`
-2. Tell operator: "Add this SSH key to rt@kali — run `ssh-copy-id rt@<kali-ip>` from host, or paste into authorized_keys"
+2. Tell operator: "Add this SSH key to kali — run `ssh-copy-id kali` from host, or paste into authorized_keys"
 3. Wait for operator confirmation
 4. Re-check SSH auth
 
@@ -53,12 +63,12 @@ curl -sk --connect-timeout 5 "https://${SPOKE_KALI_HOST}:${SPOKE_KALI_C2_WEB_POR
 
 If unreachable: SSH to Kali and check service status:
 ```bash
-ssh rt@<kali> systemctl status tuoni
+ssh kali systemctl status tuoni
 ```
 
 ### Step 4: Check for Self-Agent
 
-Use tuoni-mcp `tuoni_agents_list` to find agent on Kali hostname.
+Use `tuoni_agents_list` to find agent on Kali hostname.
 
 If agent exists:
 - Record agent ID
@@ -66,30 +76,49 @@ If agent exists:
 
 ### Step 5: Deploy Self-Agent (if missing)
 
-1. List listeners via `tuoni_listeners_list` — find or create HTTP listener
+1. List listeners via `tuoni_listeners_list` — find or create HTTPS listener
    on Kali localhost (127.0.0.1)
-2. Generate Linux payload for Kali architecture via tuoni-mcp
-3. Deploy payload to Kali:
-   - Preferred: `tuoni_upload_file` to upload, then execute via SSH
-   - Fallback: SCP payload to Kali, SSH to execute
-4. Wait for agent to check in (poll `tuoni_agents_list`)
+2. Create payload via `tuoni_payload_create` for Linux/x64
+3. Download payload via `tuoni_payload_download` — save to local temp
+4. SCP payload to Kali and execute via SSH:
+   ```bash
+   scp /tmp/payload kali:/tmp/agent && ssh kali 'chmod +x /tmp/agent && nohup /tmp/agent &'
+   ```
+5. Wait for agent to check in (poll `tuoni_agents_list`)
 
 ### Step 6: Verify Self-Agent
 
-Send test commands through tuoni-mcp to Kali self-agent:
+Send test commands through tuoni-mcp to Kali self-agent. Use the
+standard tuoni-mcp command execution flow:
 
-```
-tuoni_send_command: whoami    → expect "root"
-tuoni_send_command: ip addr   → verify Kali IP matches SPOKE_KALI_HOST
-tuoni_send_command: which nmap → verify tools available
-```
+1. `tuoni_commands_search` — find a shell command (e.g. search "shell" or "execute")
+2. `tuoni_command_describe` — get parameter schema
+3. `tuoni_command_prepare` — validate with test command (`whoami`)
+4. `tuoni_operation_execute` — run on Kali self-agent
+5. `tuoni_command_get` — poll until result arrives
+
+Verify:
+- `whoami` returns `root`
+- `ip addr` shows IP matching `SPOKE_KALI_HOST`
+- `which nmap` confirms tools available
 
 ### Step 7: Deploy Plugins
 
-Check tuoni-plugins are loaded:
-- Use tuoni-mcp to list available modules
-- If missing: upload plugin JARs via `tuoni_upload_file`
-- Verify 12 TSE DynamicAlias modules available
+Check tuoni-plugins are loaded. Use `tuoni_command_plugin_commands_list`
+or `tuoni_commands_search` to list available DynamicAlias modules.
+
+If modules missing:
+- Plugins are TSE DynamicAlias Python scripts, NOT JAR files
+- Deployment is via Tuoni web UI (Administration → Command Plugins) or
+  REST API — not file upload through MCP
+- Tell operator: "Upload DynamicAlias modules via Tuoni web UI at
+  https://<kali>:8443 → Administration → Command Plugins"
+- After operator uploads, re-check with `tuoni_commands_search`
+
+Verify 14 TSE DynamicAlias modules available (see tuoni-plugins README
+for full list: host-id, net-recon, vuln-assess, lateral-move, get-system,
+persist-swarm, cred-dump, ad-enum, agent-watcher, collect-intel,
+ioc-cleanup, log-clear, exfil-stage, payload-gen).
 
 ### Step 8: Record State
 
@@ -107,5 +136,5 @@ All must be true:
 - [ ] SSH auth working (key accepted)
 - [ ] Tuoni API responding on :8443
 - [ ] Self-agent connected and executing commands
-- [ ] tuoni-plugins loaded (12 modules)
+- [ ] tuoni-plugins loaded (14 modules)
 - [ ] Agent ID recorded in engagement YAML
