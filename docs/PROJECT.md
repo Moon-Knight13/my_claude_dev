@@ -6,37 +6,66 @@ from its template (2026-10-16), so no sync overwrites either file.
 
 ## What this repository is
 
-Two distinct things live here, and confusing them wastes time:
+An AI-driven cyber operations operator framework, built on a hub-and-spoke
+architecture. Three things live here, and confusing them wastes time:
 
-1. **Provisioning for remote developer boxes** — the primary purpose. A laptop
+1. **The hub** — the primary purpose. A devcontainer (`.devcontainer/`) that
+   serves as the operating environment for Claude Code sessions. It wires up MCP
+   servers, SSH proxy chains, safety gates, and mode-specific configuration so an
+   operator can run red team, green dev, purple team, red dev, and range-build
+   workflows from a single seat. The hub reaches spokes through `.env`-configured
+   connections, not hardcoded endpoints.
+2. **Spoke integrations** — MCP servers and SSH tunnels that connect the hub to
+   range infrastructure: Kali (Tuoni C2), deploy box (catapult/ctp-bridge),
+   Providentia (CMDB), GitLab, Outline wiki, and Obsidian vault. Each spoke is
+   configured by hostname/token in `.env` and derived at startup by
+   `scripts/lib/load-env.sh`.
+3. **Provisioning for remote developer boxes** — a secondary capability. A laptop
    bootstrap (`scripts/local/`) wires up SSH and Remote-SSH; an on-box
-   provisioner (`scripts/host/provision-remote-box.sh`) brings a box to a known
-   good state. This is what other developers consume.
-2. **A devcontainer for developing *this* repository** (`.devcontainer/`),
-   inherited from the upstream template.
+   provisioner (`scripts/host/provision-remote-box.sh`) brings a shared box to a
+   known good state. This is what other developers consume.
 
-**The devcontainer ships nothing to a remote box.** Tooling reaches a box
-through `provision-remote-box.sh`, which reuses the shared scripts in
-`scripts/` — `install-caveman.sh`, `install-claude-plugins.sh`. To change what
-developers get on a box, change the shared script. Editing `.devcontainer/`
-only changes how this repo is developed.
-
-Because those scripts are shared, a change to one affects both surfaces. Test
-accordingly: an environment variable that only exists in `devcontainer.json` is
-not available on a box.
+Because provisioning scripts in `scripts/` are shared between the devcontainer
+and remote-box surfaces, a change to one affects both. Test accordingly: an
+environment variable that only exists in `devcontainer.json` is not available
+on a box.
 
 ## Operating environment
 
-The boxes are **shared, multi-user workstations on a restricted network**, used
-for development and for security-testing work. Three consequences drive
-everything below:
+The hub runs as a **devcontainer on the operator's laptop**, connecting to
+spokes on a **restricted network** used for development and security-testing
+work. The remote boxes are **shared, multi-user workstations** on that same
+network. Three consequences drive everything below:
 
-- **A shared OS account.** Everyone signs in as the same user and everyone has
-  sudo. There is no per-developer boundary on the box.
+- **A shared OS account** (on remote boxes). Everyone signs in as the same user
+  and everyone has sudo. There is no per-developer boundary on a box.
 - **Sensitive working data.** Material handled during that work is confidential
   and must not leave the box or reach this repository.
 - **Restricted egress.** Network access is limited; new outbound hosts are a
-  deliberate change, not an incidental one.
+  deliberate change, not an incidental one. The devcontainer enforces this with
+  an egress firewall (`/firewall-allow` for changes).
+
+### Hub-and-spoke topology
+
+- **Hub:** this repo's devcontainer, running Claude Code with 9+ MCP servers.
+- **Kali spoke (primary):** Tuoni C2 agent is the main channel. Hosts C2
+  server, plugins, native tools. SSH is fallback only.
+- **Deploy box spoke:** deployed code state, catapult container, ctp-bridge
+  gate. Allocation from wiki, put in `.env` by operator.
+- **Range services:** Providentia (CMDB, source of truth for networks/compute),
+  GitLab (code), Outline wiki (documentation).
+- **Obsidian vault:** engagement documentation, findings, timeline.
+
+SSH reaches spokes through a proxy chain: container → host (hub) → deploybox →
+range-git, and container → host → kali. The host SSH server is the pivot point;
+in host-network mode the hub hostname resolves to `127.0.0.1`.
+
+### Truth hierarchy
+
+When sources conflict: **Providentia > deploy box > Kali state** (authoritative).
+**GitLab > Outline wiki > Obsidian vault** (reference/context only). Wiki is
+messy — never parse wiki tables for config or allocations. Operator puts
+allocations in `.env`.
 
 ### Authorized scope
 
