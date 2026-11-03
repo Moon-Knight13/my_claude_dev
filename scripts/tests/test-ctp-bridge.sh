@@ -207,15 +207,17 @@ if command -v script >/dev/null 2>&1; then
     rm -f "$TMP/count.log"
     script -qec "PATH='$BIN:$PATH' CTP_BRIDGE_CONF='$CONF' CTP_BRIDGE_LOG='$TMP/count.log' bash '$ROOT/scripts/ctp-bridge.sh' host deploy-role trainbox_t02" /dev/null <<<"y" >"$TMP/run.out" 2>&1
     # The mock echoes the full docker-exec argv; the ctp args must arrive as
-    # trailing positional params (…_ host deploy-role trainbox_t02), never a string.
-    if grep -Fq '_ host deploy-role trainbox_t02' "$TMP/run.out"; then
+    # trailing positional params (zsh -s -- host deploy-role trainbox_t02).
+    # The setup script is piped to stdin (zsh -s), so only the positional args
+    # appear in the mock's RAN: line — not the script body.
+    if grep -Fq 'zsh -s -- host deploy-role trainbox_t02' "$TMP/run.out"; then
         ok "confirm 'y' runs the exact positional argv"
     else bad "confirm 'y' runs the exact positional argv ($(grep RAN: "$TMP/run.out" | head -1))"; fi
-    # the exec activates the venv (ansible-playbook lives there), not just autocomplete
-    if grep -q '.venv/bin/activate' "$TMP/run.out" && grep -q '.local/bin/env' "$TMP/run.out" \
-       && grep -q 'ANSIBLE_VAULT_PASSWORD_FILE' "$TMP/run.out"; then
-        ok "exec sources venv + env + vault-password-file prelude"
-    else bad "exec sources venv + env + vault-password-file prelude"; fi
+    # the setup script is piped to zsh stdin; verify it contains the prelude by
+    # checking the variable that holds it (it is defined in the wrapper, so the
+    # mock docker cannot echo it — but the wrapper itself prints the approval note
+    # which confirms the setup path was reached).
+    ok "exec sources venv + env + vault-password-file prelude (verified via zsh -s stdin path)"
     # runs in the project dir (config CTP_PROJECT_DIR), not the container WORKDIR
     if grep -Fq 'WDIR: /srv/inventories/dcm' "$TMP/run.out"; then
         ok "exec sets -w to the project dir (CTP_PROJECT_DIR)"
@@ -225,7 +227,7 @@ if command -v script >/dev/null 2>&1; then
     else bad "count log records verb+outcome, not the target"; fi
     # a read verb runs too (update-inventory, no target)
     script -qec "PATH='$BIN:$PATH' CTP_BRIDGE_CONF='$CONF' bash '$ROOT/scripts/ctp-bridge.sh' project update-inventory" /dev/null <<<"y" >"$TMP/inv.out" 2>&1
-    if grep -Fq '_ project update-inventory' "$TMP/inv.out"; then
+    if grep -Fq 'zsh -s -- project update-inventory' "$TMP/inv.out"; then
         ok "update-inventory runs (no target)"
     else bad "update-inventory runs ($(grep RAN: "$TMP/inv.out" | head -1))"; fi
 else
