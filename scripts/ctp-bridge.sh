@@ -198,14 +198,21 @@ _log_count() { # verb class outcome — verbs/outcomes only, never target or out
 # error that aborts the non-interactive shell before ctp runs; the (N) NULL_GLOB
 # qualifier makes an unmatched pattern expand to nothing instead. argv stays
 # positional.
-set +e
-_docker exec -i -w "$WORKDIR" "$CONTAINER" zsh -c '
+#
+# Remote quoting: `_docker` routes through `ssh HOST docker ...`, and SSH's
+# remote shell re-interprets the command string — stripping the single quotes
+# around the zsh -c body so (N) glob qualifiers hit bash and fail. Pipe the
+# script to `zsh -s --` via stdin instead: the script never touches SSH's
+# argument quoting layer, and `--` + positional args pass cleanly.
+_CTP_SETUP='
     _src() { [ -f "$1" ] && . "$1" >/dev/null 2>&1; }
     _src "$HOME/.local/bin/env"
     for _v in "$HOME"/*/.venv/bin/activate(N) "$HOME"/.venv/bin/activate(N); do _src "$_v" && break; done
     [ -f "$HOME/.vault/unlock-vault.sh" ] && export ANSIBLE_VAULT_PASSWORD_FILE="$HOME/.vault/unlock-vault.sh"
     _src "$HOME/autocomplete.zsh" || _src /home/builder/autocomplete.zsh
-    ctp "$@"' _ "$@"
+    ctp "$@"'
+set +e
+printf '%s\n' "$_CTP_SETUP" | _docker exec -i -w "$WORKDIR" "$CONTAINER" zsh -s -- "$@"
 run_rc=$?
 set -e
 _log_count "$VERB" "$CLASS" "exit_$run_rc"
