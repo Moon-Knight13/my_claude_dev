@@ -111,3 +111,4 @@ findings:
 - hacktricks-mcp — attack techniques
 - mitre-mcp — ATT&CK mapping
 - lolbins-mcp — living-off-the-land binary abuse
+- cve-mcp — CVE details, EPSS scores, KEV, exploit availability

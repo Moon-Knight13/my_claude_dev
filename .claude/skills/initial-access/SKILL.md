@@ -43,7 +43,8 @@ For each operator-approved attack vector from recon:
 
 1. **HackTricks** (hacktricks-mcp): detailed exploitation steps for this
    platform/service/version combination
-2. **MITRE ATT&CK** (mitre-mcp): technique ID, sub-techniques, detection info
+2. **CVE intelligence** (cve-mcp): CVE details, EPSS score, known exploit availability
+3. **MITRE ATT&CK** (mitre-mcp): technique ID, sub-techniques, detection info
 4. **Wiki vulns-docs** (outline-readonly): prior team research on this vuln
 5. **Metasploit module** (if exists): READ for technique understanding ONLY.
    Extract: target verification method, payload delivery mechanism, post-exploit

@@ -30,7 +30,7 @@ Allocated test range ONLY — never production targets.
 
 ### Development Workflow
 
-1. **Research** — technique via HackTricks/MITRE, CVE details via web lookup
+1. **Research** — technique via HackTricks/MITRE, CVE details via cve-mcp
 2. **Analyse** — RE target binary/service via rea-mcp, identify vulnerability surface
 3. **Develop** — Write PoC exploit, test on allocated range
 4. **Document** — Technique writeup + IoC report + remediation guide
@@ -51,3 +51,4 @@ Every completed exploit produces:
 - mitre-mcp — ATT&CK technique mapping
 - obsidian-mcp — technique notes read/write
 - lolbins-mcp — living-off-the-land binary abuse reference
+- cve-mcp — CVE details, EPSS scores, KEV, exploit availability (NVD + 10 sources)

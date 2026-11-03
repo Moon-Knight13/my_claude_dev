@@ -47,7 +47,8 @@ is insufficient for the question.
 7. **HackTricks** via hacktricks-mcp — attack techniques for this platform/service
 8. **MITRE ATT&CK** via mitre-mcp — technique IDs, detection strategies
 9. **LOLBins** via lolbins-mcp — living-off-the-land binary abuse (Windows + Linux)
-10. **Web research** — last resort when all above insufficient
+10. **CVE intelligence** via cve-mcp — CVE details, EPSS scores, KEV, exploits
+11. **Web research** — last resort when all above insufficient
 
 ## Phases
 
@@ -90,7 +91,7 @@ Cross-reference active recon results with Tier 3 sources:
 - HackTricks: platform-specific attack techniques
 - MITRE: technique IDs for each finding
 - lolbins-mcp: LOLBin abuse paths for identified services
-- Web research: CVE details for identified versions (manual lookup)
+- cve-mcp: CVE details, EPSS scores, exploit availability for identified versions
 
 **OPSEC: opsec-exploit-hygiene** — flag any Metasploit modules as
 REFERENCE ONLY. Extract technique, note for custom implementation.

@@ -65,3 +65,4 @@ Proxychains on Kali routes through C2 tunnel to reach internal targets.
 - hacktricks-mcp — attack technique research
 - mitre-mcp — ATT&CK technique mapping
 - lolbins-mcp — living-off-the-land binary abuse (Windows + Linux)
+- cve-mcp — CVE details, EPSS scores, KEV, exploit availability (NVD + 10 sources)

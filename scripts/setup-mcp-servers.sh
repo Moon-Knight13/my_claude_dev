@@ -74,6 +74,10 @@ read -r -d '' CATALOG << 'CATALOG_JSON' || true
       "TUONI_VERIFY_TLS": "false",
       "TUONI_MCP_PROFILES": "agent-ops,access,discovery,authoring,administration"
     }
+  },
+  "cve-mcp": {
+    "command": "/workspace/scripts/mcp-wrapper.sh",
+    "args": ["npx", "-y", "cve-mcp@0.2.0"]
   }
 }
 CATALOG_JSON
@@ -83,12 +87,12 @@ CATALOG_JSON
 # are silently skipped (forward-compatible with planned servers like eip-mcp).
 # "all" is a special pseudo-mode that includes every server.
 declare -A MODE_SERVERS
-MODE_SERVERS[all]="obsidian-mcp rea-mcp hacktricks-mcp mitre-mcp lolbins-mcp local-ollama range-intel outline-readonly tuoni-mcp"
+MODE_SERVERS[all]="obsidian-mcp rea-mcp hacktricks-mcp mitre-mcp lolbins-mcp cve-mcp local-ollama range-intel outline-readonly tuoni-mcp"
 MODE_SERVERS[platform-ops]="local-ollama"
-MODE_SERVERS[red-team]="tuoni-mcp range-intel outline-readonly obsidian-mcp hacktricks-mcp mitre-mcp lolbins-mcp"
-MODE_SERVERS[red-dev]="tuoni-mcp rea-mcp hacktricks-mcp mitre-mcp obsidian-mcp lolbins-mcp"
+MODE_SERVERS[red-team]="tuoni-mcp range-intel outline-readonly obsidian-mcp hacktricks-mcp mitre-mcp lolbins-mcp cve-mcp"
+MODE_SERVERS[red-dev]="tuoni-mcp rea-mcp hacktricks-mcp mitre-mcp obsidian-mcp lolbins-mcp cve-mcp"
 MODE_SERVERS[green-dev]="range-intel outline-readonly"
-MODE_SERVERS[purple]="tuoni-mcp range-intel outline-readonly obsidian-mcp hacktricks-mcp mitre-mcp lolbins-mcp"
+MODE_SERVERS[purple]="tuoni-mcp range-intel outline-readonly obsidian-mcp hacktricks-mcp mitre-mcp lolbins-mcp cve-mcp"
 
 # --- Argument handling ---
 MODE="${1:-all}"
