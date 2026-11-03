@@ -66,7 +66,7 @@ If current access insufficient for credential harvesting:
 
 1. **Research escalation paths**:
    - HackTricks: platform-specific priv esc techniques
-   - GTFOBins (gtfobins-mcp): SUID/capability abuse on Linux
+   - LOLBins (lolbins-mcp): SUID/capability abuse, native binary exploitation
    - MITRE: T1068 (Exploitation for Privilege Escalation)
 2. **Enumerate from agent** (tuoni-mcp commands on target):
    - Current privileges and group memberships

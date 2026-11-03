@@ -30,8 +30,8 @@ Allocated test range ONLY — never production targets.
 
 ### Development Workflow
 
-1. **Research** — CVE details via eip-mcp, technique via HackTricks/MITRE
-2. **Analyse** — RE target binary/service, identify vulnerability surface
+1. **Research** — technique via HackTricks/MITRE, CVE details via web lookup
+2. **Analyse** — RE target binary/service via rea-mcp, identify vulnerability surface
 3. **Develop** — Write PoC exploit, test on allocated range
 4. **Document** — Technique writeup + IoC report + remediation guide
 5. **Package** — Red-team pickup card for operational use
