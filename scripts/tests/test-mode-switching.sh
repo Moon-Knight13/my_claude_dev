@@ -48,10 +48,10 @@ for mode_dir in "$MODES_DIR"/*/; do
     mode="$(basename "$mode_dir")"
     [[ "$mode" == "base" ]] && continue
 
-    if [[ -f "$mode_dir/CLAUDE.md" ]] && [[ -f "$mode_dir/settings.json" ]]; then
+    if [[ -f "$mode_dir/system-prompt.md" ]] && [[ -f "$mode_dir/settings.json" ]]; then
         ok "mode-$mode-files-exist"
     else
-        bad "mode-$mode-files-exist" "missing CLAUDE.md or settings.json"
+        bad "mode-$mode-files-exist" "missing system-prompt.md or settings.json"
     fi
 
     if jq empty "$mode_dir/settings.json" 2>/dev/null; then
@@ -87,138 +87,115 @@ for mode_dir in "$MODES_DIR"/*/; do
     fi
 done
 
-# --- 6. Settings merge includes base MCP servers ----------------------------
-merged_rt="$(jq -n --slurpfile base "$MODES_DIR/base/settings.json" --slurpfile mode "$MODES_DIR/red-team/settings.json" '
-    $base[0] + {
-        mcpServers: (($base[0].mcpServers // {}) + ($mode[0].mcpServers // {}))
-    }
-' 2>/dev/null)"
+# --- 6-8. MCP server assignment via setup-mcp-servers.sh --------------------
+# MCP servers are now in setup-mcp-servers.sh MODE_SERVERS arrays, not in
+# mode settings.json. Test by sourcing the script's manifest declarations.
+MCP_SCRIPT="$REPO_ROOT/scripts/setup-mcp-servers.sh"
 
-if echo "$merged_rt" | jq -e '.mcpServers["local-ollama"]' >/dev/null 2>&1; then
-    ok merge-red-team-keeps-local-ollama
+# Extract MODE_SERVERS from the script (declare -A lines)
+_get_mode_servers() {
+    local mode="$1"
+    grep "MODE_SERVERS\[$mode\]=" "$MCP_SCRIPT" | sed 's/.*="//' | sed 's/"//'
+}
+
+rt_servers="$(_get_mode_servers red-team)"
+if echo "$rt_servers" | grep -q "tuoni-mcp" \
+   && echo "$rt_servers" | grep -q "range-intel" \
+   && echo "$rt_servers" | grep -q "hacktricks-mcp"; then
+    ok red-team-has-offensive-mcps
 else
-    bad merge-red-team-keeps-local-ollama "local-ollama lost in red-team merge"
+    bad red-team-has-offensive-mcps "missing offensive MCP servers in red-team manifest"
 fi
 
-# --- 7. Red-team merge adds offensive MCP servers ----------------------------
-if echo "$merged_rt" | jq -e '.mcpServers["tuoni-mcp"]' >/dev/null 2>&1 \
-   && echo "$merged_rt" | jq -e '.mcpServers["range-intel"]' >/dev/null 2>&1 \
-   && echo "$merged_rt" | jq -e '.mcpServers["hacktricks-mcp"]' >/dev/null 2>&1; then
-    ok merge-red-team-adds-offensive-mcps
-else
-    bad merge-red-team-adds-offensive-mcps "missing offensive MCP servers in merged config"
-fi
-
-# --- 8. Platform-ops merge has no offensive MCP servers ----------------------
-merged_po="$(jq -n --slurpfile base "$MODES_DIR/base/settings.json" --slurpfile mode "$MODES_DIR/platform-ops/settings.json" '
-    $base[0] + {
-        mcpServers: (($base[0].mcpServers // {}) + ($mode[0].mcpServers // {}))
-    }
-' 2>/dev/null)"
-
-if echo "$merged_po" | jq -e '.mcpServers["tuoni-mcp"]' >/dev/null 2>&1; then
-    bad platform-ops-no-offensive-mcps "tuoni-mcp present in platform-ops"
+po_servers="$(_get_mode_servers platform-ops)"
+if echo "$po_servers" | grep -q "tuoni-mcp"; then
+    bad platform-ops-no-offensive-mcps "tuoni-mcp present in platform-ops manifest"
 else
     ok platform-ops-no-offensive-mcps
 fi
 
-# --- 9. CLAUDE.md merge produces non-empty file ------------------------------
-merged_claude="$(cat "$MODES_DIR/base/CLAUDE.md"; echo ""; cat "$MODES_DIR/red-team/CLAUDE.md")"
+# --- 9. System prompt merge produces non-empty file --------------------------
+merged_claude="$(cat "$MODES_DIR/base/CLAUDE.md"; echo ""; cat "$MODES_DIR/red-team/system-prompt.md")"
 if [[ -n "$merged_claude" ]] && echo "$merged_claude" | grep -q "Workflow Contract" && echo "$merged_claude" | grep -q "red-team"; then
     ok claude-merge-has-base-and-mode
 else
-    bad claude-merge-has-base-and-mode "merged CLAUDE.md missing base or mode content"
+    bad claude-merge-has-base-and-mode "merged content missing base or mode content"
 fi
 
-# --- 10. Red-team CLAUDE.md contains OPSEC rules ----------------------------
-if grep -q "RT-TGT-001" "$MODES_DIR/red-team/CLAUDE.md" \
-   && grep -q "RT-SIG-001" "$MODES_DIR/red-team/CLAUDE.md" \
-   && grep -q "RT-DEP-001" "$MODES_DIR/red-team/CLAUDE.md"; then
+# --- 10. Red-team system-prompt contains OPSEC rules ------------------------
+if grep -q "RT-TGT-001" "$MODES_DIR/red-team/system-prompt.md" \
+   && grep -q "RT-SIG-001" "$MODES_DIR/red-team/system-prompt.md" \
+   && grep -q "RT-DEP-001" "$MODES_DIR/red-team/system-prompt.md"; then
     ok red-team-has-opsec-rules
 else
-    bad red-team-has-opsec-rules "missing OPSEC rules in red-team CLAUDE.md"
+    bad red-team-has-opsec-rules "missing OPSEC rules in red-team system-prompt.md"
 fi
 
-# --- 11. Platform-ops CLAUDE.md has NO OPSEC rules ---------------------------
-if grep -q "RT-TGT-001" "$MODES_DIR/platform-ops/CLAUDE.md" 2>/dev/null; then
-    bad platform-ops-no-opsec "platform-ops CLAUDE.md contains OPSEC rules"
+# --- 11. Platform-ops system-prompt has NO OPSEC rules ----------------------
+if grep -q "RT-TGT-001" "$MODES_DIR/platform-ops/system-prompt.md" 2>/dev/null; then
+    bad platform-ops-no-opsec "platform-ops system-prompt.md contains OPSEC rules"
 else
     ok platform-ops-no-opsec
 fi
 
-# --- 12. Red-dev has eip-mcp but no tuoni in production role ----------------
-merged_rd="$(jq -n --slurpfile base "$MODES_DIR/base/settings.json" --slurpfile mode "$MODES_DIR/red-dev/settings.json" '
-    $base[0] + {
-        mcpServers: (($base[0].mcpServers // {}) + ($mode[0].mcpServers // {}))
-    }
-' 2>/dev/null)"
-
-if echo "$merged_rd" | jq -e '.mcpServers["eip-mcp"]' >/dev/null 2>&1 \
-   && echo "$merged_rd" | jq -e '.mcpServers["hacktricks-mcp"]' >/dev/null 2>&1; then
+# --- 12. Red-dev has research MCPs ------------------------------------------
+rd_servers="$(_get_mode_servers red-dev)"
+if echo "$rd_servers" | grep -q "hacktricks-mcp" \
+   && echo "$rd_servers" | grep -q "cve-mcp"; then
     ok red-dev-has-research-mcps
 else
-    bad red-dev-has-research-mcps "missing eip-mcp or hacktricks-mcp in red-dev"
+    bad red-dev-has-research-mcps "missing hacktricks-mcp or cve-mcp in red-dev manifest"
 fi
 
-# --- 13. Red-dev CLAUDE.md has exploit hygiene rules -----------------------
-if grep -q "Exploit Hygiene" "$MODES_DIR/red-dev/CLAUDE.md" \
-   && grep -q "RT-TGT-001" "$MODES_DIR/red-dev/CLAUDE.md"; then
+# --- 13. Red-dev system-prompt has exploit hygiene rules --------------------
+if grep -q "Exploit Hygiene" "$MODES_DIR/red-dev/system-prompt.md" \
+   && grep -q "RT-TGT-001" "$MODES_DIR/red-dev/system-prompt.md"; then
     ok red-dev-has-opsec
 else
-    bad red-dev-has-opsec "missing exploit hygiene or RT-TGT-001 in red-dev CLAUDE.md"
+    bad red-dev-has-opsec "missing exploit hygiene or RT-TGT-001 in red-dev system-prompt.md"
 fi
 
 # --- 14. Green-dev has range-intel but no offensive MCPs -------------------
-merged_gd="$(jq -n --slurpfile base "$MODES_DIR/base/settings.json" --slurpfile mode "$MODES_DIR/green-dev/settings.json" '
-    $base[0] + {
-        mcpServers: (($base[0].mcpServers // {}) + ($mode[0].mcpServers // {}))
-    }
-' 2>/dev/null)"
-
-if echo "$merged_gd" | jq -e '.mcpServers["range-intel"]' >/dev/null 2>&1 \
-   && ! echo "$merged_gd" | jq -e '.mcpServers["tuoni-mcp"]' >/dev/null 2>&1; then
+gd_servers="$(_get_mode_servers green-dev)"
+if echo "$gd_servers" | grep -q "range-intel" \
+   && ! echo "$gd_servers" | grep -q "tuoni-mcp"; then
     ok green-dev-range-intel-no-offensive
 else
     bad green-dev-range-intel-no-offensive "green-dev should have range-intel, no tuoni-mcp"
 fi
 
-# --- 15. Green-dev CLAUDE.md has DEV rules ---------------------------------
-if grep -q "DEV-002" "$MODES_DIR/green-dev/CLAUDE.md" \
-   && grep -q "Providentia" "$MODES_DIR/green-dev/CLAUDE.md"; then
+# --- 15. Green-dev system-prompt has DEV rules ------------------------------
+if grep -q "DEV-002" "$MODES_DIR/green-dev/system-prompt.md" \
+   && grep -q "Providentia" "$MODES_DIR/green-dev/system-prompt.md"; then
     ok green-dev-has-dev-rules
 else
-    bad green-dev-has-dev-rules "missing DEV-002 or Providentia in green-dev CLAUDE.md"
+    bad green-dev-has-dev-rules "missing DEV-002 or Providentia in green-dev system-prompt.md"
 fi
 
 # --- 16. Purple has all red-team MCPs -------------------------------------
-merged_pu="$(jq -n --slurpfile base "$MODES_DIR/base/settings.json" --slurpfile mode "$MODES_DIR/purple/settings.json" '
-    $base[0] + {
-        mcpServers: (($base[0].mcpServers // {}) + ($mode[0].mcpServers // {}))
-    }
-' 2>/dev/null)"
-
-if echo "$merged_pu" | jq -e '.mcpServers["tuoni-mcp"]' >/dev/null 2>&1 \
-   && echo "$merged_pu" | jq -e '.mcpServers["range-intel"]' >/dev/null 2>&1 \
-   && echo "$merged_pu" | jq -e '.mcpServers["hacktricks-mcp"]' >/dev/null 2>&1 \
-   && echo "$merged_pu" | jq -e '.mcpServers["mitre-mcp"]' >/dev/null 2>&1; then
+pu_servers="$(_get_mode_servers purple)"
+if echo "$pu_servers" | grep -q "tuoni-mcp" \
+   && echo "$pu_servers" | grep -q "range-intel" \
+   && echo "$pu_servers" | grep -q "hacktricks-mcp" \
+   && echo "$pu_servers" | grep -q "mitre-mcp"; then
     ok purple-has-full-mcp-stack
 else
-    bad purple-has-full-mcp-stack "purple missing expected MCP servers"
+    bad purple-has-full-mcp-stack "purple missing expected MCP servers in manifest"
 fi
 
-# --- 17. Purple CLAUDE.md has detection scoring ----------------------------
-if grep -q "Detection Scoring" "$MODES_DIR/purple/CLAUDE.md" \
-   && grep -q "RT-TGT-001" "$MODES_DIR/purple/CLAUDE.md" \
-   && grep -q "time_to_detect" "$MODES_DIR/purple/CLAUDE.md"; then
+# --- 17. Purple system-prompt has detection scoring -------------------------
+if grep -q "Detection Scoring" "$MODES_DIR/purple/system-prompt.md" \
+   && grep -q "RT-TGT-001" "$MODES_DIR/purple/system-prompt.md" \
+   && grep -q "time_to_detect" "$MODES_DIR/purple/system-prompt.md"; then
     ok purple-has-detection-scoring
 else
-    bad purple-has-detection-scoring "missing detection scoring or OPSEC in purple CLAUDE.md"
+    bad purple-has-detection-scoring "missing detection scoring or OPSEC in purple system-prompt.md"
 fi
 
-# --- 18. Purple CLAUDE.md has OPSEC inherited from red-team ----------------
-if grep -q "RT-SIG-001" "$MODES_DIR/purple/CLAUDE.md" \
-   && grep -q "RT-SIG-002" "$MODES_DIR/purple/CLAUDE.md" \
-   && grep -q "RT-DEP-001" "$MODES_DIR/purple/CLAUDE.md"; then
+# --- 18. Purple system-prompt has OPSEC inherited from red-team ------------
+if grep -q "RT-SIG-001" "$MODES_DIR/purple/system-prompt.md" \
+   && grep -q "RT-SIG-002" "$MODES_DIR/purple/system-prompt.md" \
+   && grep -q "RT-DEP-001" "$MODES_DIR/purple/system-prompt.md"; then
     ok purple-inherits-opsec
 else
     bad purple-inherits-opsec "purple missing inherited OPSEC rules"

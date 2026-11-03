@@ -1,12 +1,12 @@
 ---
 name: mode
-description: "Switch operational mode. Usage: /mode <mode-name> — rewrites CLAUDE.md + .mcp.json from mode templates. Requires session restart."
+description: "Switch or query operational mode. Usage: /mode <name> to switch, /mode list to see modes. Mode rules inject via hook on next prompt."
 ---
 
 # Mode Switching
 
 Switch the session to a different operational mode. Each mode configures
-different MCP servers, OPSEC rules, and documentation pipelines.
+different OPSEC rules, documentation pipelines, and MCP server guidance.
 
 ## Available Modes
 
@@ -22,72 +22,66 @@ different MCP servers, OPSEC rules, and documentation pipelines.
 
 When the operator invokes `/mode <name>`:
 
-### 1. Validate
+### If `list` or no argument
 
-Check `.claude/modes/<name>/` exists with `CLAUDE.md` and `settings.json`.
+Show all available modes with descriptions. Read each
+`.claude/modes/<name>/settings.json` for `_description`.
+Show which mode is currently active from `.claude/.active-mode`.
+
+### If a mode name
+
+#### 1. Validate
+
+Check `.claude/modes/<name>/` exists with `system-prompt.md` and `settings.json`.
 If validation fails, report what is missing and refuse the switch.
 
-### 2. Generate .mcp.json
-
-Run `setup-mcp-servers.sh` with the mode name to generate `.mcp.json` with
-only the servers that mode needs. Server configs are centralized in the
-script's catalog — modes do not define server configs.
-
-```bash
-bash scripts/setup-mcp-servers.sh "$MODE_NAME"
-```
-
-### 3. Merge Settings
-
-Read `.claude/modes/base/settings.json` (hooks, guards — always active).
-Read `.claude/modes/<name>/settings.json` (mode metadata).
-
-Merge: base hooks are ALWAYS preserved. Mode metadata (`_mode`, `_description`)
-is added. No MCP servers in settings — those are in `.mcp.json`.
-
-```bash
-jq -n \
-  --slurpfile base .claude/modes/base/settings.json \
-  --slurpfile mode ".claude/modes/$MODE_NAME/settings.json" \
-  '$base[0] * $mode[0]' > .claude/settings.json
-```
-
-### 4. Merge CLAUDE.md
-
-Read `.claude/modes/base/CLAUDE.md` (workflow contract — always active).
-Read `.claude/modes/<name>/CLAUDE.md` (mode-specific instructions).
-
-Concatenate: base CLAUDE.md + blank line + mode CLAUDE.md.
-Write to `CLAUDE.md` at repository root.
-
-```bash
-cat .claude/modes/base/CLAUDE.md > CLAUDE.md
-echo "" >> CLAUDE.md
-cat ".claude/modes/$MODE_NAME/CLAUDE.md" >> CLAUDE.md
-```
-
-### 5. Write mode state file
-
-Write current mode to `.claude/.active-mode` for statusline and other scripts.
+#### 2. Write active mode
 
 ```bash
 echo "$MODE_NAME" > .claude/.active-mode
 ```
 
-### 6. Report and Restart
+The `mode-inject.sh` hook reads this file on every prompt and injects the
+mode's `system-prompt.md` as `additionalContext`. Rules take effect on the
+**next prompt** — no restart needed.
+
+#### 3. Report
 
 Tell the operator:
-- Which mode was applied
-- Which MCP servers are now active (from `setup-mcp-servers.sh` output)
-- Any OPSEC rules now in effect
-- **They must restart the session** for CLAUDE.md changes to take effect
+- Which mode is now active
+- Key OPSEC rules now in effect (summarize from system-prompt.md)
+- Which MCP servers the mode recommends (from system-prompt.md)
+- **Note about MCP servers**: all MCPs are loaded at startup. The mode's
+  system prompt tells Claude which ones to use. For hard MCP isolation
+  (only load specific servers), use `scripts/start-mode.sh` instead.
 
-Do NOT attempt to restart the session programmatically. The operator
-restarts manually (exit + re-enter, or `/clear`).
+#### 4. Immediate context
+
+Read `.claude/modes/<name>/system-prompt.md` and apply its rules starting
+from this response. Do not wait for the hook — the hook ensures persistence
+across future prompts, but you should follow mode rules immediately.
+
+## How It Works
+
+Two mechanisms, complementary:
+
+### Hook-based (conversational, recommended)
+- Operator says `/mode red-dev` or just "red-dev mode"
+- Skill writes `.claude/.active-mode`
+- `mode-inject.sh` hook injects rules as `additionalContext` on every prompt
+- All MCPs already loaded — mode rules govern which Claude uses
+- **No restart needed** for rule changes
+- MCP availability is soft (all loaded, guidance-enforced)
+
+### Script-based (hard isolation, parallel sessions)
+- Operator runs `scripts/start-mode.sh red-dev` before starting Claude
+- CLI flags set system prompt, settings, and MCP config per-session
+- Only mode's MCP servers are loaded (`--strict-mcp-config`)
+- **Parallel-safe** — no shared file conflicts
+- Best for `--bg` background agents
 
 ## Safety
 
-- Base hooks MUST survive every mode switch — verify after merge
-- If merge produces invalid JSON, refuse and report error
-- Never delete `.claude/settings.json` — always overwrite atomically
+- Base hooks MUST survive every mode switch — hook is additive, not replacing
 - Mode switch is idempotent — switching to current mode is a no-op refresh
+- If `.active-mode` file is missing or empty, no mode rules are injected
