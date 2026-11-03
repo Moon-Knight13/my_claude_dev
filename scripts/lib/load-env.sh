@@ -96,6 +96,16 @@ unset _host_var _v
 [[ -n "${PROVIDENTIA_HOST:-}" && -z "${PROVIDENTIA_URL:-}" ]] && export PROVIDENTIA_URL="https://${PROVIDENTIA_HOST}"
 [[ -n "${RANGE_GIT_HOST:-}" && -z "${GITLAB_URL:-}" ]] && export GITLAB_URL="https://${RANGE_GIT_HOST}"
 [[ -n "${SPOKE_KALI_HOST:-}" && -z "${TUONI_URL:-}" ]] && export TUONI_URL="https://${SPOKE_KALI_HOST}:${SPOKE_KALI_C2_WEB_PORT:-8443}"
+
+# Enforce https:// on URL vars — catches bare hostnames set directly in .env.
+for _url_var in PROVIDENTIA_URL OUTLINE_API_URL OUTLINE_URL GITLAB_URL TUONI_URL; do
+    _v="${!_url_var:-}"
+    if [[ -n "$_v" && "$_v" != https://* && "$_v" != http://* ]]; then
+        export "$_url_var=https://$_v"
+    fi
+done
+unset _url_var _v
+
 # Ensure sourcing under set -e doesn't abort the caller when the last
 # conditional derivation above evaluates to false (exit code 1).
 true
