@@ -112,7 +112,11 @@ If possible (and operator approves):
 2. Verify operational beacon maintains contact independently
 3. Verify sleeper beacon check-in at expected interval
 
-### Step 6: Document
+### Step 6: Document (llm-wiki paths — ENFORCED)
+
+Invoke `/log-finding` with persistence deployment outcome.
+Update `llm-wiki/wiki/targets/<hostname>.md` with persistence section.
+Write `llm-wiki/raw/<hostname>-persist-<date>.md` with deployment log.
 
 Update engagement YAML:
 ```yaml

@@ -119,8 +119,8 @@ Present to operator for initial-access skill handoff.
 - Active recon results documented (if Phase 2 approved)
 - Attack vectors ranked and presented
 - Engagement YAML updated: phase=recon, target data cached
-- Obsidian raw/: recon dump saved
-- Obsidian wiki/<hostname>.md: structured target page created/updated
+- `/log-finding` invoked for each significant recon result
+- Obsidian llm-wiki notes written (raw dump + wiki target page)
 
 ## State writes
 
@@ -134,11 +134,21 @@ targets:
     attack_vectors: <ranked list>
 ```
 
-```
-# Obsidian writes
-raw/<hostname>-recon-<date>.md    # immutable dump
-wiki/<hostname>.md                # structured page (create or update)
-```
+### Obsidian writes (llm-wiki paths — ENFORCED)
+
+After Phase 2 (active recon) completes, invoke `/log-finding` for each
+significant result. This auto-writes to correct llm-wiki paths:
+
+- `llm-wiki/raw/<hostname>-recon-<date>.md` — immutable scan dump
+- `llm-wiki/wiki/targets/<hostname>.md` — structured target page
+  (uses template: `llm-wiki/templates/target.md`)
+- `llm-wiki/wiki/techniques/<technique>.md` — if technique page needed
+- `llm-wiki/log.md` — changelog entry appended
+
+Manual fallback (if `/log-finding` unavailable):
+- `obsidian_create_note` to `llm-wiki/raw/` with frontmatter `tags: [raw, intake]`
+- `obsidian_create_note` or `obsidian_edit_note` to `llm-wiki/wiki/targets/`
+  using field structure from `llm-wiki/templates/target.md`
 
 ## Failure modes
 

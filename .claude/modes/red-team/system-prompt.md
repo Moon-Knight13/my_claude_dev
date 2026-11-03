@@ -84,8 +84,18 @@ with the coordinator.
 - Engagement YAML tracks all state: targets, phase, agents, cred refs
 - Credentials stored as REFS ONLY — never plaintext in YAML or Obsidian
 - Creds go to tuoni cred store + wiki documentation (refs only)
-- Obsidian raw/: immutable intake dumps
-- Obsidian wiki/: AI-maintained structured pages (per target, technique)
+
+### Documentation Pipeline (llm-wiki — MANDATORY)
+- After EACH technique execution, invoke `/log-finding` with outcome
+- Obsidian vault: `my_notes`, all paths under `llm-wiki/`
+- `llm-wiki/raw/`: immutable intake dumps (never edit after creation)
+- `llm-wiki/wiki/targets/`: per-target structured pages (template: target.md)
+- `llm-wiki/wiki/techniques/`: per-technique pages (template: technique.md)
+- `llm-wiki/wiki/engagements/`: engagement overview pages
+- `llm-wiki/log.md`: append-only changelog
+- `llm-wiki/index.md`: master index (update on new pages)
+- Templates in `llm-wiki/templates/` — use them for new pages
+- "Document later" is NOT acceptable — write before moving to next action
 
 ### Persist-on-Lateral Rule
 Every new target gets persist-swarm IMMEDIATELY after lateral movement landing.

@@ -112,31 +112,41 @@ Execute from Kali (NEVER from target):
    - Persistence status
    - Discovery findings summary
 
-## Documentation Outputs
+## Documentation Outputs — ENFORCED (llm-wiki paths)
 
-After successful initial access, produce:
+After each technique attempt (success OR failure), BEFORE moving to next
+action, invoke `/log-finding` with the outcome. This writes to:
 
-1. **Technique writeup** (Obsidian wiki/<hostname>-initial-access.md):
+- `llm-wiki/wiki/techniques/<technique_slug>.md` (template: technique.md)
+- `llm-wiki/wiki/targets/<hostname>.md` (template: target.md)
+- `llm-wiki/log.md` (changelog row)
+- `Notes_Mitre_ATTack_Framework/` (MITRE cross-link)
+
+After successful initial access, also produce:
+
+1. **Technique writeup** (`llm-wiki/wiki/techniques/<technique>.md`):
    - Vulnerability exploited + CVE/MITRE ID
    - Custom exploit approach (what was adapted from references)
    - Exact steps to reproduce
    - Time to exploit
 
-2. **IoC report** (Obsidian wiki/<hostname>-iocs.md):
+2. **IoC report** (`llm-wiki/wiki/targets/<hostname>.md` under ## IOCs):
    - Artifacts created on target (files, registry, services)
    - Network signatures (callback patterns, ports)
    - Log entries expected (auth, service, application)
 
-3. **Remediation guide** (Obsidian wiki/<hostname>-remediation.md):
-   - Patch/config fix for the vulnerability
-   - Detection rules for this technique
-   - Hardening recommendations
+3. **Raw dump** (`llm-wiki/raw/<hostname>-initial-access-<date>.md`):
+   - Command output, exploit output, agent callback confirmation
+   - Frontmatter: `tags: [raw, intake, initial-access]`
 
-4. **Red team pickup card** (Obsidian wiki/<hostname>-pickup.md):
+4. **Red team pickup card** (appended to target wiki page):
    - Current access level and agent info
    - Persistence mechanisms in place
    - Next suggested actions (priv esc, lateral)
    - Known constraints or risks
+
+**Failed techniques get documented too.** Invoke `/log-finding` with failure
+outcome. This prevents re-trying exhausted vectors in future sessions.
 
 ## State writes
 

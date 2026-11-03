@@ -176,12 +176,21 @@ targets:
         lateral_targets: [<hostnames where cred may work>]
 ```
 
+### Obsidian writes (llm-wiki paths — ENFORCED)
+
+After each credential harvest or priv esc attempt, invoke `/log-finding`.
+Then write:
+
 ```
-# Obsidian writes
-wiki/<hostname>-privesc.md        # escalation technique used
-wiki/<hostname>-creds.md          # credential ref index (NO plaintext)
-raw/<hostname>-enum-<date>.md     # raw enumeration dump
+llm-wiki/wiki/techniques/<technique>.md  # priv esc / harvest technique
+llm-wiki/wiki/targets/<hostname>.md      # update target page findings + cred refs
+llm-wiki/raw/<hostname>-creds-<date>.md  # raw enum dump (NO plaintext creds)
+llm-wiki/log.md                          # changelog row
 ```
+
+Credential pages use template `llm-wiki/templates/credential.md`.
+**NEVER write actual credential values to Obsidian** — refs only,
+linking to Tuoni cred store IDs.
 
 ## Failure modes
 

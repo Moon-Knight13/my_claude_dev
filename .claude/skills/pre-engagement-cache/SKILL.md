@@ -39,7 +39,7 @@ list produces noise, not intel.
 
 For each target hostname:
 1. Query `range_host` via range-intel MCP
-2. Write to Obsidian: `raw/providentia/<hostname>.md`
+2. Write to Obsidian: `llm-wiki/raw/providentia/<hostname>.md`
 3. Include: OS, IPs, services, team assignment, role, network segment
 4. Frontmatter:
    ```yaml
@@ -47,6 +47,7 @@ For each target hostname:
    source: providentia
    cached_at: <ISO-8601 timestamp>
    target: <hostname>
+   tags: [raw, intake, providentia]
    ---
    ```
 
@@ -56,9 +57,9 @@ If target not found in Providentia: warn and continue (may be external target).
 
 For each target hostname:
 1. Query `range_host` with README content via range-intel MCP
-2. Write to Obsidian: `raw/gitlab/<hostname>.md`
+2. Write to Obsidian: `llm-wiki/raw/gitlab/<hostname>.md`
 3. Include: full README content, deploy notes, known defaults
-4. Frontmatter: `source: gitlab`, `cached_at`, `target`
+4. Frontmatter: `source: gitlab`, `cached_at`, `target`, `tags: [raw, intake, gitlab]`
 
 If no README exists: skip silently (not all boxes have READMEs).
 
@@ -66,14 +67,30 @@ If no README exists: skip silently (not all boxes have READMEs).
 
 1. Search outline for vulns-docs collection entries relevant to targets
 2. For each relevant page:
-   - Write to Obsidian: `wiki/vulnerabilities/<topic>.md`
+   - Write to Obsidian: `llm-wiki/wiki/vulnerabilities/<topic>.md`
    - Frontmatter: `source: outline-wiki`, `cached_at`, `collection: vulns-docs`
+
+### Step 5.5: Cache Wiki Playbooks (NEW)
+
+1. Search outline for wiki playbooks matching target roles (firewall, DC, mail, etc.)
+2. For each relevant playbook:
+   - Write to Obsidian: `llm-wiki/wiki/playbooks/<topic>.md`
+   - Frontmatter: `source: outline-wiki`, `cached_at`, `collection: doctrine`
+3. Parse playbook steps into engagement YAML `next_steps` as checklist items
 
 ### Step 6: Cache Wiki Doctrine
 
 1. Search outline for architecture and doctrine docs
-2. Write to Obsidian: `wiki/doctrine/<topic>.md`
+2. Write to Obsidian: `llm-wiki/wiki/doctrine/<topic>.md`
 3. Frontmatter: `source: outline-wiki`, `cached_at`, `collection: doctrine`
+
+### Step 6.5: Create Engagement Wiki Page (NEW)
+
+1. Create `llm-wiki/wiki/engagements/<engagement-id>.md` using
+   template `llm-wiki/templates/engagement.md`
+2. Fill: name, start_date, team, scope (from engagement YAML)
+3. Update `llm-wiki/index.md` to add engagement to Exercises list
+4. Append row to `llm-wiki/log.md`
 
 ### Step 7: Update Engagement YAML
 

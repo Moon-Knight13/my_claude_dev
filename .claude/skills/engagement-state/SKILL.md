@@ -179,42 +179,71 @@ Trigger: "next steps", "plan next", "what's next", or end of session.
 Documentation is NOT optional. Each kill-chain phase transition MUST produce
 Obsidian output before the next phase starts.
 
+### Primary method: `/log-finding`
+
+After EACH technique execution (success OR failure), invoke `/log-finding`
+with the outcome description. This command auto-writes to correct paths:
+
+- `llm-wiki/wiki/techniques/<technique>.md` — from template `llm-wiki/templates/technique.md`
+- `llm-wiki/wiki/targets/<hostname>.md` — from template `llm-wiki/templates/target.md`
+- `Notes_Mitre_ATTack_Framework/` — MITRE cross-link
+- `llm-wiki/log.md` — changelog row
+
 ### Phase Gate Checklist
 
 After EACH technique execution or phase completion, BEFORE moving on:
 
 1. **Update engagement YAML** with technique outcome + finding (if success/partial)
-2. **Write Obsidian raw/** dump of command output (immutable intake)
-3. **Update Obsidian wiki/** target page with structured finding
+2. **Invoke `/log-finding`** with technique outcome (writes to llm-wiki automatically)
+3. **Write raw dump** to `llm-wiki/raw/<host>-<phase>-<date>.md` (immutable intake)
 4. **Store credentials** in Tuoni cred store (if any harvested), add ref to YAML
 
 If ANY gate item is skipped, the session MUST catch up before proceeding to
 the next target or phase. "I'll document later" is NOT acceptable — context
 degrades and findings are lost.
 
-### Obsidian Write Points
+### Obsidian Write Points (llm-wiki/ vault paths)
+
+All paths are under `llm-wiki/` in the `my_notes` Obsidian vault.
 
 | Kill-Chain Phase | raw/ Write | wiki/ Write |
 |-----------------|------------|-------------|
-| Recon | `raw/<host>-recon-<date>.md` | `wiki/<host>.md` (create) |
-| Initial Access | `raw/<host>-initial-access-<date>.md` | `wiki/<host>-initial-access.md` |
-| Discovery | `raw/<host>-discovery-<date>.md` | `wiki/<host>.md` (update) |
-| Cred Harvest | `raw/<host>-creds-<date>.md` | `wiki/<host>-creds.md` (refs only) |
-| Lateral Move | `raw/<host>-lateral-<date>.md` | `wiki/<host>-lateral.md` |
-| Persist | — | `wiki/<host>.md` (update persistence section) |
+| Recon | `llm-wiki/raw/<host>-recon-<date>.md` | `llm-wiki/wiki/targets/<host>.md` (create) |
+| Initial Access | `llm-wiki/raw/<host>-initial-access-<date>.md` | `llm-wiki/wiki/techniques/<technique>.md` |
+| Discovery | `llm-wiki/raw/<host>-discovery-<date>.md` | `llm-wiki/wiki/targets/<host>.md` (update) |
+| Cred Harvest | `llm-wiki/raw/<host>-creds-<date>.md` | `llm-wiki/wiki/targets/<host>.md` (refs only) |
+| Lateral Move | `llm-wiki/raw/<host>-lateral-<date>.md` | `llm-wiki/wiki/targets/<host>.md` (update) |
+| Persist | — | `llm-wiki/wiki/targets/<host>.md` (update persistence) |
+
+### Templates (in `llm-wiki/templates/`)
+
+| Template | When to use |
+|----------|-------------|
+| `target.md` | New target page: hostname, IP, OS, domain, role, services, findings |
+| `technique.md` | New technique page: mitre_id, tactic, platforms, execution steps |
+| `credential.md` | Credential ref page: username, domain, type, source (NO plaintext) |
+| `ioc.md` | IOC page: type, value, context, associated targets |
+| `engagement.md` | Engagement overview: scope, objectives, timeline, findings summary |
+
+### Engagement Wiki Page
+
+On engagement creation, also create `llm-wiki/wiki/engagements/<engagement-id>.md`
+using `llm-wiki/templates/engagement.md`. Update `llm-wiki/index.md` to add
+engagement to the Exercises list. This is the missing link that caused zero
+DCM27 redteam-test2 documentation.
 
 ### Catch-Up Procedure
 
-When the operator requests review or session is ending:
+When operator requests review or session is ending:
 1. Audit engagement YAML `findings` vs `techniques_tried` — gaps = missing findings
-2. For each technique with no corresponding Obsidian note, write retroactive raw/ dump
-3. For each target with no wiki/ page, create structured target profile
+2. For each technique with no corresponding llm-wiki note, invoke `/log-finding` retroactively
+3. For each target with no `llm-wiki/wiki/targets/` page, create from template
 4. Report documentation debt to operator
 
-- **Obsidian raw/**: immutable intake dumps (scan output, command output).
+- **llm-wiki/raw/**: immutable intake dumps (scan output, command output).
   Write via `obsidian_create_note` with timestamp prefix. Never modify after
-  creation.
-- **Obsidian wiki/**: AI-maintained structured pages. One page per target
+  creation. Frontmatter: `tags: [raw, intake]`
+- **llm-wiki/wiki/**: AI-maintained structured pages. One page per target
   (host profile, findings, techniques, cred refs). One page per technique
   used (procedure, targets, results, detection notes). Update via
   `obsidian_edit_note` as findings grow.
@@ -223,7 +252,14 @@ When the operator requests review or session is ending:
 
 - `engagements/<id>.yaml` — engagement state (gitignored)
 - `engagements/` directory — created automatically, added to `.gitignore`
-- Obsidian vault — tactical documentation (via obsidian-mcp)
+- Obsidian vault `my_notes` — tactical documentation (via obsidian-mcp)
+  - `llm-wiki/raw/` — immutable intake dumps
+  - `llm-wiki/wiki/targets/` — per-target structured pages
+  - `llm-wiki/wiki/techniques/` — per-technique structured pages
+  - `llm-wiki/wiki/engagements/` — per-engagement overview pages
+  - `llm-wiki/templates/` — page templates (target, technique, credential, ioc, engagement)
+  - `llm-wiki/log.md` — append-only changelog
+  - `llm-wiki/index.md` — master index (update on new pages)
 - Tuoni credential store — actual credentials (via tuoni-mcp)
 
 ## Safety

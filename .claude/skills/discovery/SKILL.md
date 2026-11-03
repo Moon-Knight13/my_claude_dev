@@ -153,11 +153,18 @@ targets:
       discrepancies: [<vs Providentia expected>]
 ```
 
-**Obsidian:**
+**Obsidian (llm-wiki paths — ENFORCED):**
+
+After enumeration completes, invoke `/log-finding` for each significant
+discovery result. Then write:
+
 ```
-raw/<hostname>-discovery-<date>.md    # full enumeration dump
-wiki/<hostname>.md                    # update structured target page
+llm-wiki/raw/<hostname>-discovery-<date>.md    # full enumeration dump
+llm-wiki/wiki/targets/<hostname>.md            # update target page (template: target.md)
+llm-wiki/log.md                                # changelog row
 ```
+
+RT-SCOPE-001 reminder: exclude gt-prefixed accounts from all written output.
 
 ## Failure modes
 

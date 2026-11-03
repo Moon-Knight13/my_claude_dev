@@ -150,9 +150,13 @@ After all planned lateral moves complete:
    - New credential harvesting opportunities?
    - Closer to high-value targets (DCs, critical servers)?
 3. **Update proxy chain** if new routes discovered
-4. **Document in Obsidian**:
-   - `wiki/<hostname>-lateral.md`: how access was achieved
-   - Update network topology map
+4. **Document in Obsidian (llm-wiki paths — ENFORCED)**:
+   Invoke `/log-finding` for each lateral move outcome. Then write:
+   - `llm-wiki/wiki/targets/<hostname>.md`: update target page with access method
+   - `llm-wiki/wiki/techniques/<method>.md`: technique page for lateral method
+   - `llm-wiki/raw/<hostname>-lateral-<date>.md`: raw command/session output
+   - `llm-wiki/log.md`: changelog row
+   - Update network topology in engagement wiki page
 
 ## State writes
 
