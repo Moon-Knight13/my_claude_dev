@@ -12,6 +12,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 MCP_FILE="$PROJECT_DIR/.mcp.json"
+MCP_PKG_DIR="$PROJECT_DIR/.mcp-packages"
+
+# Pre-install packages that lack a bin entry (npx can't run them directly)
+if [ ! -d "$MCP_PKG_DIR/node_modules/hacktricks-mcp" ]; then
+    echo "Installing hacktricks-mcp (no bin entry — needs node direct)..."
+    npm install --prefix "$MCP_PKG_DIR" hacktricks-mcp@1.3.0 --silent 2>&1 || true
+fi
 
 # Quoted heredoc — no shell expansion. All dynamic vars flow through
 # mcp-wrapper.sh -> load-env.sh at server start time, not generation time.
@@ -28,7 +35,7 @@ cat > "$MCP_FILE" << 'ENDOFMCP'
     },
     "hacktricks-mcp": {
       "command": "/workspace/scripts/mcp-wrapper.sh",
-      "args": ["npx", "-y", "hacktricks-mcp@1.3.0"]
+      "args": ["node", "/workspace/.mcp-packages/node_modules/hacktricks-mcp/dist/index.js"]
     },
     "mitre-mcp": {
       "command": "/workspace/scripts/mcp-wrapper.sh",

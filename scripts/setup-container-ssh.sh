@@ -9,6 +9,9 @@
 #
 # Requires: the host ran scripts/local/bootstrap-hub.sh and has an SSH server
 # accepting agent-forwarded keys on localhost.
+#
+# In host-network mode host.docker.internal doesn't resolve; fall back to
+# 127.0.0.1 which reaches the same SSH server on the host.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -23,6 +26,14 @@ MARKER_END="# --- END managed by setup-container-ssh.sh ---"
 mkdir -p "$SSH_DIR"
 chmod 700 "$SSH_DIR"
 
+# Resolve hub hostname: host.docker.internal when available, else 127.0.0.1
+# (host-network mode doesn't inject the magic hostname).
+if getent hosts host.docker.internal &>/dev/null; then
+    HUB_HOSTNAME="host.docker.internal"
+else
+    HUB_HOSTNAME="127.0.0.1"
+fi
+
 HUB_USER="${HUB_SSH_USER:-}"
 if [[ -z "$HUB_USER" ]]; then
     echo "  --  HUB_SSH_USER not set in .env — skipping SSH config generation"
@@ -35,7 +46,7 @@ build_config() {
 $MARKER_BEGIN
 
 Host hub
-    HostName host.docker.internal
+    HostName $HUB_HOSTNAME
     User $HUB_USER
     ForwardAgent yes
     StrictHostKeyChecking accept-new
@@ -125,7 +136,7 @@ fi
 chmod 600 "$SSH_CONFIG"
 
 # Summary
-echo "  --  Hub: ${HUB_USER}@host.docker.internal"
+echo "  --  Hub: ${HUB_USER}@${HUB_HOSTNAME}"
 # shellcheck disable=SC2015
 [[ -n "${SPOKE_DEPLOYBOX_HOST:-}" ]] && echo "  --  Deploy box: ${SPOKE_DEPLOYBOX_USER:-gt}@${SPOKE_DEPLOYBOX_HOST} (via hub)" || true
 # shellcheck disable=SC2015
