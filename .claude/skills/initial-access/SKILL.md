@@ -41,12 +41,26 @@ Active in: **red-team** mode only.
 
 For each operator-approved attack vector from recon:
 
-1. **HackTricks** (hacktricks-mcp): detailed exploitation steps for this
-   platform/service/version combination
-2. **CVE intelligence** (cve-mcp): CVE details, EPSS score, known exploit availability
-3. **MITRE ATT&CK** (mitre-mcp): technique ID, sub-techniques, detection info
-4. **Wiki vulns-docs** (outline-readonly): prior team research on this vuln
-5. **Metasploit module** (if exists): READ for technique understanding ONLY.
+0. **Range vuln profiles** (range-intel `range_vuln_lookup`): check if range-intel
+   already has vulnerability data for this target before external research
+1. **HackTricks** (hacktricks-mcp): use efficient workflow:
+   - `hacktricks_quick_lookup` for first-pass exploitation overview
+   - `search_hacktricks` → `get_hacktricks_outline` → `get_hacktricks_section` for depth
+   - `get_hacktricks_cheatsheet` to extract all code blocks for adaptation
+   - NEVER use `get_hacktricks_page` (3000-15000 tokens) when `get_hacktricks_section` suffices
+2. **CVE intelligence** (cve-mcp) — full enrichment pipeline:
+   - `cve_enrich`: NVD + EPSS + KEV + GHSA + Shodan + VulnCheck + Nuclei + MSF in parallel
+   - `kev_check`: if in KEV catalog, actively exploited = high success probability
+   - `exploit_search`: check for public exploits across multiple sources
+   - `cve_to_attack`: map CVE's CWE to ATT&CK techniques (bridges to mitre-mcp)
+   - `cve_prioritize`: when multiple CVEs found, rank by exploitation risk
+3. **MITRE ATT&CK** (mitre-mcp): technique ID, sub-techniques, plus:
+   - `get_data_sources`: what detection sources apply (OPSEC assessment)
+   - `get_mitigations`: what defenses exist (predict failure, choose alternatives)
+4. **LOLBins OPSEC check** (lolbins-mcp `analyze_opsec_risk`): assess noise level
+   and EDR trigger probability BEFORE executing any exploit
+5. **Wiki vulns-docs** (outline-readonly): prior team research on this vuln
+6. **Metasploit module** (if exists): READ for technique understanding ONLY.
    Extract: target verification method, payload delivery mechanism, post-exploit
    actions. Document what it does. Do NOT use it.
 

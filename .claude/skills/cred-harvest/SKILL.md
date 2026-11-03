@@ -70,15 +70,22 @@ After any successful credential recovery:
 Before touching target, research WHERE credentials live for this platform:
 
 1. **HackTricks** (hacktricks-mcp): platform-specific credential locations
+   - Use `hacktricks_quick_lookup` for first-pass credential dump techniques
+   - Use `get_hacktricks_cheatsheet` to extract credential dump commands
    - Windows: SAM, LSA secrets, DPAPI, cached domain creds, vault,
      credential manager, browser stores, service account creds
    - Linux: /etc/shadow, SSH keys, .bash_history, config files,
      keyrings, process memory, environment variables
    - Network devices: running-config, startup-config, SNMP community strings
    - Applications: config files, databases, vaults, API tokens
-2. **Wiki vulns-docs** (outline-readonly): prior team findings for this host/role
-3. **GitLab README** (range-intel): deploy-time credentials, default passwords
-4. **MITRE ATT&CK** (mitre-mcp): T1003 (OS Credential Dumping) sub-techniques
+2. **LOLBins** (lolbins-mcp): credential access via native binaries
+   - `find_credential_access`: discover LOLBin-based credential harvesting paths
+   - `find_escalation_paths`: priv esc paths that lead to credential access
+   - `analyze_opsec_risk`: assess detection risk before each harvest command
+3. **Wiki vulns-docs** (outline-readonly): prior team findings for this host/role
+4. **GitLab README** (range-intel): deploy-time credentials, default passwords
+5. **MITRE ATT&CK** (mitre-mcp): T1003 (OS Credential Dumping) sub-techniques
+   - `get_data_sources` for T1003: understand what detection covers this technique
 
 Present research to operator: "These credential sources exist on this
 platform. Which to target?"
@@ -123,20 +130,27 @@ Execute harvesting from agent (through tuoni-mcp):
    - DPAPI protected data
    - Credential Manager vault
 
-### Phase 4: Credential Processing
+### Phase 4: Credential Processing — MANDATORY GATES
 
 On Kali (NOT target):
 
 1. **Identify credential type**: plaintext, NTLM hash, Kerberos ticket,
    SSH key, API token, certificate
-2. **Store in tuoni** (tuoni-mcp credential operations):
+2. **MANDATORY: Store in Tuoni cred store** (tuoni-mcp `tuoni_credential_add`):
    - Each credential gets unique ref ID
    - Tagged with: source host, source location, type, privilege level
-3. **Assess value for lateral movement**:
+   - **This is a gate step like `/log-finding` — MUST call before proceeding**
+   - Zero creds stored = engagement failure (see redteam-test2 post-mortem)
+3. **Record ref in engagement YAML** (tuoni_cred_id only, NEVER plaintext):
+   - Add to `credentials[]` with ref_id, type, username, domain, source_host
+4. **Assess value for lateral movement**:
    - Domain admin? Service accounts with broad access?
-   - Match against Providentia host list — where could these creds work?
-4. **Document in Obsidian** (refs only):
-   - `wiki/<hostname>-creds.md`: list of ref IDs, types, potential targets
+   - Match `tuoni_credentials_list` filter by realm against `range_targets` by network
+   - Programmatic lateral opportunity mapping, not manual
+5. **Document in Obsidian** (refs only):
+   - `llm-wiki/wiki/targets/<hostname>.md`: update cred refs section
+   - Use template `llm-wiki/templates/credential.md` for credential ref page
+   - `obsidian_add_tags`: `#engagement/<id>`, `#phase/cred-harvest`, `#target/<hostname>`
    - NEVER write actual credential values
 
 ### Phase 5: Credential Spray (if operator approves)

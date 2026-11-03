@@ -153,7 +153,9 @@ or skill detects existing engagement file.
 2. Read engagement YAML.
 3. Refresh agent list from `tuoni_agents_list` — update `agents` section,
    flag agents that disappeared since last session.
-4. Summarize state to operator:
+4. Load prior Obsidian context via `obsidian_search_vault` for `#engagement/<id>`
+   — read existing wiki pages to understand prior session state.
+5. Summarize state to operator:
    - Engagement ID, start date, mode
    - Active targets (count + list)
    - Live agents (count, any lost since last session)
@@ -232,13 +234,33 @@ using `llm-wiki/templates/engagement.md`. Update `llm-wiki/index.md` to add
 engagement to the Exercises list. This is the missing link that caused zero
 DCM27 redteam-test2 documentation.
 
+### Engagement Close / Session End
+
+When operator closes engagement or session ends:
+
+1. **Generate ATT&CK Navigator layer** (mitre-mcp):
+   - Extract all MITRE technique IDs from `techniques_tried` in YAML
+   - Call `generate_layer` with technique IDs + color by result (green=success, red=failed, yellow=partial)
+   - Write layer JSON to `llm-wiki/raw/<engagement-id>-attack-layer.json`
+   - This is powerful reporting automation — shows exact coverage exercised
+
+2. **Generate LOLBins report** (lolbins-mcp):
+   - Call `export_report` with engagement technique summary
+   - Write to `llm-wiki/raw/<engagement-id>-lolbins-report.md`
+
+3. **Plugin utilization audit**:
+   - Compare `plugin_inventory` from YAML against actual plugin calls in session
+   - Report: plugins available vs plugins used vs plugins that would have helped
+   - Record in engagement YAML `plugin_utilization` section
+
 ### Catch-Up Procedure
 
 When operator requests review or session is ending:
 1. Audit engagement YAML `findings` vs `techniques_tried` — gaps = missing findings
 2. For each technique with no corresponding llm-wiki note, invoke `/log-finding` retroactively
 3. For each target with no `llm-wiki/wiki/targets/` page, create from template
-4. Report documentation debt to operator
+4. Apply Obsidian tags to all engagement notes (see Tag Strategy below)
+5. Report documentation debt to operator
 
 - **llm-wiki/raw/**: immutable intake dumps (scan output, command output).
   Write via `obsidian_create_note` with timestamp prefix. Never modify after
@@ -247,6 +269,26 @@ When operator requests review or session is ending:
   (host profile, findings, techniques, cred refs). One page per technique
   used (procedure, targets, results, detection notes). Update via
   `obsidian_edit_note` as findings grow.
+- **Dedup check**: Before creating any note, call `obsidian_search_vault` to
+  check if page already exists. Update existing pages instead of creating duplicates.
+- **Directory creation**: Call `obsidian_create_directory` for engagement dirs
+  at engagement start if they don't exist.
+
+### Obsidian Tag Strategy (ENFORCED)
+
+After every note write, apply tags via `obsidian_add_tags`:
+
+| Tag pattern | When to apply |
+|-------------|---------------|
+| `#engagement/<id>` | Every note created during this engagement |
+| `#phase/<phase>` | recon, initial-access, discovery, cred-harvest, persist, lateral |
+| `#target/<hostname>` | Every note mentioning a specific target |
+| `#mitre/<T-id>` | Every technique note with MITRE mapping |
+| `#result/<outcome>` | success, failed, partial, blocked |
+
+Tags enable cross-engagement knowledge retrieval. A search for
+`#mitre/T1003 #result/success` finds all successful credential dumps
+across all engagements.
 
 ## File Locations
 

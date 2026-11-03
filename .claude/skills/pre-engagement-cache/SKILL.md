@@ -20,13 +20,35 @@ MCPs are connected.
 
 ### Step 1: Verify MCP Connectivity
 
-Check all three required MCPs respond:
+Check all required MCPs respond:
 - range-intel: query any host to confirm Providentia reachable
 - outline-readonly: search for any doc to confirm wiki reachable
 - obsidian-mcp: list vault to confirm Obsidian connected
+- tuoni-mcp: `tuoni_capabilities` to verify C2 connection + version
 
 If any MCP unreachable: report which and stop. Do NOT cache with
 partial sources — operator should fix connectivity first.
+
+### Step 1.5: Plugin and Listener Inventory (ENFORCED)
+
+Verify tuoni-plugins deployment and record available capabilities:
+
+1. `tuoni_command_plugins_list`: list all command plugins deployed
+2. `tuoni_aliases_list`: list all DynamicAlias modules available
+3. `tuoni_listeners_list`: list active listeners
+4. Record in engagement YAML:
+   ```yaml
+   plugin_inventory:
+     command_plugins: [<names>]
+     aliases: [<names>]
+     listeners: [<names + ports>]
+     inventoried_at: <ISO-8601>
+   ```
+5. Compare against expected plugins (net-recon, cred-dump, persist-swarm,
+   lateral-wmi, ad-enum, collect-intel, get-system). Warn if any missing.
+
+This prevents "use cred-dump plugin" instructions failing because plugins
+aren't deployed — a known failure mode from redteam-test2.
 
 ### Step 2: Read Engagement Targets
 
@@ -65,10 +87,18 @@ If no README exists: skip silently (not all boxes have READMEs).
 
 ### Step 5: Cache Wiki Vulnerability Docs
 
-1. Search outline for vulns-docs collection entries relevant to targets
-2. For each relevant page:
+1. `outline_collection_structure` for vulns-docs collection — understand doc tree
+2. Search outline for vulns-docs collection entries relevant to targets
+3. For each relevant page:
    - Write to Obsidian: `llm-wiki/wiki/vulnerabilities/<topic>.md`
    - Frontmatter: `source: outline-wiki`, `cached_at`, `collection: vulns-docs`
+
+### Step 5.3: CVE Trending Intelligence (NEW)
+
+1. `cve_trending`: check currently trending CVEs with high EPSS scores
+2. Cross-reference against target services from Providentia data
+3. If matches found, write to `llm-wiki/wiki/vulnerabilities/trending-<date>.md`
+4. Flag matching CVEs in engagement YAML `next_steps` as high-priority vectors
 
 ### Step 5.5: Cache Wiki Playbooks (NEW)
 

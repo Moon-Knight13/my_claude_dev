@@ -60,7 +60,12 @@ From initial agent (the one that just landed):
 
 ### Step 2: Select persistence mechanisms
 
-Choose TWO different mechanisms (defense-in-depth):
+**LOLBins-informed selection** (lolbins-mcp — ENFORCED):
+1. `find_persistence_paths`: discover all persistence options for this platform/environment
+2. `analyze_opsec_risk`: assess detection risk for each candidate mechanism
+3. Select TWO mechanisms with lowest OPSEC risk score that satisfy defense-in-depth
+
+Default fallback (if lolbins-mcp unavailable):
 
 | Priority | Windows | Linux |
 |----------|---------|-------|
@@ -71,7 +76,7 @@ Choose TWO different mechanisms (defense-in-depth):
 Mechanisms must be:
 - Different from each other (survive single remediation)
 - Appropriate to privilege level
-- Quiet (low log generation)
+- Quiet (low log generation, confirmed by `analyze_opsec_risk`)
 
 ### Step 3: Generate payloads
 

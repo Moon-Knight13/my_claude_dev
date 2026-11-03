@@ -65,19 +65,26 @@ credential store — requires creds stored via `tuoni_credential_add` first.
 ### Phase 1: Target Selection
 
 1. **Review Providentia** (range-intel MCP) for candidate targets:
-   - Network topology: what can current foothold reach?
+   - `range_networks`: full network topology — what segments exist, what can foothold reach
+   - `range_targets_summary`: lightweight inventory of hosts per segment (no vuln overhead)
+   - `range_host`: detail for specific candidates
    - Host roles: prioritize per RT-DEP-001 deployment order
    - Team assignments: stay within engagement scope
-2. **Match credentials to targets**:
+2. **Match credentials to targets** (programmatic, not manual):
+   - `tuoni_credentials_list` filter by realm/type against `range_targets` by network
    - Domain creds: which hosts are domain-joined?
    - Local admin: reuse across similar builds?
    - Service accounts: what systems do they access?
    - SSH keys: authorized on which hosts?
-3. **Assess network path**:
+3. **LOLBins lateral analysis** (lolbins-mcp):
+   - `find_lateral_movement`: discover LOLBin-based lateral movement methods
+   - `compare_platforms`: when moving Linux→Windows or vice versa, find technique equivalents
+   - `analyze_opsec_risk`: assess detection risk for chosen lateral method
+4. **Assess network path**:
    - Direct: foothold can reach target
    - Proxied: need SOCKS through intermediate foothold
    - Multi-hop: chain of proxies needed
-4. **Present plan to operator**: target, credential, method, path
+5. **Present plan to operator**: target, credential, method, path, OPSEC risk score
 
 ### Phase 2: SOCKS Proxy Setup (if needed)
 
