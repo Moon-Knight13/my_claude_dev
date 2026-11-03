@@ -2,59 +2,7 @@
   "_comment": "Base settings — always active regardless of mode. Hooks and guards live here. Mode-specific MCP servers are merged on top by /mode skill.",
   "_pii_shield_note": "PII-Shield (gregmos/PII-Shield) anonymizes content before it reaches Claude. Install manually: Settings > Extensions > drag in the .mcpb file. See docs/TEMPLATE_GUIDE.md#pii--privacy-controls for details.",
   "_statusline_note": "The caveman statusline badge is auto-configured by scripts/install-caveman.sh at container start into user-level settings (~/.claude/settings.json), because the plugin script lives at a hash-versioned cache path. Do not hardcode a statusLine here.",
-  "mcpServers": {
-    "local-ollama": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "ollama-mcp-server"
-      ],
-      "env": {
-        "OLLAMA_HOST": "http://host.docker.internal:11434",
-        "OLLAMA_MODEL": "qwen2.5-coder:7b"
-      }
-    },
-    "range-intel": {
-      "command": "/workspace/scripts/mcp-wrapper.sh",
-      "args": ["python3", "-m", "range_intel.server"],
-      "cwd": "/workspace/mcp-servers/range-intel",
-      "env": {
-        "PYTHONPATH": "/workspace/mcp-servers/range-intel/src"
-      }
-    },
-    "outline-readonly": {
-      "command": "/workspace/scripts/mcp-wrapper.sh",
-      "args": ["node", "/workspace/mcp-servers/outline-readonly/src/server.js"]
-    },
-    "obsidian-mcp": {
-      "command": "npx",
-      "args": ["-y", "obsidian-mcp@2.0.1", "serve", "--vault", "my_notes=/home/node/vault"]
-    },
-    "hacktricks-mcp": {
-      "command": "npx",
-      "args": ["-y", "hacktricks-mcp@1.3.0"]
-    },
-    "mitre-mcp": {
-      "command": "npx",
-      "args": ["-y", "mitre-attack-mcp@1.0.1"]
-    },
-    "tuoni-mcp": {
-      "command": "/workspace/scripts/mcp-wrapper.sh",
-      "args": ["python3", "-m", "tuoni_mcp"],
-      "env": {
-        "TUONI_VERIFY_TLS": "false",
-        "TUONI_MCP_PROFILES": "agent-ops,access,discovery,authoring,administration"
-      }
-    },
-    "rea-mcp": {
-      "command": "npx",
-      "args": ["-y", "rea-agents@6.8.0", "mcp"]
-    },
-    "lolbins-mcp": {
-      "command": "npx",
-      "args": ["-y", "living-off-the-land-lolbins-mcp-server@0.1.0"]
-    }
-  },
+  "_mcp_note": "MCP servers live in .mcp.json (Claude Code reads them from there, not here). This file is for hooks, permissions, and mode notes only.",
   "hooks": {
     "UserPromptSubmit": [
       {
@@ -88,5 +36,5 @@
       }
     ]
   },
-  "_mode_note": "Active mode is set by /mode skill. All MCP servers stay registered; servers that lack env vars simply fail to start and are skipped."
+  "_mode_note": "Active mode is set by /mode skill."
 }
