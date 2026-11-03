@@ -174,9 +174,42 @@ Trigger: "next steps", "plan next", "what's next", or end of session.
 3. Write updated YAML.
 4. At session end, remind operator of top 3 next steps.
 
-## Documentation Pipeline
+## Documentation Pipeline — ENFORCED GATES
 
-When findings accumulate, write structured documentation:
+Documentation is NOT optional. Each kill-chain phase transition MUST produce
+Obsidian output before the next phase starts.
+
+### Phase Gate Checklist
+
+After EACH technique execution or phase completion, BEFORE moving on:
+
+1. **Update engagement YAML** with technique outcome + finding (if success/partial)
+2. **Write Obsidian raw/** dump of command output (immutable intake)
+3. **Update Obsidian wiki/** target page with structured finding
+4. **Store credentials** in Tuoni cred store (if any harvested), add ref to YAML
+
+If ANY gate item is skipped, the session MUST catch up before proceeding to
+the next target or phase. "I'll document later" is NOT acceptable — context
+degrades and findings are lost.
+
+### Obsidian Write Points
+
+| Kill-Chain Phase | raw/ Write | wiki/ Write |
+|-----------------|------------|-------------|
+| Recon | `raw/<host>-recon-<date>.md` | `wiki/<host>.md` (create) |
+| Initial Access | `raw/<host>-initial-access-<date>.md` | `wiki/<host>-initial-access.md` |
+| Discovery | `raw/<host>-discovery-<date>.md` | `wiki/<host>.md` (update) |
+| Cred Harvest | `raw/<host>-creds-<date>.md` | `wiki/<host>-creds.md` (refs only) |
+| Lateral Move | `raw/<host>-lateral-<date>.md` | `wiki/<host>-lateral.md` |
+| Persist | — | `wiki/<host>.md` (update persistence section) |
+
+### Catch-Up Procedure
+
+When the operator requests review or session is ending:
+1. Audit engagement YAML `findings` vs `techniques_tried` — gaps = missing findings
+2. For each technique with no corresponding Obsidian note, write retroactive raw/ dump
+3. For each target with no wiki/ page, create structured target profile
+4. Report documentation debt to operator
 
 - **Obsidian raw/**: immutable intake dumps (scan output, command output).
   Write via `obsidian_create_note` with timestamp prefix. Never modify after
@@ -197,6 +230,9 @@ When findings accumulate, write structured documentation:
 
 - **RT-TGT-001**: never add targets without explicit operator approval in
   the current message. "I found host X" is NOT approval.
+- **RT-SCOPE-001**: GT (green team) accounts permanently out of scope. When
+  recording techniques or findings that enumerate users, exclude gt-prefixed
+  accounts from the data. Never add gt credentials to the credential store.
 - **Credentials**: REFS ONLY in YAML and Obsidian. Actual values in Tuoni
   cred store only.
 - **No secrets in engagement YAML**: no passwords, hashes, keys, tokens.

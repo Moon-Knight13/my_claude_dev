@@ -20,6 +20,14 @@ Active in: **red-team** mode only.
 
 ## OPSEC Rules — ENFORCED
 
+### Scope Exclusion (CRITICAL)
+
+- **RT-SCOPE-001:** GT (green team) accounts OUT OF SCOPE. When harvesting
+  credentials, DISCARD any gt-prefixed usernames, tokens, or sessions. If
+  lsass/shadow/SAM dump contains gt creds, exclude them from storage and
+  reporting. Never store gt credentials in Tuoni cred store. Never use gt
+  tokens for lateral movement even if found in memory or cached logons.
+
 ### Credential Spray Safety
 
 - **MUST enumerate lockout policy** before ANY credential spraying

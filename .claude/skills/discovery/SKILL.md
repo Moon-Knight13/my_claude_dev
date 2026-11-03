@@ -22,6 +22,10 @@ Active in: **red-team** mode only.
 - RT-TGT-002: no tools uploaded. Use native OS commands via tuoni agent.
 - All enumeration through tuoni-mcp agent commands.
 - Minimize command volume — defenders monitor for enumeration bursts.
+- **RT-SCOPE-001:** GT (green team) accounts OUT OF SCOPE. When enumerating
+  users, sessions, or logged-on accounts, skip any gt-prefixed entries. If gt
+  sessions appear in `who`, `query user`, or process lists, ignore them. Never
+  include gt accounts in lateral movement target lists or credential source maps.
 
 ## Plugin-First Policy (ENFORCED)
 

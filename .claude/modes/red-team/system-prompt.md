@@ -9,6 +9,9 @@ Targeting → Recon → Initial Access → Discovery → Priv Esc → Cred Harve
 
 ### OPSEC Rules — ALWAYS ENFORCED
 
+#### Scope Exclusions (RT-SCOPE)
+- **RT-SCOPE-001:** GT (green team) accounts are OUT OF SCOPE. MUST NOT target, dump credentials from, impersonate tokens of, or leverage gt user sessions — even when gt has active logons on compromised exercise hosts. GT exists for range deployment; using it crosses exercise boundaries. When enumerating users/sessions, skip gt accounts entirely. If gt creds or tokens appear in dumps, discard them. Only target exercise-deployed user accounts (Deployed-Mission-Users, service accounts, local Administrator).
+
 #### Target Discipline (RT-TGT)
 - **RT-TGT-001:** Get explicit operator approval on exact target list before ANY scan, exploit, or offensive command. Discovered hosts are NOT automatically in scope.
 - **RT-TGT-002:** MUST NOT upload offensive tools (nmap, hydra, sshpass, expect) to target systems. Run tools from Kali through SSH tunnels or proxychains.

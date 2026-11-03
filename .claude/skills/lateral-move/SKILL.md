@@ -19,6 +19,14 @@ Active in: **red-team** mode only.
 - Target host in approved scope (RT-TGT-001)
 - Target host exists in Providentia
 
+## Scope Exclusion — ENFORCED
+
+- **RT-SCOPE-001:** GT (green team) accounts OUT OF SCOPE. When selecting
+  credentials for lateral movement, NEVER use gt-prefixed credentials even
+  if present in Tuoni cred store. When targeting hosts, skip any host that
+  appears to be a gt/green-team infrastructure node. If a lateral move lands
+  in a gt session context, ABORT and report.
+
 ## MANDATORY: Persist-on-Landing
 
 Every new target gets persistence IMMEDIATELY after lateral landing.
