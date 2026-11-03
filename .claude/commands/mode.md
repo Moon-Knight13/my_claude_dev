@@ -1,12 +1,12 @@
 ---
 name: mode
-description: "Show mode info or generate launch command. Usage: /mode list | /mode <name> — prints the start-mode.sh command for that mode."
+description: "Switch or query operational mode. Usage: /mode <name> to switch, /mode list to see modes. Mode rules inject via hook on next prompt."
 ---
 
-# Mode Info
+# Mode Switching
 
-Show available modes, describe a mode, or generate the launch command.
-Modes are set at session start via `scripts/start-mode.sh`, not mid-session.
+Switch the session to a different operational mode. Each mode configures
+different OPSEC rules, documentation pipelines, and MCP server guidance.
 
 ## Available Modes
 
@@ -26,64 +26,62 @@ When the operator invokes `/mode <name>`:
 
 Show all available modes with descriptions. Read each
 `.claude/modes/<name>/settings.json` for `_description`.
+Show which mode is currently active from `.claude/.active-mode`.
 
 ### If a mode name
 
-1. **Validate** — check `.claude/modes/<name>/` exists with `system-prompt.md`
-   and `settings.json`. If missing, report and refuse.
+#### 1. Validate
 
-2. **Show mode info** — read `system-prompt.md` and summarize:
-   - MCP servers available
-   - OPSEC rules enforced
-   - Key workflow steps
+Check `.claude/modes/<name>/` exists with `system-prompt.md` and `settings.json`.
+If validation fails, report what is missing and refuse the switch.
 
-3. **Print launch command:**
-
-```
-./scripts/start-mode.sh <name>
-```
-
-With common variants:
+#### 2. Write active mode
 
 ```bash
-# Interactive session
-./scripts/start-mode.sh <name>
-
-# Background agent
-./scripts/start-mode.sh <name> --bg -p "<prompt>"
-
-# With worktree
-./scripts/start-mode.sh <name> -w
+echo "$MODE_NAME" > .claude/.active-mode
 ```
 
-4. **If operator is already in a session** — explain that mode is set at
-   session start. To switch, exit and relaunch with `start-mode.sh`.
-   Mid-session mode switching is not supported because MCP servers and
-   system prompt are loaded once at startup.
+The `mode-inject.sh` hook reads this file on every prompt and injects the
+mode's `system-prompt.md` as `additionalContext`. Rules take effect on the
+**next prompt** — no restart needed.
+
+#### 3. Report
+
+Tell the operator:
+- Which mode is now active
+- Key OPSEC rules now in effect (summarize from system-prompt.md)
+- Which MCP servers the mode recommends (from system-prompt.md)
+- **Note about MCP servers**: all MCPs are loaded at startup. The mode's
+  system prompt tells Claude which ones to use. For hard MCP isolation
+  (only load specific servers), use `scripts/start-mode.sh` instead.
+
+#### 4. Immediate context
+
+Read `.claude/modes/<name>/system-prompt.md` and apply its rules starting
+from this response. Do not wait for the hook — the hook ensures persistence
+across future prompts, but you should follow mode rules immediately.
 
 ## How It Works
 
-`start-mode.sh` uses Claude Code CLI flags for per-session isolation:
+Two mechanisms, complementary:
 
-- `--append-system-prompt-file` — injects mode rules into system prompt
-- `--settings` — overlays mode metadata on project settings
-- `--mcp-config` + `--strict-mcp-config` — loads only this mode's MCP servers
-- `--name` — labels session in `claude agents` list
+### Hook-based (conversational, recommended)
+- Operator says `/mode red-dev` or just "red-dev mode"
+- Skill writes `.claude/.active-mode`
+- `mode-inject.sh` hook injects rules as `additionalContext` on every prompt
+- All MCPs already loaded — mode rules govern which Claude uses
+- **No restart needed** for rule changes
+- MCP availability is soft (all loaded, guidance-enforced)
 
-No shared files are overwritten. Parallel sessions in different modes are safe.
+### Script-based (hard isolation, parallel sessions)
+- Operator runs `scripts/start-mode.sh red-dev` before starting Claude
+- CLI flags set system prompt, settings, and MCP config per-session
+- Only mode's MCP servers are loaded (`--strict-mcp-config`)
+- **Parallel-safe** — no shared file conflicts
+- Best for `--bg` background agents
 
-## Legacy Fallback
+## Safety
 
-If `start-mode.sh` is unavailable (e.g. remote session without shell access),
-the old file-swap approach still works:
-
-```bash
-bash scripts/setup-mcp-servers.sh "$MODE_NAME"
-# Generates .mcp-<mode>.json — copy to .mcp.json if needed
-cp ".mcp-${MODE_NAME}.json" .mcp.json
-cat .claude/modes/base/CLAUDE.md > CLAUDE.md
-echo "" >> CLAUDE.md
-cat ".claude/modes/$MODE_NAME/system-prompt.md" >> CLAUDE.md
-echo "$MODE_NAME" > .claude/.active-mode
-# Restart session
-```
+- Base hooks MUST survive every mode switch — hook is additive, not replacing
+- Mode switch is idempotent — switching to current mode is a no-op refresh
+- If `.active-mode` file is missing or empty, no mode rules are injected
