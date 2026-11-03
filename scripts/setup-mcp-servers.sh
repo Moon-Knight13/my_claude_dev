@@ -21,7 +21,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 MCP_FILE=""  # set below based on mode
 MCP_PKG_DIR="$PROJECT_DIR/.mcp-packages"
-MODES_DIR="$PROJECT_DIR/.claude/modes"
 
 # Pre-install packages that lack a bin entry (npx can't run them directly)
 if [ ! -d "$MCP_PKG_DIR/node_modules/hacktricks-mcp" ]; then

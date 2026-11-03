@@ -21,7 +21,7 @@ MODES_DIR="$PROJECT_DIR/.claude/modes"
 # No active mode — skip silently
 [[ -f "$MODE_FILE" ]] || exit 0
 
-MODE="$(cat "$MODE_FILE" 2>/dev/null | tr -d '[:space:]')"
+MODE="$(tr -d '[:space:]' < "$MODE_FILE" 2>/dev/null)"
 [[ -n "$MODE" ]] || exit 0
 
 PROMPT_FILE="$MODES_DIR/$MODE/system-prompt.md"
