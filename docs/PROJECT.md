@@ -372,6 +372,41 @@ Two properties matter if you change it:
   `check-day0.sh` asserts the capability is present on a box (a stale install
   predating it FAILs).
 
+### Host DNS prerequisite for range connectivity
+
+The devcontainer reaches range services (Tuoni, Providentia, Outline, GitLab)
+through hostnames configured in `.env`. Docker's embedded DNS resolver does not
+honour the host's per-link split-DNS routing — it reads only the default-route
+DNS server from `/run/systemd/resolve/resolv.conf`, which on a dual-VPN setup
+is the privacy VPN's resolver, not the range resolver.
+
+The fix is two parts, both required:
+
+1. **systemd-resolved stub on the Docker bridge** (one-time host config):
+   ```bash
+   sudo mkdir -p /etc/systemd/resolved.conf.d
+   printf '[Resolve]\nDNSStubListenerExtra=172.17.0.1\n' \
+     | sudo tee /etc/systemd/resolved.conf.d/docker-dns.conf
+   sudo systemctl restart systemd-resolved
+   ```
+   This makes the host's split-DNS-aware resolver available on the Docker
+   bridge IP. It survives reboots (drop-in is persistent). It must be done
+   once per host, not per container.
+
+2. **`--dns 172.17.0.1`** in `devcontainer.json` `runArgs` (already configured).
+   Tells Docker to forward container DNS queries to the host's resolver
+   instead of the default-route DNS.
+
+`scripts/check-host-prereqs.sh` validates both at `initializeCommand` time and
+fails the container start with remediation steps if either is missing. It only
+runs the checks when `.env` has spoke hosts configured — without spokes, range
+DNS is not expected and the script is a no-op.
+
+**Restart caveat:** `systemctl restart systemd-resolved` wipes per-link DNS
+config set by vpn-chain. If you restart resolved while the VPN is connected,
+re-run `vpn-chain` (or re-apply `resolvectl dns`/`domain` on the VPN
+interface) to restore split-DNS routing.
+
 ### Network changes are deliberate
 
 Adding an outbound host to the devcontainer firewall goes through
