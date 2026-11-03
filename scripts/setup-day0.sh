@@ -155,22 +155,6 @@ if [[ ! -f "$HOME/.local/lib/ctp-bridge/guard-stack.sh" ]]; then
         || echo "  !!  install-ctp-bridge.sh failed (continuing)"
 fi
 
-# Deploy outline-readonly MCP server config if not already registered.
-if command -v claude >/dev/null 2>&1; then
-    _mcp_list="$(claude mcp list 2>/dev/null || echo "")"
-    if ! echo "$_mcp_list" | grep -q "outline-readonly"; then
-        _mcp_server="$_SCRIPT_DIR/../mcp-servers/outline-readonly/src/server.js"
-        if [[ -f "$_mcp_server" ]]; then
-            echo "  >>  outline-readonly MCP server available but not registered."
-            echo "      To activate, run:"
-            echo "      claude mcp add outline-readonly -s user -t stdio \\"
-            echo "        -e OUTLINE_API_URL=\${OUTLINE_API_URL:?set to your Outline instance URL} \\"
-            echo "        -e OUTLINE_API_KEY=\${OUTLINE_API_KEY:?set to your Outline API key} \\"
-            echo "        -- node $_mcp_server"
-        fi
-    fi
-fi
-
 # 4. Best-effort GitHub bootstraps — only when gh is already authenticated.
 #    These mutate REMOTE GitHub settings, so log loudly. Each is guarded by its
 #    completion marker so it runs at most once.
