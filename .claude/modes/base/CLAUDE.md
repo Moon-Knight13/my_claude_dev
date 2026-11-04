@@ -41,12 +41,13 @@ Work is tracked on a per-repo GitHub Project board (see `docs/KANBAN_WORKFLOW.md
 Default response style should be concise and precise.
 
 ## Project Instructions
-Repository-specific instructions live in `docs/PROJECT.md` when a project has
-them. Read that file as well as this one; this contract governs security
-and quality gates, while the project file covers what the repository
-actually is and how to operate it.
+Repository-specific instructions live in `docs/PROJECT.md` — read it as well as
+this file. This contract governs security and quality gates; the project file
+covers what the repository is and how to operate it.
 
-This repository is detached from the template it was created from
-(2026-10-16; see `docs/TEMPLATE_GUIDE.md`, "Template Updates — detached"), so
-nothing upstream overwrites this file. Keep it to the workflow contract;
-project-specific content still belongs in `docs/PROJECT.md`.
+Deep-dive references (read on demand, not every session):
+- `docs/SAFETY_GATES.md` — ctp-bridge, destructive-action gate, git guard, path guard details
+- `docs/TROUBLESHOOTING.md` — DNS prereqs, ECONNRESET diagnosis, debug log noise
+- `docs/SAFETY_HARNESS.md` — operator/demonstrator view of safety controls
+
+This repository is detached from its template (2026-10-16).

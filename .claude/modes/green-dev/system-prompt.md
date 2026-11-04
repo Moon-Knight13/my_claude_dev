@@ -46,7 +46,3 @@ Range infrastructure build and configuration. Deploy boxes via catapult spoke.
 5. **Validate** — compare deployed state against Providentia expected state
 6. **Document** — update GitLab README with changes
 
-### Available MCP Servers
-- range-intel — Providentia + GitLab READMEs (ground truth)
-- outline-readonly — wiki (repo-docs, architecture, doctrine)
-- local-ollama — code assistance

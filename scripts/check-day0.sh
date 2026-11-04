@@ -284,6 +284,29 @@ else
         "Optional. Run: bash scripts/install-caveman.sh and read its output — it exits 0 on failure by design. A moved upstream tag makes it refuse to install until CAVEMAN_COMMIT is reviewed and updated."
 fi
 
+# 14. Skill frontmatter mode names match existing mode directories.
+_modes_dir=".claude/modes"
+_skills_dir=".claude/skills"
+_bad_modes=""
+if [[ -d "$_skills_dir" && -d "$_modes_dir" ]]; then
+    for _sf in "$_skills_dir"/*/SKILL.md; do
+        [[ -f "$_sf" ]] || continue
+        _ml="$(sed -n '/^---$/,/^---$/{/^modes:/p}' "$_sf" 2>/dev/null)"
+        [[ -n "$_ml" ]] || continue
+        for _m in $(printf '%s' "$_ml" | sed 's/modes://;s/\[//;s/\]//;s/,/ /g'); do
+            if [[ ! -d "$_modes_dir/$_m" ]]; then
+                _bad_modes="$_bad_modes  $(basename "$(dirname "$_sf")"):$_m"
+            fi
+        done
+    done
+fi
+if [[ -z "$_bad_modes" ]]; then
+    check "Skill mode names valid" "pass" ""
+else
+    check "Skill mode names valid" "warn" \
+        "Unknown modes in skill frontmatter:$_bad_modes — fix modes: field or create the mode directory."
+fi
+
 echo ""
 echo "Results: ${PASS} ok, ${FAIL} failed, ${SKIP} skipped, ${WARN} warnings"
 
