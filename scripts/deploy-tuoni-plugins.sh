@@ -162,14 +162,17 @@ echo "--- Deploy ($deploy_count scripts) ---"
 # ── Backup existing scripts on Kali ────────────────────────────────────
 backup_dir="${REMOTE_SCRIPTS_DIR}.bak.$(date +%Y%m%d-%H%M%S)"
 echo "Backing up existing scripts to $backup_dir"
+# shellcheck disable=SC2029  # intentional client-side expansion
 ssh kali "sudo cp -a ${REMOTE_SCRIPTS_DIR} ${backup_dir} 2>/dev/null || true"
 
 # ── SCP scripts to Kali ───────────────────────────────────────────────
 # SCP to tmp first (rt user), then sudo mv into place
 tmp_deploy="/tmp/tuoni-plugin-deploy-$$"
+# shellcheck disable=SC2029  # intentional client-side expansion
 ssh kali "mkdir -p $tmp_deploy"
 scp -q "$DIST_DIR"/tuoni_*.py "kali:$tmp_deploy/"
 
+# shellcheck disable=SC2029  # intentional client-side expansion
 ssh kali "sudo cp ${tmp_deploy}/tuoni_*.py ${REMOTE_SCRIPTS_DIR}/ && \
           sudo chown root:root ${REMOTE_SCRIPTS_DIR}/tuoni_*.py && \
           sudo chmod 644 ${REMOTE_SCRIPTS_DIR}/tuoni_*.py && \
@@ -204,6 +207,7 @@ fi
 # ── Verify ─────────────────────────────────────────────────────────────
 echo ""
 echo "--- Verify ---"
+# shellcheck disable=SC2029  # intentional client-side expansion
 remote_count=$(ssh kali "ls -1 ${REMOTE_SCRIPTS_DIR}/tuoni_*.py 2>/dev/null | wc -l" 2>/dev/null || echo "0")
 echo "Scripts on Kali: $remote_count"
 
