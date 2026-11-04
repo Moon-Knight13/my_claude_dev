@@ -26,537 +26,93 @@ architecture. Three things live here, and confusing them wastes time:
    known good state. This is what other developers consume.
 
 Because provisioning scripts in `scripts/` are shared between the devcontainer
-and remote-box surfaces, a change to one affects both. Test accordingly: an
-environment variable that only exists in `devcontainer.json` is not available
-on a box.
+and remote-box surfaces, a change to one affects both.
 
 ## Operating environment
 
 The hub runs as a **devcontainer on the operator's laptop**, connecting to
 spokes on a **restricted network** used for development and security-testing
 work. The remote boxes are **shared, multi-user workstations** on that same
-network. Three consequences drive everything below:
+network.
 
-- **A shared OS account** (on remote boxes). Everyone signs in as the same user
-  and everyone has sudo. There is no per-developer boundary on a box.
-- **Sensitive working data.** Material handled during that work is confidential
-  and must not leave the box or reach this repository.
-- **Restricted egress.** Network access is limited; new outbound hosts are a
-  deliberate change, not an incidental one. The devcontainer enforces this with
-  an egress firewall (`/firewall-allow` for changes).
+- **Shared OS account** (on remote boxes). No per-developer boundary.
+- **Sensitive working data.** Must not leave the box or reach this repository.
+- **Restricted egress.** Network access is limited; `/firewall-allow` for changes.
 
 ### Hub-and-spoke topology
 
 - **Hub:** this repo's devcontainer, running Claude Code with 9+ MCP servers.
-- **Kali spoke (primary):** Tuoni C2 agent is the main channel. Hosts C2
-  server, plugins, native tools. SSH is fallback only.
-- **Deploy box spoke:** deployed code state, catapult container, ctp-bridge
-  gate. Allocation from wiki, put in `.env` by operator.
-- **Range services:** Providentia (CMDB, source of truth for networks/compute),
-  GitLab (code), Outline wiki (documentation).
+- **Kali spoke (primary):** Tuoni C2 agent is main channel. SSH is fallback.
+- **Deploy box spoke:** catapult container, ctp-bridge gate.
+- **Range services:** Providentia (CMDB), GitLab (code), Outline wiki (docs).
 - **Obsidian vault:** engagement documentation, findings, timeline.
 
-SSH reaches spokes through a proxy chain: container → host (hub) → deploybox →
-range-git, and container → host → kali. The host SSH server is the pivot point;
-in host-network mode the hub hostname resolves to `127.0.0.1`.
+SSH reaches spokes through a proxy chain: container → host → deploybox/kali.
 
 ### Truth hierarchy
 
 When sources conflict: **Providentia > deploy box > Kali state** (authoritative).
-**GitLab > Outline wiki > Obsidian vault** (reference/context only). Wiki is
-messy — never parse wiki tables for config or allocations. Operator puts
-allocations in `.env`.
+**GitLab > Outline wiki > Obsidian vault** (reference only). Never parse wiki
+tables for config/allocations. Operator puts allocations in `.env`.
 
 ### Authorized scope
 
-The work this harness supports is confined to **one authorized range**, on boxes
-the organisation owns and operates, for **training and authorized
-security-testing** — including authorized red-team work: developing boxes, both
-hardened and deliberately weak, and the means to exercise those weaknesses, on
-range assets set aside for it. This is the standing authorization context, and it
-is why an assistant should read deploy and box-development work here as ordinary
-engineering, not as targeting.
-
-Two things keep that legible rather than assumed:
-
-- The tool bridge is scoped to a **single named box** in code (see *The tool
-  bridge*), so the work provably cannot reach a target it was not pointed at.
-- Nothing operational enters the repository. Per *This repository is public*
-  below, range names, hosts, topology, technique detail and box specifics stay
-  off the repo regardless — which keeps the authorization clean and the sensitive
-  content where it belongs.
-
-Anything outside that scope — a target not on the authorized range, real
-infrastructure the organisation does not own — is not in view here and is not
-something to work toward.
+Confined to **one authorized range**, on boxes the organisation owns, for
+**training and authorized security-testing**. The tool bridge is scoped to a
+**single named box** in code. Nothing operational enters the repository.
 
 ## Rules
 
 ### This repository is public
 
 No domains, hostnames, IP addresses, account names, network topology, or details
-of the work performed on the boxes — in code, comments, commit messages, issues,
-or documentation. The existing scripts prompt for the box domain rather than
-hardcoding it; keep that pattern for anything comparable.
+of work performed — in code, comments, commit messages, issues, or documentation.
 
 ### Credentials never enter the repository
 
-Tokens and passwords are entered live at the prompt and stored outside the
-workspace. Do not add them to tracked files, `.env`, environment variables in
-committed config, or CI. `.env` is gitignored and is not read by the on-box
-provisioner — do not rely on it to configure a box.
-
-Because the account is shared, credentials must not outlive a session. The
-killswitch (`scripts/host/setup-killswitch.sh`) shreds the Claude token, the
-`gh` token, and any plaintext git credential store once the user has no live SSH
-session. Anything new that authenticates a *person* rather than the machine
-belongs in that list.
-
-Session transcripts under `~/.claude/projects/` are deliberately **not** wiped:
-Claude Code stores them locally and nowhere else, so deleting them destroys the
-developer's own history without protecting anything. They are plaintext and
-readable by the next person on the account — so keep sensitive specifics out of
-prompts on a shared box.
-
-Treat the killswitch as **hygiene, not a security boundary**: a peer with sudo
-can disable it. The durable fix is per-developer accounts, which is an
-organisational change rather than a repository one.
+Tokens and passwords are entered live and stored outside the workspace. `.env` is
+gitignored. The killswitch shreds credentials when no live SSH session exists.
 
 ### Provisioning must not lie
 
-A step that fails must not be reported as success. `host_fail` records a failed
-golden-state step; the provisioner then prints a summary, skips the completion
-marker, and exits non-zero, so a re-run retries instead of short-circuiting on
-"Already provisioned". Never downgrade a real failure to a bare warning to get a
-clean run — a silent `|| host_warn` is what previously hid a tool that had never
-installed on any box.
-
-Bump `PROVISION_VERSION` whenever the provisioning steps change, so boxes that
-already carry a marker re-provision.
+A step that fails must not be reported as success. `host_fail` records failures;
+re-run retries. Never downgrade a real failure to a bare warning.
+Bump `PROVISION_VERSION` when provisioning steps change.
 
 ### `.env` only works because something loads it
 
-`.env.example` is copied to `.env` by `setup-day0.sh`. `scripts/lib/load-env.sh`
-parses it (never sources — `.env` is developer-authored) and exports `KEY=VALUE`
-lines. The environment wins over the file, so CI and `containerEnv` still
-override `.env`. `scripts/lib/subsystems.sh` refuses to source `template.conf`
-for the same reason.
-
-Note: the routing subsystem (`SUBSYSTEM_ROUTING`) that was the primary consumer
-of `.env` has been disabled and its scripts removed (archived to
-`archive/sp1a-gate`). `load-env.sh` remains because other scripts still use it.
+`scripts/lib/load-env.sh` parses it (never sources). Environment wins over file.
 
 ### sudo is for one step, not for the whole run
 
-`provision-remote-box.sh` is invoked with `sudo` because the killswitch needs
-root. Everything else it does is user-level — VSCode server extensions, the
-Machine `settings.json`, caveman, the Claude plugin set, git config, the docker
-group — and under `sudo`, `$HOME` is `/root`.
-
-Using it provisioned root instead of the developer, on every box, silently:
-extensions reported "not found" because the search looked in
-`/root/.vscode-server`; ansible settings were merged into
-`/root/.config/Code/User/settings.json`, a file no VSCode session reads; plugins
-would have installed into `/root/.claude`; and the docker-group step offered to
-add *root* to the docker group, which is meaningless.
-
 `scripts/host/lib/host-common.sh` resolves `CLAUDE_TARGET_USER` and
-`CLAUDE_TARGET_HOME` — who the work is *for*, whether or not the script was
-elevated — and `run_as_target` runs a command as them with the right `HOME`.
-Any user-level step added to a host script must go through it. The run announces
-the target user, and warns when that target is root.
-
-Two related traps in the same family: `code` is not on `PATH` on a Remote-SSH
-box (the shim lives under the VSCode server directory in the developer's home,
-so `command -v code` alone reports no CLI on boxes that have one), and `sudo`
-strips `SSH_AUTH_SOCK`, so an agent check run as root says nothing about whether
-forwarding works.
-
-### Local-model routing subsystem (removed)
-
-The routing subsystem (`SUBSYSTEM_ROUTING`) and its scripts (`route-model.sh`,
-`delegate-local.sh`, `local-health.sh`, `ask-local.sh`, `suggest-route.sh`) have
-been disabled and removed. The code is preserved on the `archive/sp1a-gate`
-branch. Architecture pivot: Opus 4.6 is the primary session with no local model
-routing layer; MCP servers provide data and execution surfaces directly.
+`CLAUDE_TARGET_HOME`. Any user-level step in a host script must go through
+`run_as_target`.
 
 ### Build-tooling commands are confirmed manually
 
-Set by the repository owner, 2026-08-27:
-
-> Every tool command is confirmed manually until there are protections against a
-> model — Claude or local — accidentally running a destructive or high-cost
-> command.
-
-The tooling on a dev box deploys to a live range. Nothing in this repository may
-invoke it without a human saying yes to that specific invocation. That applies to
-Claude, to any subagent, and to the local model, which has no judgement about
-consequences at all.
-
-Practical consequences for anything built here:
-
-- A wrapper around the tooling ships **confirming everything**. An empty
-  allow-list is the supported configuration, not a placeholder to be filled in
-  later by whoever implements it.
-- `ASSUME_YES`, `--yes` and equivalents must not reach that gate. A
-  non-interactive caller is **refused**, never auto-approved — the whole point is
-  that a human is present.
-- Exempting a verb is the owner's decision, made per verb, after a classifier and
-  its tests exist. It is not a judgement call for whoever is writing the code.
-
-Classification needs **two** axes, not one. Destructive-versus-read-only is
-insufficient: a whole-range deployment may destroy nothing and still be something
-no one wants triggered by a misread instruction, because it consumes real time
-and real infrastructure. A verb is a candidate for exemption only when it is low
-on both **blast radius** (what it changes, and whether that is reversible) and
-**cost** (what running it consumes, and who pays).
-
-Pattern-matching command strings is not a protection — quoting and environment
-prefixes defeat it, and it looks enforced while not being. See the provisioning
-rule above for the same failure shape.
-
-#### The tool bridge (`scripts/ctp-bridge.sh`)
-
-That wrapper is the **only** supported path to run `ctp`. A `PreToolUse` hook
-(`.claude/hooks/pretooluse-ctp.sh`) denies the two ways around it — `docker exec`
-into the container, and a bare `ctp` — so the gates cannot be skipped.
-
-**Installed at user scope, not per-repo.** The work does not happen in this repo —
-it happens in the range checkout (e.g. `~/catapult/inventories/dcm`), and a hook
-registered only in this repo's `.claude/` would not load for a session started
-there. So `scripts/install-ctp-bridge.sh` (run by provisioning, step 8, or
-standalone) installs the wrapper to `~/.local/bin/ctp-bridge`, the guard to
-`~/.local/lib/ctp-bridge/`, the hook into `~/.claude/`, and seeds
-`~/.ctp-bridge.conf` — so the gate is present in **every** session on the account,
-whatever the CWD, and **nothing** is written into the range checkout (a tree you
-push). Run it as `ctp-bridge host deploy <box>` from the range checkout. The gate
-is inert until `CTP_ALLOWED_TARGET` is set — a provisioned box refuses every deploy
-until configured, which is the safe direction.
-
-The gates that matter, all in code on the parsed argv (never string-matched), and
-shared between wrapper and hook via `scripts/lib/ctp-guard.sh` so the two cannot
-drift:
-
-- **Two gates on a mutating target, both mandatory.** A **team gate** —
-  `CTP_ALLOWED_TEAM`, e.g. `t02` — requires the target to end with the authorised
-  team suffix, so a deploy cannot land on a live team by mistake; it holds even if
-  the box list is widened, and fails closed when unset. A **box allow-list** —
-  `CTP_ALLOWED_TARGET`, one named box — on top of it. A glob metacharacter in a
-  target is refused outright.
-- **Reachable verbs.** Mutating: `host deploy`, `host deploy-role` (team + box
-  gated). Read: `host list <box>` (verify a target) and `project update-inventory`
-  (required after making a Providentia box). `host vars`/`redeploy`/`remove` are
-  not reachable (`vars` would stream box detail into the transcript); `secrets` and
-  `make` are refused outright (credentials). Every reachable verb is still
-  confirmed per the owner policy above.
-- **The boundary is the config file, never caller env.** An agent that can set an
-  environment variable in the same call it makes must not be able to widen its own
-  limits. Both wrapper and hook read `.ctp-bridge.conf`; neither trusts env for a
-  boundary value.
-- **The agent's confirmation is the hook's prompt, handed to the wrapper by a
-  token.** The Bash tool's stdin is non-interactive, so the wrapper cannot prompt
-  on the agent path. The human confirms at the hook's `ask` prompt; the hook then
-  writes a single-use, argv-bound, short-TTL token, and the wrapper consumes it in
-  place of prompting. Without a token and without a TTY the wrapper refuses (no
-  auto-yes) — so an unattended/scripted run with no human is still blocked, while
-  the hook-approved agent path runs. The token path is itself guarded: the hook
-  denies any Read/Write/Edit/Bash access to it (and to the secret paths), and its
-  matcher is `Bash|Read|Write|Edit` for that reason. This is hygiene + human-in-
-  the-loop to the same strength as the rest of the hook, not a cryptographic
-  boundary — consistent with the accepted-risk note below.
-
-`.ctp-bridge.conf` is gitignored and holds a box name and paths — never secrets.
-The invocation count log lives under `.ai/` (also gitignored) and records verbs
-and outcomes only, never a target or output.
-
-#### Secrets and transcripts
-
-The tool gate does nothing about a secret Claude might *read*. On this shared box
-the next occupant can read the session transcript, and anything read also leaves
-the box to reach the model. So the same hook **denies reads of configured secret
-paths** — the vault password file, `~/.ssh/id_*`, `**/.env`, shell history —
-whether via the Read tool or a Bash command naming them. Least privilege makes
-that free: the deploy loop needs none of those, and the wrapper checks the vault
-by existence, never by reading it.
-
-Be honest about the limit. A hook matching command strings is hygiene and
-defense-in-depth, not a sandbox — an adversarial model could obfuscate a read. The
-real containment is OS-level: an agent user without read access to those files.
-The shared single-account box does not offer that (see *Operating environment* —
-one account, everyone sudo), so this is an **accepted risk**, the same class as
-the killswitch: it reduces incidental and instructed capture, it does not contain
-a hostile model. `PII-Shield` (referenced in `.claude/settings.json`) is
-complementary, not a substitute.
-
-### Accidental commits: the warn-only commit guard
-
-Provisioning installs a commit guard at user scope
-(`scripts/install-commit-guard.sh`, step 9) that scans staged content for secrets
-and PII on every commit. It is **warn-only by owner decision, for both PII and
-secrets** — intentional commits must never be blocked. On a finding it prints a
-warning and appends `{rule, file, line}` to
-`~/.local/state/commit-guard/findings.jsonl`; it **never** stores the matched
-value, because a log full of real secrets would only relocate the leak — the same
-reasoning as the ctp log recording verbs/outcomes but never targets.
-
-Two properties matter if you change it:
-
-- **It covers every repo, not just this one.** The installer sets the user's
-  global `core.hooksPath`, so the hook fires in the range checkout too, with the
-  gitleaks config carried alongside the runner — nothing is written into that
-  pushed tree. It chains to a repo-local `pre-commit` hook if one exists, so a
-  repo using the pre-commit framework still runs (and can still block on) its own
-  hooks; only this guard is warn-only.
-- **Warn-only shifts the mitigation, and it is bypassable.** Nothing stops the
-  push, so a secret finding must be acted on — rotate/clean per `SECURITY.md`.
-  `--no-verify` and direct index writes bypass any git hook. This cuts accidental
-  leaks; it does not contain a determined actor — the same accepted-risk framing
-  as the secret-read hook. `check-day0.sh` reports it honestly on a box (present,
-  warn-only, bypassable), and warns if `gitleaks` is absent so the scan is not
-  silently a no-op.
-
-### The destructive-action gate
-
-The same user-scope PreToolUse hook that fronts the tool bridge now also gates
-**destructive shell commands** — the first control of a proportionate agent safety
-harness. `scripts/lib/safety-guard.sh` classifies a command and returns
-`ask` (the human confirms in Claude Code) or, with no human present, the harness
-resolves that to a **deny** — it fails closed, and there is no `--yes`/`ASSUME_YES`
-path to it. Empty allow-list is the supported default: everything the classifier
-flags is confirmed. An owner exempts a verb per-verb in `~/.config/safety-guard.conf`
-(parsed, never sourced, never read from caller env), only after weighing **both**
-blast radius and cost — the same two-axis rule as the tool bridge.
-
-Scope is generic **filesystem / infra / database** commands (`rm -rf`, `shred`,
-`mkfs`, `dd of=`, `dropdb`, `DROP`/`TRUNCATE` SQL, `terraform destroy`,
-`kubectl delete`, `docker system prune`/`rm -f`). It deliberately does **not**
-cover git or commit actions — those are the commit guard's domain — and it does
-**not** re-gate `ctp`, which keeps its dedicated gate above (double-gating it would
-just add noise).
-
-Two properties matter if you change it:
-
-- **It classifies segmented command words, never a raw string.** The
-  quote/heredoc/subshell segmentation from #40-42 was factored into
-  `scripts/lib/cmd-segment.sh` so the ctp path and this classifier share one
-  hardened implementation instead of drifting. That is why `git commit -m "drop
-  the users table"` and a `DROP` inside a heredoc body are **not** flagged, while
-  `FOO=1 dropdb prod` and `$(rm -rf x)` are — the classifier sees the real command
-  word after env prefixes are stripped and substitutions are descended.
-- **It is model-agnostic and honest about its reach.** The classifier is a lib —
-  the single choke point any executor routes through. It stops the accidental
-  and the misread-instruction cases; an
-  adversarial model can still obfuscate around string classification, so like the
-  secret-read hook it is defense-in-depth, not a sandbox — the real containment is
-  OS-level, which the shared-sudo box does not provide (accepted risk).
-  `check-day0.sh` reports it honestly on a box.
-
-### Destructive git operations (2b)
-
-The destructive-action gate above deliberately leaves git alone — by owner
-decision, **all git/commit actions are the commit guard's (B's) domain**. But the
-commit guard is a *pre-commit* hook, and the dangerous git ops are not commits and
-fire no git hook: `git push --force`, `reset --hard`, `clean -f`, `branch -D`,
-`checkout/switch --force`. So `scripts/lib/git-guard.sh` gates those at the **same
-PreToolUse choke point** as A — `gitguard_classify` returns `ask` (human confirms;
-no human ⇒ deny, fail closed). It classifies the segmented command word (shared
-`cmd-segment.sh`), so a commit message that merely says "reset --hard" is not
-flagged, and env prefixes / `git -C <dir>` are seen through. An owner exempts an op
-per-op in `~/.config/git-guard.conf` (`GITGUARD_ALLOWLIST`, parsed never sourced);
-empty is the default (confirm everything). Same honest limit as A: string
-classification can be obfuscated — defense-in-depth, not a sandbox. `check-day0.sh`
-asserts it on a box.
-
-### Keeping Org PII/IP out of Claude: the path guard
-
-The worry is Org PII or intellectual property leaking to the model — and the
-primary channel is a tool *reading* a sensitive file into the transcript. A hook
-**cannot redact tool output**: `PreToolUse` runs before the tool and can only
-allow/ask/deny (it may rewrite tool *input*, but not the result), and
-`PostToolUse` runs after the tool has already produced its output. So for a
-file's *contents* the only reliable in-harness protection is to **deny the read**
-— which is what the secret-read hook already does, now extended to a second,
-separately-configured list.
-
-`CTP_PII_PATHS` (in the gitignored `~/.ctp-bridge.conf`) lists Org PII/IP path
-globs, same syntax as `CTP_SECRET_PATHS` (tilde expands to the target home; a
-`**/` prefix matches anywhere by basename). The hook denies any Read/Write/Edit
-or Bash command that names a listed path, with its own reason string so a denial
-says *which* policy fired. Both matchers share one hardened glob helper
-(`_ctp_path_in`), so they cannot drift.
-
-Two properties matter if you change it:
-
-- **It is a separate list from secrets, on purpose.** Secrets are credentials
-  (never touch, for anyone); PII paths are a data-governance boundary the owner
-  tunes independently. Keeping them apart preserves that. **Empty is the
-  default (opt-in):** nothing is denied until the owner lists the directories
-  where Org data lives. The deny is **symmetric** (read *and* write) because a
-  PII/IP directory is a boundary the agent should not touch at all.
-- **It is path-based, and honest about that.** PII sitting inside a file *outside*
-  the listed globs is not caught, and the guard does not redact PII embedded in an
-  otherwise-readable file's output — hooks cannot rewrite output regardless. This
-  is the same defense-in-depth, accepted-risk framing as the secret-read hook —
-  the real containment is OS-level, which the shared-sudo box does not provide.
-  `check-day0.sh` asserts the capability is present on a box (a stale install
-  predating it FAILs).
-
-### Host DNS prerequisite for range connectivity
-
-The devcontainer reaches range services (Tuoni, Providentia, Outline, GitLab)
-through hostnames configured in `.env`. Docker's embedded DNS resolver does not
-honour the host's per-link split-DNS routing — it reads only the default-route
-DNS server from `/run/systemd/resolve/resolv.conf`, which on a dual-VPN setup
-is the privacy VPN's resolver, not the range resolver.
-
-The fix is two parts, both required:
-
-1. **systemd-resolved stub on the Docker bridge** (one-time host config):
-   ```bash
-   sudo mkdir -p /etc/systemd/resolved.conf.d
-   printf '[Resolve]\nDNSStubListenerExtra=172.17.0.1\n' \
-     | sudo tee /etc/systemd/resolved.conf.d/docker-dns.conf
-   sudo systemctl restart systemd-resolved
-   ```
-   This makes the host's split-DNS-aware resolver available on the Docker
-   bridge IP. It survives reboots (drop-in is persistent). It must be done
-   once per host, not per container.
-
-2. **`--dns 172.17.0.1`** in `devcontainer.json` `runArgs` (already configured).
-   Tells Docker to forward container DNS queries to the host's resolver
-   instead of the default-route DNS.
-
-`scripts/check-host-prereqs.sh` validates both at `initializeCommand` time and
-fails the container start with remediation steps if either is missing. It only
-runs the checks when `.env` has spoke hosts configured — without spokes, range
-DNS is not expected and the script is a no-op.
-
-**Restart caveat:** `systemctl restart systemd-resolved` wipes per-link DNS
-config set by vpn-chain. If you restart resolved while the VPN is connected,
-re-run `vpn-chain` (or re-apply `resolvectl dns`/`domain` on the VPN
-interface) to restore split-DNS routing.
+Every tool command is confirmed manually. The ctp-bridge is the **only** path to
+run `ctp`. Gates: team gate (`CTP_ALLOWED_TEAM`), box allow-list
+(`CTP_ALLOWED_TARGET`). No `ASSUME_YES`/`--yes`. Non-interactive callers are refused.
+Full details: [`docs/SAFETY_GATES.md`](SAFETY_GATES.md).
 
 ### Network changes are deliberate
 
-Adding an outbound host to the devcontainer firewall goes through
-`/firewall-allow`. Per `CLAUDE.md` this is a hard escalation trigger.
-
-Note that the firewall pins hostnames to the IPs resolved at container start, so
-a CDN-hosted host can drift and need a rebuild.
-
-The firewall is **IPv4-only, deliberately**. IPv6 egress is denied wholesale,
-and `allowed-domains` can only ever learn IPv4 addresses — it skips IPv6 CIDRs
-from the GitHub meta feed and resolves A records only. To stop processes
-attempting a route that is guaranteed to be refused, the image raises the glibc
-precedence of IPv4-mapped addresses in `/etc/gai.conf` so `getaddrinfo` returns
-A records first.
-
-That pairing matters: without it, any host publishing AAAA records is resolved
-to IPv6 first, rejected in about two milliseconds, and the Claude CLI drops
-mid-session with `ECONNRESET`. Diagnose with:
-
-```bash
-getent ahosts api.anthropic.com   # IPv4 must sort first
-curl -4 -sS -o /dev/null -w 'v4: %{http_code}\n' https://api.anthropic.com/v1/messages
-curl -6 -sS -o /dev/null -w 'v6: %{http_code}\n' https://api.anthropic.com/v1/messages
-```
-
-Use `ahosts`, not `hosts`: `getent hosts` resolves through the NSS `hosts` map
-and does not apply RFC 3484 sorting, so it can still report an IPv6 address
-even when the precedence setting is working. `getent ahosts` goes through
-`getaddrinfo`, which is what applications use and what `gai.conf` governs.
-
-A working v4 alongside a v6 that fails in milliseconds is this, not a network
-fault. If IPv6 egress is ever required, the ipset and the resolver precedence
-must change together — changing either alone recreates the dead path.
-
-### Reading the debug log: expected noise vs a real failure
-
-`~/.claude/debug/<session-id>.txt` is loud in this container, and most of the
-noise is the firewall doing its job. Distinguish the two classes before
-investigating anything.
-
-**Expected — telemetry the firewall deliberately blocks.** These hosts are not in
-`allowed-domains` and never will be; the errors are the deny-by-default policy
-working, not a symptom:
-
-- `Failed to flush logs to Datadog: ... connect ECONNREFUSED`
-- `[3P telemetry] OTEL diag error: Failed to export N events`
-- `1P event logging: N events failed to export`
-- `CCRClient: internal events failed` / `client events failed`
-- `MCP server "ide" Connection failed: WebSocket is not open` — the VS Code
-  bridge, cosmetic
-- YAML frontmatter errors under `.claude/skills/bmad-*` — BMAD-installed content,
-  gitignored (`.gitignore:26`), not fixable here; report upstream
-
-**A real API failure** looks like this instead, and carries an id meant for
-Anthropic support:
-
-```bash
-grep -E "API error \(attempt|turn ended in error|x-client-request-id" \
-  ~/.claude/debug/<session-id>.txt
-```
-
-`x-client-request-id` is emitted specifically so the API team can find the
-server-side record. When local measurement has been exhausted, that id — not
-another configuration change — is the next step.
-
-Do not allowlist the telemetry endpoints to quieten the log. Opening egress to
-reduce noise is the wrong trade in a deny-by-default container.
-
-### If you see `ECONNRESET`
-
-The failing shape is a full retry ladder — `API error (attempt 1/11)` through
-`attempt 11/11`, then `API connection_error after retries` and `[engine] turn
-ended in error: API Error: Connection dropped (ECONNRESET)`. Auto-mode tool
-classification fails closed in the same window, so tools start being denied with
-retry guidance; that is a consequence, not a second fault.
-
-**Check the one cause that is in this repository first.** Run the `getent
-ahosts` / `curl -4` / `curl -6` triple from the section above. If IPv4 does not
-sort first, or v6 fails in milliseconds while v4 works, this is the resolver
-precedence pairing and it is fixable here.
-
-If IPv4 sorts first and `curl -4` returns a response, the repository is not
-involved. A full day of measurement has already ruled out everything below —
-re-running it is a day nobody gets back:
-
-| Eliminated | How |
-| --- | --- |
-| DNS and IPv6 | `getent ahosts` sorts v4 first; `curl -4` succeeds |
-| Firewall and ipset membership | Destination resolves into the allowed ipset; rule counters increment on ACCEPT, and nothing lands on the deny rules |
-| MTU / path MTU black hole | 1500-byte don't-fragment probes round-trip cleanly, so no fragmentation-needed message is being swallowed |
-| Docker networking | Reproduced identically from the host, outside any container |
-| Throughput and connection duration | Bulk downloads and deliberately slow-trickled long-lived transfers both sustain without a reset |
-| Router IPS / ad-blocking | Router logs show zero blocks against the destination across the entire failure window |
-
-**What that leaves is upstream transit**, and the discriminator is this: a VPN
-egress path reaching the *same destination address* succeeds while the direct
-path fails. Same destination, same client, same request — only the transit
-differs. That isolates the fault to a hop between this network and the
-destination. No devcontainer, firewall, MTU or DNS change can reach it, and
-proposing one is how this loops back to the start.
-
-The workaround is a destination-scoped policy route at the network edge, which
-lives outside this repository by design — routing an egress path is not a
-container concern, and the repository is public.
-
-For the escalation path, pull `x-client-request-id` out of the debug log. Every
-failed request emits one so Anthropic support can find the server-side record;
-once local measurement is exhausted that id is the next step, not another
-configuration change.
+Egress changes go through `/firewall-allow`. Firewall is IPv4-only. IPv6 denied
+wholesale. Details: [`docs/TROUBLESHOOTING.md`](TROUBLESHOOTING.md).
 
 ### Pinning third-party installers
 
-Installers fetched from upstream are pinned to a specific tag, and the commit
-that tag resolves to is recorded alongside it. Before installing, the script
-confirms the tag still points at that commit and refuses to install on drift,
-rather than executing code nobody reviewed. Pinning a wrapper that then fetches
-an unpinned default branch is not a pin — pin the code that actually executes.
+Pinned to specific tag + recorded commit SHA. Refuses install on drift.
 
 ## Verification
 
 - `bash scripts/check-day0.sh` (or `/day0-check`) — day-0 state on either surface.
 - `bash scripts/validate-template.sh` — template invariants; runs in CI.
-- `pre-commit run --all-files` — covers gitleaks and semgrep. Run locally before
-  opening a pull request; the CI gates run the same tools but not the hook set.
+- `pre-commit run --all-files` — covers gitleaks and semgrep.
+
+## Deep-dive references
+
+- [`docs/SAFETY_GATES.md`](SAFETY_GATES.md) — ctp-bridge, destructive-action gate, git guard, path guard, commit guard, secret/PII protection details
+- [`docs/TROUBLESHOOTING.md`](TROUBLESHOOTING.md) — DNS prereqs, ECONNRESET diagnosis, debug log noise vs real failures
+- [`docs/SAFETY_HARNESS.md`](SAFETY_HARNESS.md) — operator/demonstrator view of the safety harness

@@ -6,8 +6,9 @@ actions into a human decision — or refuse them outright — **while you watch*
 This page explains each control in active usage and gives you a copy-paste way
 to **demonstrate** every one of them firing.
 
-> Source of truth for the rules is [`PROJECT.md`](PROJECT.md); this page is the
-> operator/demonstrator view. The audience-facing visual version is the
+> Source of truth for the rules is [`PROJECT.md`](PROJECT.md) and
+> [`SAFETY_GATES.md`](SAFETY_GATES.md); this page is the operator/demonstrator
+> view. The audience-facing visual version is the
 > [explainer](explainer/index.html).
 
 ## What the harness is — and is not
