@@ -38,6 +38,17 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-end-audit.sh"
+          }
+        ]
+      }
     ]
   },
   "_mode_note": "Active mode is set at launch by scripts/start-mode.sh. See /mode for info."

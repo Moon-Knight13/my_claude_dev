@@ -57,6 +57,9 @@ For each operator-approved attack vector from recon:
 3. **MITRE ATT&CK** (mitre-mcp): technique ID, sub-techniques, plus:
    - `get_data_sources`: what detection sources apply (OPSEC assessment)
    - `get_mitigations`: what defenses exist (predict failure, choose alternatives)
+   - **Fallback if mitre-mcp unavailable**: use `cve_to_attack` (cve-mcp) for
+     CWE→ATT&CK mapping, `lolbins analyze_opsec_risk` for detection assessment,
+     and `hacktricks_quick_lookup` for mitigation/detection notes
 4. **LOLBins OPSEC check** (lolbins-mcp `analyze_opsec_risk`): assess noise level
    and EDR trigger probability BEFORE executing any exploit
 5. **Wiki vulns-docs** (outline-readonly): prior team research on this vuln
@@ -112,9 +115,10 @@ Execute from Kali (NEVER from target):
 
 **PERSIST-ON-LANDING RULE**: Before ANY other operation:
 
-1. **Deploy persistence** (hand off to persist-swarm skill when available):
+1. **Deploy persistence** — invoke `persist-swarm` skill (MANDATORY):
    - Operational beacon: short callback interval
    - Sleeper beacon: long callback interval (survival)
+   - If persist-swarm skill fails: deploy manually, but DO NOT skip
 2. **Discovery sweep** (tuoni-mcp agent commands):
    - Local users, groups, privileges
    - Network connections, routing table

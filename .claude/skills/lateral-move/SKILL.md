@@ -134,10 +134,14 @@ Per target, strictly sequential:
 2. **Deliver payload**: stage on target using authenticated session
 3. **Execute payload**: trigger execution via authenticated access
 4. **Wait for callback**: monitor listener for agent check-in
-5. **PERSIST IMMEDIATELY** (non-negotiable):
-   - Deploy operational beacon (30s-2min callback)
-   - Deploy sleeper beacon (4h-24h callback)
+5. **PERSIST IMMEDIATELY** (non-negotiable) — invoke `persist-swarm` skill:
+   - Hand off to persist-swarm skill for full dual-beacon deployment
+   - Persist-swarm handles: mechanism selection, LOLBins OPSEC check, dual beacon
+   - If persist-swarm skill unavailable, manual fallback:
+     - Deploy operational beacon (30s-2min callback)
+     - Deploy sleeper beacon (4h-24h callback)
    - Verify both beacons survive reboot test if possible
+   - **DO NOT PROCEED** to step 6 until persist-swarm confirms success
 6. **Discovery sweep** (only after persistence):
    - whoami, hostname, network config
    - Local users, groups, privileges

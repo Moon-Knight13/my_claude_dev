@@ -86,6 +86,9 @@ Before touching target, research WHERE credentials live for this platform:
 4. **GitLab README** (range-intel): deploy-time credentials, default passwords
 5. **MITRE ATT&CK** (mitre-mcp): T1003 (OS Credential Dumping) sub-techniques
    - `get_data_sources` for T1003: understand what detection covers this technique
+   - **Fallback if mitre-mcp unavailable**: use `lolbins analyze_opsec_risk` for
+     detection assessment + `hacktricks_quick_lookup "credential dumping detection"`
+     for OPSEC notes. `cve_to_attack` can map CWE→ATT&CK if CVE-driven.
 
 Present research to operator: "These credential sources exist on this
 platform. Which to target?"
@@ -97,7 +100,8 @@ If current access insufficient for credential harvesting:
 1. **Research escalation paths**:
    - HackTricks: platform-specific priv esc techniques
    - LOLBins (lolbins-mcp): SUID/capability abuse, native binary exploitation
-   - MITRE: T1068 (Exploitation for Privilege Escalation)
+   - MITRE: T1068 (Exploitation for Privilege Escalation) — if mitre-mcp unavailable,
+     use LOLBins `find_escalation_paths` + HackTricks as alternatives
 2. **Enumerate from agent** (tuoni-mcp commands on target):
    - Current privileges and group memberships
    - SUID binaries / service permissions / scheduled tasks

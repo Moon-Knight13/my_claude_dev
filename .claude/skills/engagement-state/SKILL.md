@@ -243,6 +243,9 @@ When operator closes engagement or session ends:
    - Call `generate_layer` with technique IDs + color by result (green=success, red=failed, yellow=partial)
    - Write layer JSON to `llm-wiki/raw/<engagement-id>-attack-layer.json`
    - This is powerful reporting automation — shows exact coverage exercised
+   - **Fallback if mitre-mcp unavailable**: build manual ATT&CK layer JSON
+     (format: `{"name":"<id>","versions":{"attack":"14","navigator":"5.1"},"domain":"enterprise-attack","techniques":[{"techniqueID":"<T-id>","color":"<hex>","score":<1-100>}]}`)
+     and write to same path. Operator can import into Navigator manually.
 
 2. **Generate LOLBins report** (lolbins-mcp):
    - Call `export_report` with engagement technique summary

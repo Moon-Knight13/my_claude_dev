@@ -118,7 +118,7 @@ Use `cve-mcp msf_check` + `nuclei_check` to verify module existence for techniqu
 Produce ranked attack vector list:
 1. Vector name + technique ID + CVE (if applicable)
 2. Likelihood of success (from EPSS score, KEV status, prior findings, config analysis)
-3. Stealth rating (from `lolbins analyze_opsec_risk`, MITRE `get_data_sources`)
+3. Stealth rating (from `lolbins analyze_opsec_risk`, MITRE `get_data_sources` — if mitre-mcp unavailable, rely on lolbins OPSEC score + HackTricks detection notes)
 4. Prerequisites (creds needed? auth required? adjacent access?)
 
 Present to operator for initial-access skill handoff.
