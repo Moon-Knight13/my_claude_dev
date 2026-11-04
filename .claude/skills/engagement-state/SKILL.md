@@ -70,7 +70,14 @@ next_steps: []
 ```
 
 5. Ensure `engagements/` directory exists and is in `.gitignore`.
-6. Report: engagement created, agent count, ready for target approval.
+6. **Write to Obsidian immediately** — do NOT defer to reporting phase:
+   a. Create `llm-wiki/wiki/engagements/<id>.md` from template (see Documentation Pipeline).
+   b. Create `wiki/engagements/<id>/Engagement State.md` with status summary.
+   c. Create `wiki/engagements/<id>/Phase Reviews.md` with empty phase sections.
+   d. If flight plan was generated, write it to `wiki/engagements/<id>/Flight Plan.md`.
+   e. Update `llm-wiki/index.md` to add engagement to Exercises list.
+   f. Apply tags: `#engagement/<id>`, `#phase/setup`.
+7. Report: engagement created, agent count, Obsidian synced, ready for target approval.
 
 ### Add Targets
 
@@ -85,7 +92,9 @@ in the current message. Discovered hosts are NOT automatically in scope.
    ground truth (IP, role, OS, services).
 3. Append to `targets` list with `approved_by: operator`, `approved_at: <now>`,
    `status: active`.
-4. Report: targets added, total scope count.
+4. **Sync to Obsidian**: create or update `llm-wiki/wiki/targets/<host>.md` per
+   target from template. Apply tags: `#engagement/<id>`, `#target/<host>`.
+5. Report: targets added, total scope count, Obsidian pages created.
 
 ### Record Technique Outcome
 
