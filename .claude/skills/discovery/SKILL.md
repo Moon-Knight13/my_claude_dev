@@ -1,6 +1,7 @@
 ---
 name: discovery
 description: "Post-compromise host and network enumeration skill. Runs after persistence is established. Compares actual state against Providentia expected state. Feeds cred-harvest and lateral-move skills."
+modes: [red-team, purple]
 ---
 
 # Discovery — Post-Compromise Enumeration

@@ -1,6 +1,7 @@
 ---
 name: kali-bootstrap
 description: "Verify Tuoni self-agent on Kali + deploy plugins. Run before engagement, during green-dev phase. Use when operator says 'bootstrap kali', 'check kali', or before first red-team mode switch."
+modes: [red-team, purple, red-dev]
 ---
 
 # Kali Bootstrap

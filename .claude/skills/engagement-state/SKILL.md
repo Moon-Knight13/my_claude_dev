@@ -1,6 +1,7 @@
 ---
 name: engagement-state
 description: "Create, update, query, and resume engagement state (YAML). Triggers: 'engagement', 'state', 'resume engagement', 'what targets', 'new engagement', 'add target', 'record technique', 'what creds'."
+modes: [red-team, purple]
 ---
 
 # Engagement State Management

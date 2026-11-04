@@ -1,6 +1,7 @@
 ---
 name: reverse-engineering
 description: "Binary analysis and reverse engineering workflow using rea-mcp. Use when operator says 'reverse engineer', 'RE', 'analyze binary', 'decompile', 'disassemble', or 'patch diff'."
+modes: [red-dev]
 ---
 
 # Reverse Engineering — Binary Analysis Workflow

@@ -1,6 +1,7 @@
 ---
 name: lolbins
 description: "Living-off-the-land technique lookup via lolbins-mcp. Use when operator needs LOLBin/LOLBas/LOLOL techniques, defense evasion, execution proxy, DLL hijack, or native binary abuse for red-team/purple ops."
+modes: [red-team, purple, red-dev]
 ---
 
 # LOLBins Technique Lookup

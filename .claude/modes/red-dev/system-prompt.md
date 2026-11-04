@@ -31,5 +31,3 @@ test range. Never production enclave.
 Per completed exploit: `techniques/<CVE-or-name>/` containing writeup.md,
 ioc-report.md, remediation.md, pickup-card.md.
 
-### Mode Skills
-reverse-engineering, lolbins, opsec-exploit-hygiene

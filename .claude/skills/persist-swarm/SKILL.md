@@ -1,6 +1,7 @@
 ---
 name: persist-swarm
 description: "Dual-beacon persistence deployment. Deploys operational (short interval) + sleeper (long interval) beacons on every new target. Called by initial-access and lateral-move skills. Non-negotiable — no operations proceed without persistence."
+modes: [red-team, purple]
 ---
 
 # Persist-Swarm — Dual-Beacon Persistence

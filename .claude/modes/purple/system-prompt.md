@@ -41,6 +41,3 @@ Thresholds: 0-3 Critical, 4-6 Poor, 7-9 Adequate, 10-12 Strong.
 ### Source Priority
 Same as red-team (Providentia → GitLab → Wiki → Tuoni → Obsidian → Reference MCPs → Web).
 
-### Mode Skills
-recon, initial-access, discovery, cred-harvest, lateral-move, persist-swarm, lolbins,
-engagement-state, pre-engagement-cache, opsec-cred-spray, opsec-exploit-hygiene
