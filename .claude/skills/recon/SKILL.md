@@ -95,20 +95,30 @@ high-value findings — document them.
 ### Phase 3: Vulnerability Analysis
 
 Cross-reference active recon results with Tier 3 sources:
-- HackTricks: platform-specific attack techniques
-- MITRE: technique IDs for each finding
-- lolbins-mcp: LOLBin abuse paths for identified services
-- cve-mcp: CVE details, EPSS scores, exploit availability for identified versions
+
+**CVE enrichment pipeline** (cve-mcp — run for each identified service version):
+- `cve_by_product`: search CVEs by product name + version from Providentia/recon
+- `cve_enrich`: full enrichment for top CVE candidates (NVD + EPSS + KEV + exploits)
+- `cve_prioritize`: rank multiple CVEs by exploitation risk
+- `kev_check`: flag CVEs in Known Exploited Vulnerabilities catalog
+- `exploit_search`: check public exploit availability across sources
+
+**Technique research** (use efficient tool workflows):
+- HackTricks: `hacktricks_quick_lookup` for first-pass, then `search→outline→section` for depth
+- MITRE: `search_techniques` + `get_technique` for IDs and detection info
+- lolbins-mcp: `analyze_environment` if enumeration data available, then `discover_chains`
+- `analyze_opsec_risk`: assess detection risk for each candidate technique
 
 **OPSEC: opsec-exploit-hygiene** — flag any Metasploit modules as
 REFERENCE ONLY. Extract technique, note for custom implementation.
+Use `cve-mcp msf_check` + `nuclei_check` to verify module existence for technique research.
 
 ### Phase 4: Target Assessment
 
 Produce ranked attack vector list:
-1. Vector name + technique ID
-2. Likelihood of success (from EPSS, prior findings, config analysis)
-3. Stealth rating (noise level, detection probability)
+1. Vector name + technique ID + CVE (if applicable)
+2. Likelihood of success (from EPSS score, KEV status, prior findings, config analysis)
+3. Stealth rating (from `lolbins analyze_opsec_risk`, MITRE `get_data_sources` — if mitre-mcp unavailable, rely on lolbins OPSEC score + HackTricks detection notes)
 4. Prerequisites (creds needed? auth required? adjacent access?)
 
 Present to operator for initial-access skill handoff.
@@ -119,8 +129,8 @@ Present to operator for initial-access skill handoff.
 - Active recon results documented (if Phase 2 approved)
 - Attack vectors ranked and presented
 - Engagement YAML updated: phase=recon, target data cached
-- Obsidian raw/: recon dump saved
-- Obsidian wiki/<hostname>.md: structured target page created/updated
+- `/log-finding` invoked for each significant recon result
+- Obsidian llm-wiki notes written (raw dump + wiki target page)
 
 ## State writes
 
@@ -134,11 +144,21 @@ targets:
     attack_vectors: <ranked list>
 ```
 
-```
-# Obsidian writes
-raw/<hostname>-recon-<date>.md    # immutable dump
-wiki/<hostname>.md                # structured page (create or update)
-```
+### Obsidian writes (llm-wiki paths — ENFORCED)
+
+After Phase 2 (active recon) completes, invoke `/log-finding` for each
+significant result. This auto-writes to correct llm-wiki paths:
+
+- `llm-wiki/raw/<hostname>-recon-<date>.md` — immutable scan dump
+- `llm-wiki/wiki/targets/<hostname>.md` — structured target page
+  (uses template: `llm-wiki/templates/target.md`)
+- `llm-wiki/wiki/techniques/<technique>.md` — if technique page needed
+- `llm-wiki/log.md` — changelog entry appended
+
+Manual fallback (if `/log-finding` unavailable):
+- `obsidian_create_note` to `llm-wiki/raw/` with frontmatter `tags: [raw, intake]`
+- `obsidian_create_note` or `obsidian_edit_note` to `llm-wiki/wiki/targets/`
+  using field structure from `llm-wiki/templates/target.md`
 
 ## Failure modes
 

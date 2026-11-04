@@ -41,12 +41,29 @@ Active in: **red-team** mode only.
 
 For each operator-approved attack vector from recon:
 
-1. **HackTricks** (hacktricks-mcp): detailed exploitation steps for this
-   platform/service/version combination
-2. **CVE intelligence** (cve-mcp): CVE details, EPSS score, known exploit availability
-3. **MITRE ATT&CK** (mitre-mcp): technique ID, sub-techniques, detection info
-4. **Wiki vulns-docs** (outline-readonly): prior team research on this vuln
-5. **Metasploit module** (if exists): READ for technique understanding ONLY.
+0. **Range vuln profiles** (range-intel `range_vuln_lookup`): check if range-intel
+   already has vulnerability data for this target before external research
+1. **HackTricks** (hacktricks-mcp): use efficient workflow:
+   - `hacktricks_quick_lookup` for first-pass exploitation overview
+   - `search_hacktricks` → `get_hacktricks_outline` → `get_hacktricks_section` for depth
+   - `get_hacktricks_cheatsheet` to extract all code blocks for adaptation
+   - NEVER use `get_hacktricks_page` (3000-15000 tokens) when `get_hacktricks_section` suffices
+2. **CVE intelligence** (cve-mcp) — full enrichment pipeline:
+   - `cve_enrich`: NVD + EPSS + KEV + GHSA + Shodan + VulnCheck + Nuclei + MSF in parallel
+   - `kev_check`: if in KEV catalog, actively exploited = high success probability
+   - `exploit_search`: check for public exploits across multiple sources
+   - `cve_to_attack`: map CVE's CWE to ATT&CK techniques (bridges to mitre-mcp)
+   - `cve_prioritize`: when multiple CVEs found, rank by exploitation risk
+3. **MITRE ATT&CK** (mitre-mcp): technique ID, sub-techniques, plus:
+   - `get_data_sources`: what detection sources apply (OPSEC assessment)
+   - `get_mitigations`: what defenses exist (predict failure, choose alternatives)
+   - **Fallback if mitre-mcp unavailable**: use `cve_to_attack` (cve-mcp) for
+     CWE→ATT&CK mapping, `lolbins analyze_opsec_risk` for detection assessment,
+     and `hacktricks_quick_lookup` for mitigation/detection notes
+4. **LOLBins OPSEC check** (lolbins-mcp `analyze_opsec_risk`): assess noise level
+   and EDR trigger probability BEFORE executing any exploit
+5. **Wiki vulns-docs** (outline-readonly): prior team research on this vuln
+6. **Metasploit module** (if exists): READ for technique understanding ONLY.
    Extract: target verification method, payload delivery mechanism, post-exploit
    actions. Document what it does. Do NOT use it.
 
@@ -98,9 +115,10 @@ Execute from Kali (NEVER from target):
 
 **PERSIST-ON-LANDING RULE**: Before ANY other operation:
 
-1. **Deploy persistence** (hand off to persist-swarm skill when available):
+1. **Deploy persistence** — invoke `persist-swarm` skill (MANDATORY):
    - Operational beacon: short callback interval
    - Sleeper beacon: long callback interval (survival)
+   - If persist-swarm skill fails: deploy manually, but DO NOT skip
 2. **Discovery sweep** (tuoni-mcp agent commands):
    - Local users, groups, privileges
    - Network connections, routing table
@@ -112,31 +130,41 @@ Execute from Kali (NEVER from target):
    - Persistence status
    - Discovery findings summary
 
-## Documentation Outputs
+## Documentation Outputs — ENFORCED (llm-wiki paths)
 
-After successful initial access, produce:
+After each technique attempt (success OR failure), BEFORE moving to next
+action, invoke `/log-finding` with the outcome. This writes to:
 
-1. **Technique writeup** (Obsidian wiki/<hostname>-initial-access.md):
+- `llm-wiki/wiki/techniques/<technique_slug>.md` (template: technique.md)
+- `llm-wiki/wiki/targets/<hostname>.md` (template: target.md)
+- `llm-wiki/log.md` (changelog row)
+- `Notes_Mitre_ATTack_Framework/` (MITRE cross-link)
+
+After successful initial access, also produce:
+
+1. **Technique writeup** (`llm-wiki/wiki/techniques/<technique>.md`):
    - Vulnerability exploited + CVE/MITRE ID
    - Custom exploit approach (what was adapted from references)
    - Exact steps to reproduce
    - Time to exploit
 
-2. **IoC report** (Obsidian wiki/<hostname>-iocs.md):
+2. **IoC report** (`llm-wiki/wiki/targets/<hostname>.md` under ## IOCs):
    - Artifacts created on target (files, registry, services)
    - Network signatures (callback patterns, ports)
    - Log entries expected (auth, service, application)
 
-3. **Remediation guide** (Obsidian wiki/<hostname>-remediation.md):
-   - Patch/config fix for the vulnerability
-   - Detection rules for this technique
-   - Hardening recommendations
+3. **Raw dump** (`llm-wiki/raw/<hostname>-initial-access-<date>.md`):
+   - Command output, exploit output, agent callback confirmation
+   - Frontmatter: `tags: [raw, intake, initial-access]`
 
-4. **Red team pickup card** (Obsidian wiki/<hostname>-pickup.md):
+4. **Red team pickup card** (appended to target wiki page):
    - Current access level and agent info
    - Persistence mechanisms in place
    - Next suggested actions (priv esc, lateral)
    - Known constraints or risks
+
+**Failed techniques get documented too.** Invoke `/log-finding` with failure
+outcome. This prevents re-trying exhausted vectors in future sessions.
 
 ## State writes
 

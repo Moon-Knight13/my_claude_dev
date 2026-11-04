@@ -19,6 +19,14 @@ Active in: **red-team** mode only.
 - Target host in approved scope (RT-TGT-001)
 - Target host exists in Providentia
 
+## Scope Exclusion — ENFORCED
+
+- **RT-SCOPE-001:** GT (green team) accounts OUT OF SCOPE. When selecting
+  credentials for lateral movement, NEVER use gt-prefixed credentials even
+  if present in Tuoni cred store. When targeting hosts, skip any host that
+  appears to be a gt/green-team infrastructure node. If a lateral move lands
+  in a gt session context, ABORT and report.
+
 ## MANDATORY: Persist-on-Landing
 
 Every new target gets persistence IMMEDIATELY after lateral landing.
@@ -57,19 +65,26 @@ credential store — requires creds stored via `tuoni_credential_add` first.
 ### Phase 1: Target Selection
 
 1. **Review Providentia** (range-intel MCP) for candidate targets:
-   - Network topology: what can current foothold reach?
+   - `range_networks`: full network topology — what segments exist, what can foothold reach
+   - `range_targets_summary`: lightweight inventory of hosts per segment (no vuln overhead)
+   - `range_host`: detail for specific candidates
    - Host roles: prioritize per RT-DEP-001 deployment order
    - Team assignments: stay within engagement scope
-2. **Match credentials to targets**:
+2. **Match credentials to targets** (programmatic, not manual):
+   - `tuoni_credentials_list` filter by realm/type against `range_targets` by network
    - Domain creds: which hosts are domain-joined?
    - Local admin: reuse across similar builds?
    - Service accounts: what systems do they access?
    - SSH keys: authorized on which hosts?
-3. **Assess network path**:
+3. **LOLBins lateral analysis** (lolbins-mcp):
+   - `find_lateral_movement`: discover LOLBin-based lateral movement methods
+   - `compare_platforms`: when moving Linux→Windows or vice versa, find technique equivalents
+   - `analyze_opsec_risk`: assess detection risk for chosen lateral method
+4. **Assess network path**:
    - Direct: foothold can reach target
    - Proxied: need SOCKS through intermediate foothold
    - Multi-hop: chain of proxies needed
-4. **Present plan to operator**: target, credential, method, path
+5. **Present plan to operator**: target, credential, method, path, OPSEC risk score
 
 ### Phase 2: SOCKS Proxy Setup (if needed)
 
@@ -119,10 +134,14 @@ Per target, strictly sequential:
 2. **Deliver payload**: stage on target using authenticated session
 3. **Execute payload**: trigger execution via authenticated access
 4. **Wait for callback**: monitor listener for agent check-in
-5. **PERSIST IMMEDIATELY** (non-negotiable):
-   - Deploy operational beacon (30s-2min callback)
-   - Deploy sleeper beacon (4h-24h callback)
+5. **PERSIST IMMEDIATELY** (non-negotiable) — invoke `persist-swarm` skill:
+   - Hand off to persist-swarm skill for full dual-beacon deployment
+   - Persist-swarm handles: mechanism selection, LOLBins OPSEC check, dual beacon
+   - If persist-swarm skill unavailable, manual fallback:
+     - Deploy operational beacon (30s-2min callback)
+     - Deploy sleeper beacon (4h-24h callback)
    - Verify both beacons survive reboot test if possible
+   - **DO NOT PROCEED** to step 6 until persist-swarm confirms success
 6. **Discovery sweep** (only after persistence):
    - whoami, hostname, network config
    - Local users, groups, privileges
@@ -142,9 +161,13 @@ After all planned lateral moves complete:
    - New credential harvesting opportunities?
    - Closer to high-value targets (DCs, critical servers)?
 3. **Update proxy chain** if new routes discovered
-4. **Document in Obsidian**:
-   - `wiki/<hostname>-lateral.md`: how access was achieved
-   - Update network topology map
+4. **Document in Obsidian (llm-wiki paths — ENFORCED)**:
+   Invoke `/log-finding` for each lateral move outcome. Then write:
+   - `llm-wiki/wiki/targets/<hostname>.md`: update target page with access method
+   - `llm-wiki/wiki/techniques/<method>.md`: technique page for lateral method
+   - `llm-wiki/raw/<hostname>-lateral-<date>.md`: raw command/session output
+   - `llm-wiki/log.md`: changelog row
+   - Update network topology in engagement wiki page
 
 ## State writes
 

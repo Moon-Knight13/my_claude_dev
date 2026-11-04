@@ -104,21 +104,30 @@ Verify:
 
 ### Step 7: Deploy Plugins
 
-Check tuoni-plugins are loaded. Use `tuoni_command_plugin_commands_list`
-or `tuoni_commands_search` to list available DynamicAlias modules.
+Check tuoni-plugins are loaded:
 
-If modules missing:
-- Plugins are TSE DynamicAlias Python scripts, NOT JAR files
-- Deployment is via Tuoni web UI (Administration → Command Plugins) or
-  REST API — not file upload through MCP
-- Tell operator: "Upload DynamicAlias modules via Tuoni web UI at
-  https://<kali>:8443 → Administration → Command Plugins"
-- After operator uploads, re-check with `tuoni_commands_search`
+```bash
+bash scripts/deploy-tuoni-plugins.sh --check-only
+```
 
-Verify 14 TSE DynamicAlias modules available (see tuoni-plugins README
-for full list: host-id, net-recon, vuln-assess, lateral-move, get-system,
-persist-swarm, cred-dump, ad-enum, agent-watcher, collect-intel,
-ioc-cleanup, log-clear, exfil-stage, payload-gen).
+If modules missing, deploy automatically:
+
+```bash
+bash scripts/deploy-tuoni-plugins.sh
+```
+
+This clones `Moon-Knight13/tuoni-plugins` (branch `refactor/overhaul-v2`),
+runs `build_scripts.py` to inline shared code, SCPs built scripts to Kali
+`/srv/tuoni/data/scripts/`, restarts tuoni-server, and verifies.
+
+If GitHub access unavailable (disconnected range), deploy from backup:
+- Backups live at `/srv/tuoni/data/scripts.bak.*` on Kali
+- Restore: `ssh kali "sudo cp /srv/tuoni/data/scripts.bak.<timestamp>/tuoni_*.py /srv/tuoni/data/scripts/"`
+
+Verify 16 TSE DynamicAlias modules available (see tuoni-plugins README
+for full list: host-id, net-recon, vuln-assess, lateral-move, lateral-wmi,
+get-system, persist-swarm, cred-dump, ad-enum, agent-watcher, collect-intel,
+ioc-cleanup, log-clear, exfil-stage, payload-gen, route-hijack).
 
 ### Step 8: Record State
 

@@ -153,7 +153,9 @@ or skill detects existing engagement file.
 2. Read engagement YAML.
 3. Refresh agent list from `tuoni_agents_list` — update `agents` section,
    flag agents that disappeared since last session.
-4. Summarize state to operator:
+4. Load prior Obsidian context via `obsidian_search_vault` for `#engagement/<id>`
+   — read existing wiki pages to understand prior session state.
+5. Summarize state to operator:
    - Engagement ID, start date, mode
    - Active targets (count + list)
    - Live agents (count, any lost since last session)
@@ -174,29 +176,144 @@ Trigger: "next steps", "plan next", "what's next", or end of session.
 3. Write updated YAML.
 4. At session end, remind operator of top 3 next steps.
 
-## Documentation Pipeline
+## Documentation Pipeline — ENFORCED GATES
 
-When findings accumulate, write structured documentation:
+Documentation is NOT optional. Each kill-chain phase transition MUST produce
+Obsidian output before the next phase starts.
 
-- **Obsidian raw/**: immutable intake dumps (scan output, command output).
+### Primary method: `/log-finding`
+
+After EACH technique execution (success OR failure), invoke `/log-finding`
+with the outcome description. This command auto-writes to correct paths:
+
+- `llm-wiki/wiki/techniques/<technique>.md` — from template `llm-wiki/templates/technique.md`
+- `llm-wiki/wiki/targets/<hostname>.md` — from template `llm-wiki/templates/target.md`
+- `Notes_Mitre_ATTack_Framework/` — MITRE cross-link
+- `llm-wiki/log.md` — changelog row
+
+### Phase Gate Checklist
+
+After EACH technique execution or phase completion, BEFORE moving on:
+
+1. **Update engagement YAML** with technique outcome + finding (if success/partial)
+2. **Invoke `/log-finding`** with technique outcome (writes to llm-wiki automatically)
+3. **Write raw dump** to `llm-wiki/raw/<host>-<phase>-<date>.md` (immutable intake)
+4. **Store credentials** in Tuoni cred store (if any harvested), add ref to YAML
+
+If ANY gate item is skipped, the session MUST catch up before proceeding to
+the next target or phase. "I'll document later" is NOT acceptable — context
+degrades and findings are lost.
+
+### Obsidian Write Points (llm-wiki/ vault paths)
+
+All paths are under `llm-wiki/` in the `my_notes` Obsidian vault.
+
+| Kill-Chain Phase | raw/ Write | wiki/ Write |
+|-----------------|------------|-------------|
+| Recon | `llm-wiki/raw/<host>-recon-<date>.md` | `llm-wiki/wiki/targets/<host>.md` (create) |
+| Initial Access | `llm-wiki/raw/<host>-initial-access-<date>.md` | `llm-wiki/wiki/techniques/<technique>.md` |
+| Discovery | `llm-wiki/raw/<host>-discovery-<date>.md` | `llm-wiki/wiki/targets/<host>.md` (update) |
+| Cred Harvest | `llm-wiki/raw/<host>-creds-<date>.md` | `llm-wiki/wiki/targets/<host>.md` (refs only) |
+| Lateral Move | `llm-wiki/raw/<host>-lateral-<date>.md` | `llm-wiki/wiki/targets/<host>.md` (update) |
+| Persist | — | `llm-wiki/wiki/targets/<host>.md` (update persistence) |
+
+### Templates (in `llm-wiki/templates/`)
+
+| Template | When to use |
+|----------|-------------|
+| `target.md` | New target page: hostname, IP, OS, domain, role, services, findings |
+| `technique.md` | New technique page: mitre_id, tactic, platforms, execution steps |
+| `credential.md` | Credential ref page: username, domain, type, source (NO plaintext) |
+| `ioc.md` | IOC page: type, value, context, associated targets |
+| `engagement.md` | Engagement overview: scope, objectives, timeline, findings summary |
+
+### Engagement Wiki Page
+
+On engagement creation, also create `llm-wiki/wiki/engagements/<engagement-id>.md`
+using `llm-wiki/templates/engagement.md`. Update `llm-wiki/index.md` to add
+engagement to the Exercises list. This is the missing link that caused zero
+DCM27 redteam-test2 documentation.
+
+### Engagement Close / Session End
+
+When operator closes engagement or session ends:
+
+1. **Generate ATT&CK Navigator layer** (mitre-mcp):
+   - Extract all MITRE technique IDs from `techniques_tried` in YAML
+   - Call `generate_layer` with technique IDs + color by result (green=success, red=failed, yellow=partial)
+   - Write layer JSON to `llm-wiki/raw/<engagement-id>-attack-layer.json`
+   - This is powerful reporting automation — shows exact coverage exercised
+   - **Fallback if mitre-mcp unavailable**: build manual ATT&CK layer JSON
+     (format: `{"name":"<id>","versions":{"attack":"14","navigator":"5.1"},"domain":"enterprise-attack","techniques":[{"techniqueID":"<T-id>","color":"<hex>","score":<1-100>}]}`)
+     and write to same path. Operator can import into Navigator manually.
+
+2. **Generate LOLBins report** (lolbins-mcp):
+   - Call `export_report` with engagement technique summary
+   - Write to `llm-wiki/raw/<engagement-id>-lolbins-report.md`
+
+3. **Plugin utilization audit**:
+   - Compare `plugin_inventory` from YAML against actual plugin calls in session
+   - Report: plugins available vs plugins used vs plugins that would have helped
+   - Record in engagement YAML `plugin_utilization` section
+
+### Catch-Up Procedure
+
+When operator requests review or session is ending:
+1. Audit engagement YAML `findings` vs `techniques_tried` — gaps = missing findings
+2. For each technique with no corresponding llm-wiki note, invoke `/log-finding` retroactively
+3. For each target with no `llm-wiki/wiki/targets/` page, create from template
+4. Apply Obsidian tags to all engagement notes (see Tag Strategy below)
+5. Report documentation debt to operator
+
+- **llm-wiki/raw/**: immutable intake dumps (scan output, command output).
   Write via `obsidian_create_note` with timestamp prefix. Never modify after
-  creation.
-- **Obsidian wiki/**: AI-maintained structured pages. One page per target
+  creation. Frontmatter: `tags: [raw, intake]`
+- **llm-wiki/wiki/**: AI-maintained structured pages. One page per target
   (host profile, findings, techniques, cred refs). One page per technique
   used (procedure, targets, results, detection notes). Update via
   `obsidian_edit_note` as findings grow.
+- **Dedup check**: Before creating any note, call `obsidian_search_vault` to
+  check if page already exists. Update existing pages instead of creating duplicates.
+- **Directory creation**: Call `obsidian_create_directory` for engagement dirs
+  at engagement start if they don't exist.
+
+### Obsidian Tag Strategy (ENFORCED)
+
+After every note write, apply tags via `obsidian_add_tags`:
+
+| Tag pattern | When to apply |
+|-------------|---------------|
+| `#engagement/<id>` | Every note created during this engagement |
+| `#phase/<phase>` | recon, initial-access, discovery, cred-harvest, persist, lateral |
+| `#target/<hostname>` | Every note mentioning a specific target |
+| `#mitre/<T-id>` | Every technique note with MITRE mapping |
+| `#result/<outcome>` | success, failed, partial, blocked |
+
+Tags enable cross-engagement knowledge retrieval. A search for
+`#mitre/T1003 #result/success` finds all successful credential dumps
+across all engagements.
 
 ## File Locations
 
 - `engagements/<id>.yaml` — engagement state (gitignored)
 - `engagements/` directory — created automatically, added to `.gitignore`
-- Obsidian vault — tactical documentation (via obsidian-mcp)
+- Obsidian vault `my_notes` — tactical documentation (via obsidian-mcp)
+  - `llm-wiki/raw/` — immutable intake dumps
+  - `llm-wiki/wiki/targets/` — per-target structured pages
+  - `llm-wiki/wiki/techniques/` — per-technique structured pages
+  - `llm-wiki/wiki/engagements/` — per-engagement overview pages
+  - `llm-wiki/templates/` — page templates (target, technique, credential, ioc, engagement)
+  - `llm-wiki/log.md` — append-only changelog
+  - `llm-wiki/index.md` — master index (update on new pages)
 - Tuoni credential store — actual credentials (via tuoni-mcp)
 
 ## Safety
 
 - **RT-TGT-001**: never add targets without explicit operator approval in
   the current message. "I found host X" is NOT approval.
+- **RT-SCOPE-001**: GT (green team) accounts permanently out of scope. When
+  recording techniques or findings that enumerate users, exclude gt-prefixed
+  accounts from the data. Never add gt credentials to the credential store.
 - **Credentials**: REFS ONLY in YAML and Obsidian. Actual values in Tuoni
   cred store only.
 - **No secrets in engagement YAML**: no passwords, hashes, keys, tokens.

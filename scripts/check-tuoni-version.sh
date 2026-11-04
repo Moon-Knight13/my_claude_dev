@@ -190,6 +190,40 @@ _exit=1
 # Strip any trailing + or - for comparison.
 _clean_version="${_version%%[+-]*}"
 
+# ── Plugin JAR version check (SSH to Kali) ──────────────────────────────
+# Plugin JARs must match the server version. Mismatched JARs crash the
+# command template cache at startup, killing the DB pool and the API.
+# Incident: 2026-11-04, 0.16.1 JARs on 0.17.1 server → boot loop.
+_plugin_mismatch=0
+_kali_host="${SPOKE_KALI_HOST:-}"
+if [[ -n "$_kali_host" && "$_clean_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    _jar_versions=$(ssh -o ConnectTimeout=5 -o BatchMode=yes kali \
+        "sudo docker exec tuoni-server ls /app/plugins/ 2>/dev/null" 2>/dev/null) || true
+    if [[ -n "$_jar_versions" ]]; then
+        _bad_jars=""
+        while IFS= read -r jar; do
+            [[ -z "$jar" ]] && continue
+            jar_ver=$(echo "$jar" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)
+            if [[ -n "$jar_ver" && "$jar_ver" != "$_clean_version" ]]; then
+                _bad_jars="${_bad_jars}  $jar (has $jar_ver, need $_clean_version)"$'\n'
+                _plugin_mismatch=1
+            fi
+        done <<< "$_jar_versions"
+        if [[ $_plugin_mismatch -eq 1 ]]; then
+            echo "FAIL  Plugin JAR version mismatch — server will crash on startup:"
+            echo "$_bad_jars"
+            echo "      Fix: TUONI_LICENCE_KEY=<key> sudo -E /srv/tuoni/scripts/update-plugins.sh"
+            echo "      Or:  cd /srv/tuoni && sudo SILENT=1 ./tuoni update"
+        else
+            echo "OK    Plugin JARs match server version $_clean_version"
+        fi
+    else
+        echo "WARN  Could not check plugin JARs (SSH to kali failed or docker exec denied)"
+    fi
+else
+    echo "WARN  Plugin JAR check skipped (SPOKE_KALI_HOST unset or version unknown)"
+fi
+
 if [[ "$_clean_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && _ver_gte "$_clean_version" "$OFFICIAL_MCP_MIN"; then
     _compat="official"
     _exit=0
@@ -207,6 +241,13 @@ else
     echo "WARN  Tuoni $_version < $OFFICIAL_MCP_MIN — official MCP incompatible."
     echo "      Use: tuoni-c2-readonly (custom MCP, v1 API)"
     echo "      Upgrade Tuoni to ${OFFICIAL_MCP_MIN}+ to switch to official MCP."
+fi
+
+if [[ $_plugin_mismatch -eq 1 ]]; then
+    echo ""
+    echo "FAIL  Plugin JAR mismatch will crash Tuoni on next restart."
+    echo "      Update plugins BEFORE restarting the server."
+    _exit=1
 fi
 
 exit "$_exit"

@@ -22,6 +22,10 @@ Active in: **red-team** mode only.
 - RT-TGT-002: no tools uploaded. Use native OS commands via tuoni agent.
 - All enumeration through tuoni-mcp agent commands.
 - Minimize command volume — defenders monitor for enumeration bursts.
+- **RT-SCOPE-001:** GT (green team) accounts OUT OF SCOPE. When enumerating
+  users, sessions, or logged-on accounts, skip any gt-prefixed entries. If gt
+  sessions appear in `who`, `query user`, or process lists, ignore them. Never
+  include gt accounts in lateral movement target lists or credential source maps.
 
 ## Plugin-First Policy (ENFORCED)
 
@@ -87,6 +91,27 @@ Execute via tuoni agent commands (native OS tools only):
 - Recent files: `dir /o-d /t:w` / `find / -mtime -7 -type f`
 - Mounted shares: `net use` / `mount`
 
+### Step 1.5: LOLBins Environment Analysis (ENFORCED)
+
+After host enumeration, pipe output to lolbins-mcp for structured analysis:
+
+1. **`analyze_environment`**: feed enumeration output to create lolbins environment session
+2. **`discover_chains`**: find multi-step attack chains from environment assessment
+3. **`find_escalation_paths`**: identify privilege escalation paths (feeds cred-harvest)
+4. **`find_persistence_paths`**: identify persistence options (feeds persist-swarm)
+5. **`analyze_opsec_risk`**: assess OPSEC risk of planned enumeration commands
+
+This creates an environment context that all subsequent lolbins calls
+(find_credential_access, find_lateral_movement, build_attack_plan) can use.
+Without this step, lolbins-mcp is nearly useless.
+
+### Step 1.7: Tuoni Discovery ↔ Providentia Reconciliation
+
+Compare `tuoni_hosts_list` against `range_targets` for this host's network segment:
+- **Hosts Tuoni sees but Providentia doesn't** = rogue systems (high-value finding)
+- **Hosts Providentia lists but Tuoni hasn't reached** = remaining attack surface
+- Document discrepancies in engagement YAML `discovery.reconciliation`
+
 ### Step 2: Compare Against Providentia
 
 Query range-intel MCP for expected host state:
@@ -149,17 +174,35 @@ targets:
       discrepancies: [<vs Providentia expected>]
 ```
 
-**Obsidian:**
+**Obsidian (llm-wiki paths — ENFORCED):**
+
+After enumeration completes, invoke `/log-finding` for each significant
+discovery result. Then write:
+
 ```
-raw/<hostname>-discovery-<date>.md    # full enumeration dump
-wiki/<hostname>.md                    # update structured target page
+llm-wiki/raw/<hostname>-discovery-<date>.md    # full enumeration dump
+llm-wiki/wiki/targets/<hostname>.md            # update target page (template: target.md)
+llm-wiki/log.md                                # changelog row
 ```
+
+RT-SCOPE-001 reminder: exclude gt-prefixed accounts from all written output.
 
 ## Failure modes
 
 - **Agent dies during enumeration**: use sleeper beacon to re-establish.
   Resume from where enumeration stopped.
-- **Commands blocked by AV/EDR**: note which commands blocked. Research
-  alternative enumeration methods via HackTricks.
+- **Commands blocked by AV/EDR**: note which commands blocked. Use
+  `lolbins analyze_opsec_risk` to find lower-risk alternatives, then
+  research via HackTricks (`hacktricks_quick_lookup`).
 - **Host not in Providentia**: flag as unknown host. Cannot compare
   expected vs actual. Report to operator.
+
+## MCP Tool Reference (discovery phase)
+
+| MCP | Tools to use | When |
+|-----|-------------|------|
+| tuoni-mcp | agent commands, `tuoni_hosts_list` | Host enumeration, Discovery reconciliation |
+| range-intel | `range_host`, `range_targets_summary`, `range_networks` | Providentia comparison, network topology |
+| lolbins-mcp | `analyze_environment`, `discover_chains`, `find_escalation_paths`, `analyze_opsec_risk` | Post-enum analysis |
+| outline-readonly | `outline_search` (vulns-docs) | Check prior vuln research for this host role |
+| obsidian-mcp | `obsidian_search_vault`, `obsidian_create_note`, `obsidian_add_tags` | Dedup + write + tag notes |

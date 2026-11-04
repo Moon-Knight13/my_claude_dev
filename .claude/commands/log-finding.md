@@ -68,6 +68,13 @@ Server 2022").
       existing narrative notes. If a Write_Up exists, link to it from the
       wiki page rather than duplicating content.
 
+6e. **Apply Obsidian tags** via `obsidian_add_tags` to each written/updated note:
+   - `#engagement/<active-engagement-id>` (from engagement YAML)
+   - `#phase/<current-phase>` (recon, initial-access, discovery, cred-harvest, persist, lateral)
+   - `#target/<hostname>` (if finding names a specific host)
+   - `#mitre/<T-id>` (if MITRE technique mapped)
+   - `#result/<outcome>` (success, failed, partial, blocked)
+
 7. Confirm the action:
    ```
    Finding logged: [[note_name]]
