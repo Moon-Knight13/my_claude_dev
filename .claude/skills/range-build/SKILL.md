@@ -1,6 +1,7 @@
 ---
 name: range-build
 description: "Range infrastructure workflow using Providentia + catapult. Use when operator says 'build box', 'deploy box', 'check host', 'what IPs', 'network layout', or range infrastructure tasks in green-dev mode."
+modes: [green-dev]
 ---
 
 # Range Build Workflow

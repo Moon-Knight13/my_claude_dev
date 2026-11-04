@@ -1,6 +1,7 @@
 ---
 name: spoke-health
 description: "Check connectivity and health of all hub spokes. Use when operator says 'check health', 'spoke status', 'am I connected', or before switching to an operational mode."
+modes: [platform-ops, red-team, purple, red-dev, green-dev]
 ---
 
 # Spoke Health Check

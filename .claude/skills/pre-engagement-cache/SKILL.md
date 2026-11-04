@@ -1,6 +1,7 @@
 ---
 name: pre-engagement-cache
 description: "Cache Providentia, GitLab, and wiki intel into Obsidian before red-team engagement. Run in green-dev mode when range-intel and outline MCPs are connected. Use when operator says 'cache intel', 'prep for engagement', or before mode switch to red-team."
+modes: [red-team, purple]
 ---
 
 # Pre-Engagement Cache

@@ -1,6 +1,7 @@
 ---
 name: ctp-deploy
 description: Use when deploying or iterating a box on the authorized range with the build tooling (ctp) — how to run it through the bridge, and how to read a deploy result instead of guessing.
+modes: [green-dev]
 ---
 
 # Deploying a box through the ctp bridge

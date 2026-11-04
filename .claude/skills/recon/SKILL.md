@@ -1,6 +1,7 @@
 ---
 name: recon
 description: "Phase-based reconnaissance skill for red-team and purple modes. Queries authoritative sources first (Providentia, GitLab READMEs, wiki collections), then reference MCPs. Use when operator says 'recon', 'target', 'research <hostname>', or starts an engagement."
+modes: [red-team, purple]
 ---
 
 # Recon Skill — Source-Priority Phased Reconnaissance

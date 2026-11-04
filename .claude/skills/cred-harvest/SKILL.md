@@ -1,6 +1,7 @@
 ---
 name: cred-harvest
 description: "Credential harvesting and privilege escalation skill. Research-first approach: determine WHERE creds live via HackTricks + wiki before harvesting. Store in tuoni cred store + wiki refs only. Lockout-aware credential spraying."
+modes: [red-team, purple]
 ---
 
 # Credential Harvest + Privilege Escalation

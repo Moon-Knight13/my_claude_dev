@@ -1,6 +1,7 @@
 ---
 name: opsec-cred-spray
 description: "OPSEC guard skill: enforces lockout policy enumeration before any credential spraying. Prevents account lockouts that alert defenders. Invoke before any password spray or brute-force attempt."
+modes: [red-team, purple]
 ---
 
 # OPSEC: Lockout-Aware Credential Spray

@@ -1,6 +1,7 @@
 ---
 name: lateral-move
 description: "Lateral movement skill with mandatory persist-on-landing. Uses harvested credentials to move through the network per deployment order (RT-DEP-001). Establishes SOCKS proxies from footholds for Kali tool routing."
+modes: [red-team, purple]
 ---
 
 # Lateral Movement — Persist-on-Landing Enforced

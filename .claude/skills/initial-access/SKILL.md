@@ -1,6 +1,7 @@
 ---
 name: initial-access
 description: "Guided initial access skill for red-team mode. Takes recon output, researches exploit techniques via reference MCPs, enforces OPSEC exploit hygiene (no Metasploit defaults), and stages custom exploitation from Kali."
+modes: [red-team, purple]
 ---
 
 # Initial Access Skill — OPSEC-Compliant Exploitation

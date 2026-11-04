@@ -123,9 +123,11 @@ else
 fi
 
 # --- 10. Red-team system-prompt contains OPSEC rules ------------------------
-if grep -q "RT-TGT-001" "$MODES_DIR/red-team/system-prompt.md" \
-   && grep -q "RT-SIG-001" "$MODES_DIR/red-team/system-prompt.md" \
-   && grep -q "RT-DEP-001" "$MODES_DIR/red-team/system-prompt.md"; then
+# Rules may be inline (RT-TGT-001 etc.) or referenced via dedup pattern
+# ("All RT-TGT, RT-SIG, RT-DEP rules from CLAUDE.md apply").
+if grep -q "RT-TGT" "$MODES_DIR/red-team/system-prompt.md" \
+   && grep -q "RT-SIG" "$MODES_DIR/red-team/system-prompt.md" \
+   && grep -q "RT-DEP" "$MODES_DIR/red-team/system-prompt.md"; then
     ok red-team-has-opsec-rules
 else
     bad red-team-has-opsec-rules "missing OPSEC rules in red-team system-prompt.md"
@@ -185,17 +187,17 @@ fi
 
 # --- 17. Purple system-prompt has detection scoring -------------------------
 if grep -q "Detection Scoring" "$MODES_DIR/purple/system-prompt.md" \
-   && grep -q "RT-TGT-001" "$MODES_DIR/purple/system-prompt.md" \
-   && grep -q "time_to_detect" "$MODES_DIR/purple/system-prompt.md"; then
+   && grep -q "RT-TGT" "$MODES_DIR/purple/system-prompt.md" \
+   && grep -qi "time.to.detect" "$MODES_DIR/purple/system-prompt.md"; then
     ok purple-has-detection-scoring
 else
     bad purple-has-detection-scoring "missing detection scoring or OPSEC in purple system-prompt.md"
 fi
 
 # --- 18. Purple system-prompt has OPSEC inherited from red-team ------------
-if grep -q "RT-SIG-001" "$MODES_DIR/purple/system-prompt.md" \
-   && grep -q "RT-SIG-002" "$MODES_DIR/purple/system-prompt.md" \
-   && grep -q "RT-DEP-001" "$MODES_DIR/purple/system-prompt.md"; then
+# Rules may be inline or referenced via dedup pattern
+if grep -q "RT-SIG" "$MODES_DIR/purple/system-prompt.md" \
+   && grep -q "RT-DEP" "$MODES_DIR/purple/system-prompt.md"; then
     ok purple-inherits-opsec
 else
     bad purple-inherits-opsec "purple missing inherited OPSEC rules"
