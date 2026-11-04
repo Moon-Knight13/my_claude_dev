@@ -132,6 +132,34 @@ _probe_url "Outline" "${OUTLINE_API_URL:-}"
 _probe_url "Providentia" "${PROVIDENTIA_URL:-}"
 _probe_url "GitLab" "${GITLAB_URL:-}"
 _probe_url "Tuoni" "${TUONI_URL:-}"
+
+# --- Tuoni plugin JAR health (quick SSH check) ---
+if [[ -n "${SPOKE_KALI_HOST:-}" ]]; then
+    _jar_out=$(ssh -o ConnectTimeout=5 -o BatchMode=yes kali \
+        "sudo docker exec tuoni-server ls /app/plugins/ 2>/dev/null" 2>/dev/null) || true
+    _srv_ver=$(ssh -o ConnectTimeout=5 -o BatchMode=yes kali \
+        "sudo docker exec tuoni-server cat /app/cp/version.txt 2>/dev/null || \
+         sudo docker inspect tuoni-server --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | grep ^VERSION= | cut -d= -f2" 2>/dev/null) || true
+    _srv_ver="${_srv_ver%%$'\n'*}"
+    if [[ -n "$_jar_out" && -n "$_srv_ver" ]]; then
+        _jar_mismatch=""
+        while IFS= read -r jar; do
+            [[ -z "$jar" ]] && continue
+            jv=$(echo "$jar" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)
+            [[ -n "$jv" && "$jv" != "$_srv_ver" ]] && _jar_mismatch="$jar ($jv != $_srv_ver)"
+        done <<< "$_jar_out"
+        if [[ -n "$_jar_mismatch" ]]; then
+            echo "  $FAIL  Tuoni plugin JAR mismatch: $_jar_mismatch"
+            echo "         Server will crash on startup. Run update-plugins.sh or ./tuoni update"
+            _status=1
+        else
+            echo "  $PASS  Tuoni plugin JARs match server v${_srv_ver}"
+        fi
+    elif [[ -z "$_jar_out" ]]; then
+        echo "  $WARN  Tuoni plugin JAR check skipped (SSH/docker access failed)"
+    fi
+fi
+
 _probe_url "Ollama" "${OLLAMA_HOST:-}"
 
 # --- Ghidra install check ---
