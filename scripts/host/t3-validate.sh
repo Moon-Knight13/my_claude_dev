@@ -43,7 +43,7 @@ gate "claude authenticated" claude auth status
 
 echo ""
 echo "--- Config ---"
-gate "~/.claude exists" test -d "$HOME/.claude"
+gate "\$HOME/.claude exists" test -d "$HOME/.claude"
 gate ".claude/modes/ exists" test -d "$HOME/.claude/projects/-workspace/.claude" || test -d "$PWD/.claude/modes"
 
 echo ""
