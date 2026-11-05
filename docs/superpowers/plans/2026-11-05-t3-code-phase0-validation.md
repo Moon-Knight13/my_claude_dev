@@ -51,7 +51,7 @@ Host (Ubuntu 26.06)
 1. **SSE proxy stability:** Range MCPs behind supergateway must handle reconnects, VPN drops, and concurrent requests without losing state.
 2. **Hook parity:** Host claude's UserPromptSubmit hooks must fire identically to container claude. Same mode-inject, secret-scan, ctp-bridge behavior.
 3. **MCP config divergence:** Host claude uses SSE URLs, container claude uses stdio. Two `.mcp.json` strategies needed — or one config that works for both.
-4. **T3 + Tailscale + VPN coexistence:** Tailscale 100.64.0.0/10 range must not conflict with range VPN routing.
+4. **T3 + Tailscale + VPN coexistence:** Triple-VPN stack (Proton + DCM + Tailscale). Primary risk: ProtonVPN kill switch blocks Tailscale. Recommended: Tailscale userspace networking mode. See Task B3 Step 2 for full analysis.
 5. **Thread state durability:** T3 SQLite survives host reboot, T3 update, and doesn't conflict with engagement YAML.
 
 ---
@@ -287,27 +287,127 @@ t3 serve --tailscale-serve
 
 Verify laptop appears as environment on tailnet.
 
-- [ ] **Step 2: Validate VPN coexistence**
+- [ ] **Step 2: Validate VPN coexistence (triple-VPN stack)**
 
-Verify all three network overlays coexist:
-- ProtonVPN killswitch not blocking Tailscale traffic
-- DCM VPN range routes (172.21.x.x) still working
-- Tailscale CGNAT range (100.64.0.0/10) has no overlap with range
-- SSE proxy endpoints still reachable from T3
+Three VPN layers must coexist: ProtonVPN (privacy), DCM work VPN (range
+access), Tailscale (T3 mobile remote access). Analysis of `vpn-chain`
+script identified three conflict points:
+
+**Conflict 1: ProtonVPN kill switch blocks Tailscale**
+
+vpn-chain sets `kill-switch standard` which drops all non-Proton traffic.
+Tailscale needs to reach:
+- Coordination server (controlplane.tailscale.com) — for key exchange
+- DERP relay servers — for NAT traversal when direct WireGuard fails
+- Direct WireGuard peers — for Tailscale device-to-device traffic
+
+Tailscale WireGuard packets (UDP 41641) would be dropped by kill switch.
+
+**Mitigation options (test in order):**
+
+a. **Tailscale userspace networking mode** (preferred):
+   `tailscale up --userspace-networking`. Tailscale runs as userspace
+   SOCKS5/HTTP proxy instead of kernel tun device. Traffic goes through
+   Proton like any other app. No route table conflicts. Downside: slightly
+   higher latency, no subnet routing.
+
+b. **Pin Tailscale coordination + DERP to Proton** (like vpn-chain pins
+   work VPN server). Add Tailscale server IPs to `/run/vpn-chain.routes`
+   so they route through Proton interface. Problem: DERP IPs are dynamic,
+   coordination server may change.
+
+c. **ProtonVPN split tunneling**: Exempt Tailscale binary or Tailscale
+   ports from kill switch. ProtonVPN Linux CLI supports
+   `protonvpn config set split-tunnel` but scope is limited.
+
+d. **Start Tailscale before vpn-chain**: If Tailscale's tun device is up
+   before Proton, the kill switch may not affect already-established
+   WireGuard tunnels. Fragile — reconnect would break.
+
+**Recommended test sequence:**
+```bash
+# 1. Start vpn-chain normally
+vpn-chain EE
+
+# 2. Try Tailscale userspace mode
+sudo tailscale up --userspace-networking --accept-routes=false
+tailscale status  # should show connected
+
+# 3. Verify T3 reachable from phone via Tailscale
+# On phone: open T3 app, check environment visible
+
+# 4. Verify range still works through vpn-chain
+vpn-chain status  # should show "through Proton"
+# Test range host reachability
+
+# 5. If userspace fails, try option (b):
+# Get Tailscale coordination IP
+dig +short controlplane.tailscale.com
+# Pin it like vpn-chain pins work VPN server
+```
+
+**Conflict 2: Route table — three layers of route manipulation**
+
+- ProtonVPN: default route through `proton*` tun device
+- vpn-chain: metric-0 pinned routes for work VPN server + Proton DNS
+- Work VPN (DCM): range routes (172.21.x.x/16-ish)
+- Tailscale: 100.64.0.0/10 routes for CGNAT mesh
+
+No IP overlap (Proton=internet, DCM=172.21.x.x, Tailscale=100.64.0.0/10).
+But route *priority* matters:
 
 ```bash
 # Check routing table for conflicts
 ip route show table all | grep -E '100\.64|172\.21|proton'
-# Verify range access through VPN chain
-curl -s http://172.21.x.x/health  # adjust to real range endpoint
-# Verify Tailscale connectivity
-tailscale status
+# Verify no overlapping metrics on same prefix
+ip rule show  # check policy routing order
+# Tailscale may use table 52 (its default)
+ip route show table 52
 ```
 
-If conflicts found: investigate ProtonVPN `--accept-routes`, Tailscale
-userspace networking mode, or split-tunnel adjustments. VPN chain
-redesign deferred to homelab_infra overhaul — fix coexistence issues
-only, don't restructure.
+With userspace networking, Tailscale adds no kernel routes — conflict 2
+disappears entirely. This is why option (a) is preferred.
+
+**Conflict 3: DNS triple-split**
+
+Three DNS layers competing via systemd-resolved:
+- ProtonVPN DNS: default resolver (all queries not matched by others)
+- Work VPN DNS: range domains (crp.cr14.net, dcm.ex) via resolvectl
+- Tailscale MagicDNS: tailnet names (*.ts.net) via resolvectl
+
+systemd-resolved handles split DNS natively — each link gets its own
+servers and domain list. This *should* work if configured correctly.
+
+**Known hazard from TROUBLESHOOTING.md:** `systemctl restart
+systemd-resolved` wipes all per-link DNS config (set by vpn-chain and
+Tailscale). Recovery: `vpn-chain off && vpn-chain EE` to re-establish,
+plus `tailscale up` to re-register MagicDNS.
+
+```bash
+# Verify DNS split after all three VPNs up
+resolvectl status  # show per-link DNS config
+# Should see: proton* link (Proton DNS), work VPN link (range DNS),
+# tailscale0 link (MagicDNS) or no tailscale link if userspace mode
+resolvectl query some-host.crp.cr14.net  # range DNS
+resolvectl query $(hostname).ts.net      # Tailscale MagicDNS
+curl -s https://api.ipify.org            # should show Proton exit IP
+```
+
+With userspace networking, Tailscale MagicDNS works differently (local
+proxy, not per-link resolvectl). May simplify or complicate — test.
+
+**Decision gate:** If userspace networking passes all tests, use it.
+If not, evaluate effort for option (b) or (c). If none work cleanly,
+defer Tailscale to homelab_infra overhaul and use T3 web UI on local
+network only (still useful, just no mobile remote access outside LAN).
+
+**VPN startup order (target):**
+1. ProtonVPN (via vpn-chain or Proton app)
+2. DCM work VPN (via vpn-chain — connects through Proton)
+3. Tailscale (userspace mode — goes through Proton like any app)
+4. Docker containers (bridge network, DNS via 172.17.0.1 stub)
+
+This order ensures each layer builds on the previous one.
 
 - [ ] **Step 3: Install T3 mobile app**
 
