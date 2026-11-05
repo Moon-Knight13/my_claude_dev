@@ -187,6 +187,89 @@ targets:
       method: <brief description>
 ```
 
+## Degraded Mode (Router-Only Operations)
+
+When `degraded_mode: router-only` is set in engagement YAML (no Kali spoke),
+the following constraints apply:
+
+**Available on router agents:** Python3 (socket, subprocess, urllib,
+http.client), pexpect (r1), Scapy (ICMP/raw), curl, basic shell, Tuoni
+plugins (net-recon, host-id, jump-ssh, cred-dump, persist-swarm).
+
+**NOT available:** nmap, hydra, smbclient, impacket, xfreerdp, crackmapexec,
+rpcclient, icmp_c2.py, sshpass, medusa, enum4linux.
+
+**Degraded attack paths:**
+- SSH password auth: Tuoni `remote-exec-ssh` or `jump-ssh` (one attempt at
+  a time, manually)
+- Port scanning: Python socket (`connect_ex`), NOT bash `/dev/tcp` (false negatives)
+- Web enumeration: curl + Python urllib (manual path probing)
+- ICMP: Scapy for crafted packets
+- SMB/RDP: BLOCKED — no tools available
+- Password spray: BLOCKED — no spray tools
+
+**Skip Phases 2-3** (payload prep, Kali execution). Attempt SSH-based
+initial access directly through Tuoni agent commands.
+
+## Network Device SSH (Menu Shell Targets)
+
+pfSense, Cisco IOS, and similar devices present interactive menu shells on SSH
+instead of a standard command shell. Tuoni `remote-exec-ssh` connects but
+cannot navigate menus.
+
+**Preferred approach: jump-ssh plugin.** SCP delivery bypasses the login
+shell entirely — SCP writes files directly without invoking the menu. Use
+`jump-ssh` to:
+1. SCP a script to the target
+2. Execute the script via a separate SSH channel
+
+**pexpect approach (fallback):** Write a pexpect script to a file on the
+relay agent, then execute it. Use prompt pattern `Password for.*:` (not
+`[Pp]assword:` — pfSense includes username in prompt).
+
+## fail2ban / IDS Awareness — ENFORCED
+
+Many targets run fail2ban or equivalent IDS that ban source IPs after
+repeated authentication failures. A ban can lose access to the target AND
+all targets behind it (e.g., a gateway firewall blocks all downstream targets).
+
+**Rules:**
+- **Max 2 SSH attempts per source IP per target** before pausing
+- **Wait 30 minutes minimum** between attempt batches (default fail2ban ban)
+- **Rotate source IPs** if multiple agents available on different hosts
+- **Before ANY auth attempt**: invoke `opsec-cred-spray` skill for lockout
+  policy enumeration
+- **After ban detection** (SSH FILTERED or connection refused after prior
+  success): log OPSEC incident, set 60-minute cooldown timer, try alternate
+  source IP
+
+**Ban detection indicators:**
+- Port changes from OPEN to FILTERED (iptables DROP)
+- TCP RST where previously SYN-ACK (iptables REJECT)
+- HTTP 000 response on previously-working HTTPS
+- SSH banner timeout where banner previously appeared
+- ICMP still responds (fail2ban bans port, not IP entirely)
+
+**Recovery:**
+1. Log ban in engagement YAML as OPSEC incident finding
+2. Set timer: do NOT retry before ban expiry (typically 30-60 min)
+3. If alternate agent on different IP exists, attempt from there
+4. If gateway target banned: ALL downstream targets inaccessible — pivot
+   to other reachable targets first
+
+## Providentia Vulnerability Data — Trust but Verify
+
+Providentia vuln data may be aspirational (what SHOULD be deployed) rather
+than factual (what IS deployed). The `custom_not_working` tag explicitly
+marks broken vulns, but unlisted vulns may also be non-functional.
+
+**Before committing to an attack vector:**
+1. Check Providentia tags for `custom_not_working` or similar
+2. Verify the service/port actually exists (port scan first)
+3. Cross-reference with GitLab README for deploy status
+4. If 2+ vectors fail on same target: suspect Providentia data issue, not
+   technique failure. Report to operator.
+
 ## Failure modes
 
 - **Exploit fails**: document failure, rotate to next attack vector. Do NOT
@@ -197,3 +280,6 @@ targets:
   non-negotiable before proceeding.
 - **Wrong target responds**: ABORT IMMEDIATELY. Verify Providentia data.
   Report incident to operator.
+- **fail2ban triggered**: STOP all attempts to target. Log OPSEC incident.
+  Set 60-min cooldown. Try alternate source IP or target. See fail2ban
+  section above.

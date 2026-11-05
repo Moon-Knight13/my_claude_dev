@@ -23,6 +23,43 @@ If no engagement YAML exists, CREATE ONE before allowing any other skill to proc
 
 After creation, auto-invoke `pre-engagement-cache` skill to warm Providentia data per-host (not bulk) and load reference MCP tool schemas via ToolSearch.
 
+### Mandatory Pre-Engagement Gates (red-team / purple)
+
+Before ANY kill-chain skill (recon, initial-access, discovery, etc.) runs,
+verify these gates IN ORDER. Gate failures block engagement start — they are
+not warnings.
+
+**Gate 1: spoke-health** — invoke `spoke-health` skill.
+- All SSH hops must reach Kali spoke
+- tuoni-mcp must respond
+- If Kali spoke unreachable: BLOCK. Operator must deploy Kali or explicitly
+  acknowledge degraded (router-only) mode in engagement YAML:
+  `degraded_mode: router-only`
+
+**Gate 2: kali-bootstrap** (red-team only) — verify Kali agent exists.
+- Query `tuoni_agents_list` for a Kali-hosted agent
+- If no Kali agent AND `degraded_mode` not set: BLOCK. Report:
+  "No Kali spoke agent. Run kali-bootstrap or set degraded_mode: router-only"
+- If `degraded_mode: router-only`: warn and continue. Skills must use their
+  degraded-mode sections (router agents only, limited tooling).
+
+**Gate 3: agent routing verification** — for each router agent hostname:
+- Run `ip route` or equivalent via a single agent per host
+- Verify at least one agent can reach each target subnet
+- Report unreachable targets. If ALL targets unreachable from ALL agents: BLOCK.
+
+Record gate results in engagement YAML:
+```yaml
+preflight:
+  spoke_health: passed | failed
+  kali_agent: <agent_id> | missing
+  degraded_mode: false | router-only
+  agent_routing:
+    r1: [reachable_subnets]
+    r2: [reachable_subnets]
+  gate_timestamp: <ISO-8601>
+```
+
 ### Create Engagement
 
 Trigger: operator says "new engagement", "start engagement", or no engagement
