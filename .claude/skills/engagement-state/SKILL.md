@@ -202,6 +202,36 @@ or skill detects existing engagement file.
    - Next steps from previous session
 5. Ask operator: "Resume this engagement? Any scope changes?"
 
+### Archive Engagement (Clean Slate)
+
+Trigger: operator says "archive engagement", "clean slate", "new engagement"
+when an active engagement exists, or "close engagement".
+
+Purpose: range changes between engagements (new enclaves, IP reassignment,
+vulns deployed/removed). Stale engagement data misleads. Technique KNOWLEDGE
+persists; target-specific STATE archives.
+
+1. Set engagement YAML `status: archived`, add `archived_at: <ISO-8601>`
+2. Move `engagements/<id>.yaml` to `engagements/archive/<id>.yaml`
+   (create `archive/` if needed)
+3. Tag Obsidian target pages with `#archived/<id>` via `obsidian_add_tags`:
+   - `llm-wiki/wiki/targets/<hostname>.md` — add `#archived`
+   - These pages remain searchable but recon skill treats them as historical
+4. **PRESERVE** (do NOT archive):
+   - `llm-wiki/wiki/techniques/*.md` — technique knowledge persists across
+     engagements. This is the learning.
+   - `llm-wiki/wiki/providentia-accuracy/*.md` — vuln accuracy data persists
+   - `llm-wiki/log.md` — append-only, never truncated
+5. Generate engagement summary in Obsidian:
+   - Create `llm-wiki/wiki/engagements/<id>/Summary.md`
+   - Include: targets, techniques_tried with results, findings, metrics
+   - This is the permanent record
+6. Report: "Engagement <id> archived. Technique pages preserved. Ready for
+   new engagement."
+
+After archive, "new engagement" creates fresh state from Providentia ground
+truth. Pre-engagement-cache runs fresh. No stale target data carried forward.
+
 ### Update Next Steps
 
 Trigger: "next steps", "plan next", "what's next", or end of session.
