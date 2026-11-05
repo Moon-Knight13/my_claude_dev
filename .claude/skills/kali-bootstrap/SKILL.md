@@ -130,14 +130,115 @@ for full list: host-id, net-recon, vuln-assess, lateral-move, lateral-wmi,
 get-system, persist-swarm, cred-dump, ad-enum, agent-watcher, collect-intel,
 ioc-cleanup, log-clear, exfil-stage, payload-gen, route-hijack).
 
-### Step 8: Record State
+### Step 8: Verify and Install Tools
+
+Run tool checks through Kali self-agent (tuoni-mcp commands). Three tiers:
+
+**Tier 1: Stock Kali tools (verify present)**
+
+Check these binaries exist via `which` on Kali agent. All should be
+pre-installed on kali-linux-default. Report any missing as anomaly.
+
+```
+nmap masscan hydra medusa crackmapexec smbclient rpcclient enum4linux-ng
+impacket-secretsdump impacket-wmiexec impacket-psexec impacket-smbexec
+impacket-ntlmrelayx xfreerdp rdesktop sshpass proxychains4 chisel socat
+gobuster feroxbuster nikto sqlmap responder searchsploit bloodhound-python
+ldapsearch certipy evil-winrm hping3 tshark john hashcat wfuzz
+```
+
+**Tier 2: APT packages (install if missing)**
+
+```bash
+apt list --installed 2>/dev/null | grep -E 'redis-tools|postgresql-client'
+```
+
+If missing:
+```bash
+apt update && apt install -y redis-tools postgresql-client
+```
+
+These provide `redis-cli` (Redis exploitation) and `psql` (PostgreSQL RCE
+via `COPY FROM PROGRAM`).
+
+**Tier 3: Python packages (install if missing)**
+
+```bash
+pip3 list 2>/dev/null | grep -iE 'pexpect|paramiko|coercer|mitm6|ldapdomaindump|adidnsdump|pypykatz|pcredz|netexec'
+```
+
+Install missing:
+```bash
+pip3 install pexpect paramiko coercer mitm6 ldapdomaindump adidnsdump pypykatz Pcredz netexec
+```
+
+Purpose by package:
+- `pexpect`: interactive SSH automation (pfSense menu shells, custom prompts)
+- `paramiko`: programmatic SSH with keyboard-interactive auth control
+- `coercer`: force Windows machine authentication (PetitPotam, PrinterBug, DFSCoerce)
+- `mitm6`: IPv6 DNS takeover for NTLM relay in AD
+- `ldapdomaindump`: dump AD via LDAP to HTML/JSON/grep
+- `adidnsdump`: dump AD-integrated DNS zones (find hidden hosts)
+- `pypykatz`: pure-Python mimikatz (parse LSASS dumps offline on Kali)
+- `Pcredz`: extract credentials from PCAP captures
+- `netexec`: CrackMapExec successor, better maintained
+
+**Tier 4: Binary tools (download if missing)**
+
+Check and install on Kali filesystem:
+```bash
+test -x /opt/tools/ligolo-agent || echo "ligolo-ng missing"
+test -x /opt/tools/kerbrute || echo "kerbrute missing"
+```
+
+If missing, download from GitHub releases (requires internet or pre-staged):
+- `ligolo-ng`: TUN-level tunnel through footholds (better than proxychains)
+- `kerbrute`: Kerberos user enum + password spray (no lockout on enum)
+
+Install to `/opt/tools/` and symlink to `/usr/local/bin/`.
+
+**Tier 5: .NET assemblies for Tuoni execute-assembly**
+
+Stage in `/opt/assemblies/` on Kali for quick deployment through Tuoni
+agents on Windows targets:
+
+```
+SharpHound.exe    — BloodHound AD data collector
+Rubeus.exe        — Kerberos abuse (roasting, ticket manipulation)
+Certify.exe       — ADCS enumeration and abuse
+Seatbelt.exe      — Host situational awareness
+```
+
+These run on Windows agents via `execute-assembly`, not on Kali directly.
+Download from GhostPack/BloodHound repos if not pre-staged.
+
+**Tier 6: Custom/range-specific tools**
+
+```bash
+test -f /opt/tools/icmp_c2.py || echo "icmp_c2.py missing"
+```
+
+- `icmp_c2.py`: ICMP backdoor trigger (SCP from deploy infra if available)
+
+Report summary: tools verified N, installed N, missing N (with names).
+
+### Step 9: Record State
 
 Update engagement YAML:
 ```yaml
 kali_agent_id: <agent-id-from-step-4-or-5>
+tools_verified:
+  stock_kali: <count>/35
+  apt_packages: [redis-tools, postgresql-client]
+  pip_packages: [pexpect, paramiko, coercer, mitm6, ...]
+  binaries: [ligolo-ng, kerbrute]
+  assemblies: [SharpHound, Rubeus, Certify, Seatbelt]
+  custom: [icmp_c2.py]
+  missing: [<any that could not be installed>]
+  verified_at: <ISO-8601>
 ```
 
-If no engagement YAML exists: print agent ID for operator to record.
+If no engagement YAML exists: print agent ID and tool summary for operator.
 
 ## Exit Criteria
 
@@ -146,5 +247,32 @@ All must be true:
 - [ ] SSH auth working (key accepted)
 - [ ] Tuoni API responding on :8443
 - [ ] Self-agent connected and executing commands
-- [ ] tuoni-plugins loaded (14 modules)
-- [ ] Agent ID recorded in engagement YAML
+- [ ] tuoni-plugins loaded (16 modules)
+- [ ] Stock Kali tools verified present
+- [ ] redis-tools + postgresql-client installed
+- [ ] Python packages installed (pexpect, paramiko, coercer, mitm6, etc.)
+- [ ] Agent ID + tool manifest recorded in engagement YAML
+
+## Attack Chain Reference
+
+Tools combine across layers to unlock specific attack chains:
+
+**Redis RCE** (needs creds): `redis-cli` AUTH, CONFIG SET dir/dbfilename,
+write SSH key or cron, or MODULE LOAD for .so RCE.
+
+**PostgreSQL RCE** (needs creds): `psql` COPY FROM PROGRAM for command
+execution, lo_import/lo_export for file read/write.
+
+**NTLM relay** (AD): `responder` + `impacket-ntlmrelayx` capture and relay.
+`Coercer` forces machine auth. `mitm6` for IPv6 DNS takeover.
+
+**Pivoting**: Tuoni `socks5` on foothold + `proxychains4` on Kali wraps all
+tools. `ligolo-ng` for TUN-level routing (tools work natively).
+
+**pfSense access**: `pexpect` navigates menu shell (option 8 = Shell).
+`jump-ssh` SCP bypasses login shell. Extract `/cf/conf/config.xml` for
+admin hash, VPN PSKs, firewall rules.
+
+**AD attack path**: `bloodhound-python` or SharpHound via execute-assembly
+for path mapping. `kerbrute` for user enum. `certipy` for ADCS abuse.
+`Rubeus` for Kerberoasting/AS-REP roasting through Tuoni agent.
