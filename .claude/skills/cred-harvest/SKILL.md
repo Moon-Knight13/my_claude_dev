@@ -141,18 +141,25 @@ On Kali (NOT target):
 
 1. **Identify credential type**: plaintext, NTLM hash, Kerberos ticket,
    SSH key, API token, certificate
-2. **MANDATORY: Store in Tuoni cred store** (tuoni-mcp `tuoni_credential_add`):
+2. **Auto-crack hashes** (hashcat-mcp — if hash type credential):
+   - Feed hash to Hashcat MCP `auto_attack_strategy()`
+   - MCP selects mode, rules, wordlists automatically
+   - Hashcat runs on Kali spoke (CPU or GPU)
+   - If cracked: store plaintext result in Tuoni cred store alongside hash
+   - If not cracked after strategy exhaustion: note as "hash-only" in ref
+   - **NEVER store cracked plaintext in YAML or Obsidian — Tuoni cred store only**
+3. **MANDATORY: Store in Tuoni cred store** (tuoni-mcp `tuoni_credential_add`):
    - Each credential gets unique ref ID
    - Tagged with: source host, source location, type, privilege level
    - **This is a gate step like `/log-finding` — MUST call before proceeding**
    - Zero creds stored = engagement failure (see redteam-test2 post-mortem)
-3. **Record ref in engagement YAML** (tuoni_cred_id only, NEVER plaintext):
+4. **Record ref in engagement YAML** (tuoni_cred_id only, NEVER plaintext):
    - Add to `credentials[]` with ref_id, type, username, domain, source_host
-4. **Assess value for lateral movement**:
+5. **Assess value for lateral movement**:
    - Domain admin? Service accounts with broad access?
    - Match `tuoni_credentials_list` filter by realm against `range_targets` by network
    - Programmatic lateral opportunity mapping, not manual
-5. **Document in Obsidian** (refs only):
+6. **Document in Obsidian** (refs only):
    - `llm-wiki/wiki/targets/<hostname>.md`: update cred refs section
    - Use template `llm-wiki/templates/credential.md` for credential ref page
    - `obsidian_add_tags`: `#engagement/<id>`, `#phase/cred-harvest`, `#target/<hostname>`

@@ -39,17 +39,21 @@ is insufficient for the question.
 5. **Tuoni Discovery** via tuoni-mcp (`tuoni_discovery_hosts_list`)
    - Live C2 state: existing agents, discovered hosts from prior ops
    - ALWAYS queried fresh, never cached
-6. **Obsidian notes** via obsidian-mcp
+6. **BloodHound graph** via bloodhound-mcp (if AD environment)
+   - Attack path queries: "shortest path to Domain Admin"
+   - Kerberoastable accounts, delegation abuse, NTLM relay-vulnerable DCs
+   - Only available after bloodhound-python collection ingested
+7. **Obsidian notes** via obsidian-mcp
    - Operator tactical knowledge from prior engagements
    - Check raw/ for prior recon dumps, wiki/ for compiled intel
 
 ### Tier 3 — Reference (research)
 
-7. **HackTricks** via hacktricks-mcp — attack techniques for this platform/service
-8. **MITRE ATT&CK** via mitre-mcp — technique IDs, detection strategies
-9. **LOLBins** via lolbins-mcp — living-off-the-land binary abuse (Windows + Linux)
-10. **CVE intelligence** via cve-mcp — CVE details, EPSS scores, KEV, exploits
-11. **Web research** — last resort when all above insufficient
+8. **HackTricks** via hacktricks-mcp — attack techniques for this platform/service
+9. **MITRE ATT&CK** via mitre-mcp — technique IDs, detection strategies
+10. **LOLBins** via lolbins-mcp — living-off-the-land binary abuse (Windows + Linux)
+11. **CVE intelligence** via cve-mcp — CVE details, EPSS scores, KEV, exploits
+12. **Web research** — last resort when all above insufficient
 
 ## Phases
 
@@ -109,6 +113,20 @@ Cross-reference active recon results with Tier 3 sources:
 - MITRE: `search_techniques` + `get_technique` for IDs and detection info
 - lolbins-mcp: `analyze_environment` if enumeration data available, then `discover_chains`
 - `analyze_opsec_risk`: assess detection risk for each candidate technique
+
+**Nuclei scanning** (nuclei-mcp — if Kali spoke available):
+- Run targeted template scans based on service fingerprint from Phase 2
+- Filter by severity: critical + high first, then medium
+- Structured JSON results feed directly into attack vector ranking
+- Do NOT run full template set — select by technology tag (e.g. `apache`,
+  `wordpress`, `pfsense`)
+
+**BloodHound path analysis** (bloodhound-mcp — AD environments only):
+- Requires prior `bloodhound-python` collection ingested into Neo4j
+- Query attack paths: shortest to DA, kerberoastable accounts,
+  constrained delegation, ADCS misconfiguration
+- Each path becomes a ranked attack vector with full hop chain
+- Cross-reference with MITRE technique IDs for detection assessment
 
 **OPSEC: opsec-exploit-hygiene** — flag any Metasploit modules as
 REFERENCE ONLY. Extract technique, note for custom implementation.

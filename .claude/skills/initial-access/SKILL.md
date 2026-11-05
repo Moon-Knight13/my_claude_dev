@@ -80,9 +80,14 @@ For each operator-approved attack vector from recon:
    - **Fallback if mitre-mcp unavailable**: use `cve_to_attack` (cve-mcp) for
      CWE→ATT&CK mapping, `lolbins analyze_opsec_risk` for detection assessment,
      and `hacktricks_quick_lookup` for mitigation/detection notes
-4. **LOLBins OPSEC check** (lolbins-mcp `analyze_opsec_risk`): assess noise level
+4. **BloodHound path validation** (bloodhound-mcp — AD targets only):
+   - Query if target is on any path to high-value objectives (DA, EA, DC)
+   - Check for kerberoastable SPNs, delegation abuse, ADCS templates
+   - If path exists: prioritize this vector (graph-validated attack chain)
+   - If no path: deprioritize AD-specific vectors for this target
+5. **LOLBins OPSEC check** (lolbins-mcp `analyze_opsec_risk`): assess noise level
    and EDR trigger probability BEFORE executing any exploit
-5. **Wiki vulns-docs** (outline-readonly): prior team research on this vuln
+6. **Wiki vulns-docs** (outline-readonly): prior team research on this vuln
 6. **Metasploit module** (if exists): READ for technique understanding ONLY.
    Extract: target verification method, payload delivery mechanism, post-exploit
    actions. Document what it does. Do NOT use it.

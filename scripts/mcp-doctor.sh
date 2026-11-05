@@ -80,6 +80,19 @@ _check_var GHIDRA_INSTALL_DIR false "load-env.sh default → rea-mcp"
 _check_var JAVA_HOME false "load-env.sh default → rea-mcp"
 
 echo ""
+echo "  BloodHound MCP:"
+_check_var BH_NEO4J_USER false ".env → bloodhound-mcp"
+_check_var BH_NEO4J_PASSWORD false ".env → bloodhound-mcp"
+
+echo ""
+echo "  Hashcat MCP:"
+_check_var HASHCAT_HOST false "derived from SPOKE_KALI_HOST → hashcat-mcp"
+
+echo ""
+echo "  Nuclei MCP:"
+_check_var NUCLEI_HOST false "derived from SPOKE_KALI_HOST → nuclei-mcp"
+
+echo ""
 echo "  Ollama / local model:"
 _check_var LOCAL_MODEL_ENABLED false ".env"
 _check_var OLLAMA_HOST false "derived from LOCAL_MODEL_ENDPOINT → local-ollama"
@@ -157,6 +170,28 @@ if [[ -n "${SPOKE_KALI_HOST:-}" ]]; then
         fi
     elif [[ -z "$_jar_out" ]]; then
         echo "  $WARN  Tuoni plugin JAR check skipped (SSH/docker access failed)"
+    fi
+fi
+
+# --- New MCP service probes ---
+if [[ -n "${SPOKE_KALI_HOST:-}" ]]; then
+    _neo4j_port="${BH_NEO4J_PORT:-7687}"
+    if timeout 3 bash -c "echo >/dev/tcp/${SPOKE_KALI_HOST}/$_neo4j_port" 2>/dev/null; then
+        echo "  $PASS  Neo4j (BloodHound) — ${SPOKE_KALI_HOST}:${_neo4j_port} reachable"
+    else
+        echo "  $WARN  Neo4j (BloodHound) — ${SPOKE_KALI_HOST}:${_neo4j_port} unreachable (deploy BloodHound CE on Kali)"
+    fi
+
+    if ssh -o ConnectTimeout=5 -o BatchMode=yes kali "command -v hashcat" >/dev/null 2>&1; then
+        echo "  $PASS  Hashcat — available on Kali"
+    else
+        echo "  $WARN  Hashcat — not found on Kali"
+    fi
+
+    if ssh -o ConnectTimeout=5 -o BatchMode=yes kali "command -v nuclei" >/dev/null 2>&1; then
+        echo "  $PASS  Nuclei — available on Kali"
+    else
+        echo "  $WARN  Nuclei — not found on Kali"
     fi
 fi
 
