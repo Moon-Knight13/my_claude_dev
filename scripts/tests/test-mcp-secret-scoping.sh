@@ -30,8 +30,10 @@ DOTENV
 
 # Copy scripts structure so load-env.sh finds .env at ../../.env
 mkdir -p "$TMPDIR_TEST/scripts/lib"
+mkdir -p "$TMPDIR_TEST/config"
 cp "$PROJECT_DIR/scripts/lib/load-env.sh" "$TMPDIR_TEST/scripts/lib/"
 cp "$PROJECT_DIR/scripts/mcp-wrapper.sh" "$TMPDIR_TEST/scripts/"
+cp "$PROJECT_DIR/config/mcp-secrets.yaml" "$TMPDIR_TEST/config/"
 
 # Helper: run wrapper with MCP_SERVER_NAME override, exec `env` to dump vars
 _run_as_mcp() {
