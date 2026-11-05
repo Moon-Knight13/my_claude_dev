@@ -244,7 +244,62 @@ t3 service install  # background service
 - Custom context handoff augmentation (mode, engagement state)
 - Failback procedure (return to primary when recovered)
 
-## 8. Risk Assessment
+## 8. Security Requirements
+
+### Mandatory Mitigations (implement at Phase A/B)
+
+1. **`supergateway --apiKey <token>`** on all SSE proxy endpoints. Tokens in `.env`, never in repo.
+2. **`--host 127.0.0.1`** binding on supergateway — never `0.0.0.0`.
+3. **Tailscale HTTPS** for mobile remote access — not T3 Connect (avoids Ping.gg cloud relay).
+4. **T3 permission mode: Auto** as default for new threads, never Full Access.
+5. **Scoped device pairing** — `--scope` flag on `t3 up`, never default admin grant.
+6. **No range secrets through OpenRouter** — red-team failover uses local Ollama only.
+
+### Secrets Architecture (6 layers)
+
+| Layer | Status | Component |
+|---|---|---|
+| 1. Environment variables | EXISTS | `.env`, systemd units — tokens never in repo |
+| 2. Prompt-side scanning | EXISTS (extend) | `secret-scan.sh` — add SSE token + T3 pairing patterns |
+| 3. MCP response filtering | NEW (build) | supergateway proxy — regex redact before model sees responses |
+| 4. Handoff sanitization | NEW (build) | Strip raw tool output from T3 provider switch summaries |
+| 5. Provider classification | NEW (policy) | Anthropic/Ollama=full context; OpenRouter=sanitized only |
+| 6. Credential store refs | EXISTS (enforce) | `tuoni://cred/<id>` format in engagement YAML |
+
+Layer 3 is critical path — SSE proxy is the only interception point for MCP
+response content before it reaches model context. No `PostMcpResponse` hook
+exists in Claude Code today.
+
+### Threat Matrix Summary
+
+| Risk | Threat | Mitigation |
+|---|---|---|
+| HIGH | Host claude full filesystem access (no container sandbox) | T3 permission mode: Supervised/Auto |
+| HIGH | SSE proxy unauthenticated = any local process gets Tuoni C2 access | `--apiKey` + localhost bind + bridge firewall |
+| MEDIUM | T3 MCP escalation (compromised MCP reads other threads) | T3 scopes MCP sessions to parent thread |
+| MEDIUM | OpenRouter data exfil (engagement context to cloud proxy) | Local Ollama for red-team failover only |
+| MEDIUM | Default device pairing grants admin (terminal + orchestration) | Scoped `--scope` pairing |
+
+## 8.5 Scope and Ownership
+
+### What lives where
+
+| Component | Location | Reason |
+|---|---|---|
+| Mode system, hooks, skills | my_claude_dev | Configures AI behavior |
+| SSE proxy install + systemd units | my_claude_dev `scripts/host/` | Bootstrap scripts, run once |
+| Response filter patterns | my_claude_dev `scripts/host/` | Travels with secret-scan patterns |
+| T3 install script | my_claude_dev `scripts/host/` | Bootstrap script |
+| Provider classification policy | Mode system-prompts | Policy = mode concern |
+| T3 runtime config | `~/.config/t3code/` (T3-owned) | T3 manages itself |
+| SSE proxy runtime config | `~/.config/range-mcp-proxy/` | Host-level, persists across containers |
+| Plan/spec docs | my_claude_dev `docs/planning/` | Architecture docs |
+
+All host scripts in `scripts/host/` are bootstrap-only. Runtime config lives
+on host outside repo. Future: extract to `homelab_infra` Ansible role when
+that overhaul lands.
+
+## 9. Risk Assessment
 
 | Risk | Impact | Mitigation |
 |---|---|---|
