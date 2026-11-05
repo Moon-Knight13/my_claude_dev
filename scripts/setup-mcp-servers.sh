@@ -33,6 +33,14 @@ fi
 WRAPPER="$PROJECT_DIR/scripts/mcp-wrapper.sh"
 PKG_DIR="$PROJECT_DIR/.mcp-packages"
 
+# Host vs container: use venv python for Python-based MCPs on host.
+VENV_DIR="$PROJECT_DIR/mcp-servers/.venv"
+if [[ "${DEVCONTAINER:-}" != "true" ]] && [[ -d "$VENV_DIR/bin" ]]; then
+    PYTHON_CMD="$VENV_DIR/bin/python3"
+else
+    PYTHON_CMD="python3"
+fi
+
 # Obsidian vault: container mounts at /home/node/vault, host uses OBSIDIAN_VAULT_PATH from .env
 # shellcheck source=scripts/lib/load-env.sh
 source "$SCRIPT_DIR/lib/load-env.sh" 2>/dev/null || true
@@ -77,7 +85,7 @@ read -r -d '' CATALOG << CATALOG_JSON || true
   },
   "range-intel": {
     "command": "$WRAPPER",
-    "args": ["python3", "-m", "range_intel.server"],
+    "args": ["$PYTHON_CMD", "-m", "range_intel.server"],
     "cwd": "$PROJECT_DIR/mcp-servers/range-intel",
     "env": {
       "PYTHONPATH": "$PROJECT_DIR/mcp-servers/range-intel/src"
@@ -89,7 +97,7 @@ read -r -d '' CATALOG << CATALOG_JSON || true
   },
   "tuoni-mcp": {
     "command": "$WRAPPER",
-    "args": ["python3", "-m", "tuoni_mcp"],
+    "args": ["$PYTHON_CMD", "-m", "tuoni_mcp"],
     "env": {
       "TUONI_VERIFY_TLS": "false",
       "TUONI_MCP_PROFILES": "agent-ops,access,discovery,authoring,administration"
