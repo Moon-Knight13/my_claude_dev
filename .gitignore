@@ -22,6 +22,7 @@ secrets.*
 .claude/history/
 .claude/statsig/
 .claude/.active-mode
+.claude/audit/
 engagements/
 .ai/
 

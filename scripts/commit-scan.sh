@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
-# commit-scan.sh — warn-only PII/secret scan of STAGED content.
+# commit-scan.sh — PII/secret scan of STAGED content.
 #
-# Wired in as a git pre-commit hook by scripts/install-commit-guard.sh. It NEVER
-# blocks: it prints a warning for any finding and always exits 0, so an
-# intentional commit is never aborted (owner decision — for both PII and
-# secrets). The mitigation for a secret is therefore fast reaction (rotate/clean
-# per SECURITY.md), not prevention.
+# Wired in as a git pre-commit hook by scripts/install-commit-guard.sh.
+# Secrets: BLOCKING (exit 1) — a commit containing a detected secret is refused.
+# PII: warn-only — prints a warning but does not block (owner decision).
+# Override: set COMMIT_SCAN_WARN_ONLY=1 to revert to warn-only for all findings.
 #
 # It records rule + file + line to a user-scope review log — never the matched
 # value, because a log full of real secrets would just relocate the leak.
@@ -16,7 +15,7 @@
 # without anything being written into that pushed tree.
 #
 # Usage:  scripts/commit-scan.sh            # scans staged changes in CWD's repo
-# Exit:   always 0 (warn-only).
+# Exit:   0 if clean or PII-only; 1 if secrets detected (unless COMMIT_SCAN_WARN_ONLY=1).
 set -uo pipefail
 
 note() { echo "  --  commit-guard: $*"; }
@@ -53,14 +52,15 @@ if [[ -n "$report" && "$report" != "null" && "$report" != "[]" ]]; then
 fi
 
 _ts="$(date -Is 2>/dev/null || echo unknown)"
+_secret_count=0
 if (( count > 0 )); then
-    warn "$count finding(s) in staged content — commit is NOT blocked; review before pushing:"
     # Emit rule/file/line ONLY. Never echo .Match/.Secret. Classify pii-* as PII.
     while IFS=$'\t' read -r rule file line desc; do
         if [[ "$rule" == pii-* || "$rule" == *email* || "$rule" == *pii* ]]; then
-            warn "  PII    [$rule] $file:$line — $desc"
+            warn "  PII    [$rule] $file:$line — $desc (warn-only)"
         else
-            warn "  SECRET [$rule] $file:$line — $desc  ➜ rotate/clean per SECURITY.md (warn-only: the push is not stopped)"
+            warn "  SECRET [$rule] $file:$line — $desc  ➜ remove secret and re-stage"
+            _secret_count=$((_secret_count + 1))
         fi
         # durable review log: rule/file/line/class only, no value
         cls="secret"; [[ "$rule" == pii-* || "$rule" == *pii* || "$rule" == *email* ]] && cls="pii"
@@ -94,4 +94,9 @@ if command -v semgrep >/dev/null 2>&1; then
     fi
 fi
 
+# Block on secrets unless overridden
+if (( _secret_count > 0 )) && [[ "${COMMIT_SCAN_WARN_ONLY:-}" != "1" ]]; then
+    warn "$_secret_count secret(s) detected — commit BLOCKED. Remove secrets, re-stage, and retry. Override: COMMIT_SCAN_WARN_ONLY=1 git commit ..."
+    exit 1
+fi
 exit 0
