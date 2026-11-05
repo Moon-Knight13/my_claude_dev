@@ -2,20 +2,21 @@
 title: "PRD Quality Review"
 reviewer: quality-rubric
 date: 2026-10-30
-verdict: CONDITIONAL PASS
+updated: 2026-11-04
+verdict: PASS
 ---
 
 # PRD Quality Review — my_claude_dev v2
 
-## Verdict: CONDITIONAL PASS
+## Verdict: PASS
 
-PRD is well-structured with clear mode separation, numbered FRs, traceable NFRs, and explicit MVP/deferred split. Five findings need resolution before finalization; twelve minor items noted.
+All five findings resolved as of 2026-11-04. PRD aligned with implemented mode switching architecture (hook injection, decentralized skill filtering, base-mode layer). Original review preserved below for traceability.
 
 ---
 
 ## Top 5 Findings (by severity)
 
-### 1. CRITICAL — Missing FR: Engagement YAML schema/lifecycle (implied but unnumbered)
+### 1. ~~CRITICAL~~ RESOLVED — Missing FR: Engagement YAML schema/lifecycle (implied but unnumbered)
 
 FR-H3 says "engagement YAML file persists between sessions" and FR-SK2 says skills read/write it, but no FR defines:
 - What fields the YAML contains
@@ -27,7 +28,9 @@ MVP scope table lists "Engagement YAML state — Structured state persistence" �
 
 **Recommendation:** Add FR-H8 defining engagement YAML as a structured contract (sections per mode, create/close lifecycle, single-engagement-at-a-time for MVP). Details go to architecture doc.
 
-### 2. HIGH — Inconsistency: Visual spoke in MVP but no implementation path
+**Resolution (2026-11-04):** FR-H8 added. `engagement-state` skill implements full schema, lifecycle (create/resume/close), and fail-closed gate. Live engagement file validates the contract.
+
+### 2. ~~HIGH~~ RESOLVED — Inconsistency: Visual spoke in MVP but no implementation path
 
 FR-K3 is listed as MVP in section 12, but section 13 Open Question #4 says "computer-use capability availability and RDP/VNC integration approach TBD." The deferred table also lists "Visual spoke computer-use AI integration — v1.5", creating ambiguity about what MVP visual spoke actually delivers.
 
@@ -35,7 +38,9 @@ The PRD needs to clarify: MVP visual spoke = operator-facing RDP/VNC proxy (huma
 
 **Recommendation:** Split FR-K3 into FR-K3a (MVP: operator RDP/VNC/SOCKS proxy — human-operated visual access) and FR-K3b (v1.5: AI-driven computer-use through visual spoke). Update Open Question #4 to reference only FR-K3b.
 
-### 3. HIGH — Missing FR: Mode template authoring/structure
+**Resolution (2026-11-04):** FR-K3 split into K3a (MVP, SOCKS proxy) and K3b (v1.5, computer-use). `scripts/visual-spoke.sh` implements K3a.
+
+### 3. ~~HIGH~~ RESOLVED — Missing FR: Mode template authoring/structure
 
 Section 5.2 says mode switch "rewrites from mode templates" and FR-H2 says "mode template defines which servers are active." But no FR describes:
 - Where templates live (file path convention)
@@ -46,13 +51,17 @@ This is MVP-critical — `/mode` skill depends on templates existing.
 
 **Recommendation:** Add FR-H9 defining mode template structure: location, content schema, validation. Can be brief; architecture doc expands.
 
-### 4. MEDIUM — FR-K4 mislabeled as "spoke" — it's a local mount, not a spoke
+**Resolution (2026-11-04):** FR-H9 added and updated to match implementation: `system-prompt.md` + hook injection (not `CLAUDE.md` rewrite), decentralized `modes:` frontmatter in skills (no central manifest), base mode documented as always-on layer.
+
+### 4. ~~MEDIUM~~ RESOLVED — FR-K4 mislabeled as "spoke" — it's a local mount, not a spoke
 
 FR-K4 (Obsidian vault) says "local on host laptop... MCP runs local in devcontainer, no remote spoke needed." This contradicts its placement in "Spoke Infrastructure" — it's a local volume mount, not a spoke. Calling it a spoke dilutes the term and confuses the architecture (spokes = remote systems reached via tunnels).
 
 **Recommendation:** Move FR-K4 to Hub Infrastructure (section 6) or rename section 7 to "External & Local Data Sources." Alternatively, add a note that "spoke" here means "data source outside the container" rather than "remote system via tunnel."
 
-### 5. MEDIUM — Memlog entry 1 says 6 modes; PRD says 5
+**Resolution (2026-11-04):** Section renamed to "Spoke and Data Source Infrastructure". FR-K4 has inline clarification note.
+
+### 5. ~~MEDIUM~~ N/A — Memlog entry 1 says 6 modes; PRD says 5
 
 Memlog line 1: "6 modes confirmed: platform-ops (new, default), red-team, red-dev, green-dev, purple, range-build." PRD section 5.1 lists 5 modes — range-build was merged into green-dev (memlog entry 16 confirms this). The PRD is internally consistent at 5 modes. The memlog is stale on this point but that's expected (append-only log). No PRD change needed, but memlog should get a clarifying entry at finalize.
 

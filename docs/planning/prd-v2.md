@@ -2,7 +2,7 @@
 title: "my_claude_dev v2 — AI-Driven Cyber Operations Operator Framework"
 status: final
 created: 2026-10-28
-updated: 2026-10-30
+updated: 2026-11-04
 ---
 
 # PRD: my_claude_dev v2 — AI-Driven Cyber Operations Operator Framework
@@ -49,11 +49,11 @@ Claude Code    (execution — MCP servers, hooks, guards, spoke connectivity)
 
 ### 5.2 Mode Switching
 
-Mode switch rewrites `.claude/CLAUDE.md` + `.claude/settings.json` from mode templates, requiring session restart. CLAUDE.md is not hot-reloaded mid-session (confirmed via research — multiple Claude Code issues document this constraint).
+Mode switch writes `.claude/.active-mode` and takes effect on the next prompt via `mode-inject.sh` UserPromptSubmit hook, which injects the mode's `system-prompt.md` as additional context. No session restart required.
 
 | Level | Mechanism | Phase |
 |-------|-----------|-------|
-| **MVP** | Operator invokes `/mode red-team` skill. Skill rewrites config. Operator restarts session | Manual, explicit |
+| **MVP** | Operator invokes `/mode red-team` skill. Hook injects mode rules on next prompt. No restart | Manual, explicit |
 | **v1.5** | Claude suggests mode switch based on task context. Operator confirms | AI-suggested, human-approved |
 | **v2** | Master orchestrator spawns mode-agents as subagents with mode instructions injected as prompt context. No file rewrite needed for subagents | Autonomous, orchestrated |
 
@@ -191,7 +191,7 @@ Cross-cutting features that every mode relies on.
 
 **FR-H8:** Engagement YAML contract — structured state file created when operator starts an engagement, closed when engagement ends. Sections per mode: targets (approved list), access (credentials obtained, not stored — references only), findings, handoff notes. Single active engagement for MVP. Skills read at start, write results on completion. Corrupt or missing YAML triggers skill entry-criteria failure (fail-closed). Schema and lifecycle details deferred to architecture doc.
 
-**FR-H9:** Mode templates — each mode defined by a template directory under `.claude/modes/<mode>/` containing: `CLAUDE.md` fragment (instructions, OPSEC rules), `settings.json` fragment (permissions, MCP server list), and a manifest listing active tools. `/mode` skill validates template before applying (checks required files exist, MCP servers referenced are installed). Broken template = switch refused with diagnostic.
+**FR-H9:** Mode templates — each mode defined by a template directory under `.claude/modes/<mode>/` containing: `system-prompt.md` (OPSEC rules, MCP guidance, documentation pipeline — injected via hook on each prompt) and `settings.json` fragment (permissions, hook overrides). Skills declare which modes they belong to via `modes:` frontmatter — no central manifest. `/mode` skill validates template before applying (checks required files exist). Broken template = switch refused with diagnostic. Base mode is the always-on layer: its `settings.json` defines hooks and guards applied to all modes; it has no `system-prompt.md` since its rules are never toggled off.
 
 ## 7. Spoke and Data Source Infrastructure
 
