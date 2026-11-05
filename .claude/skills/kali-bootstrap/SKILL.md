@@ -130,7 +130,41 @@ for full list: host-id, net-recon, vuln-assess, lateral-move, lateral-wmi,
 get-system, persist-swarm, cred-dump, ad-enum, agent-watcher, collect-intel,
 ioc-cleanup, log-clear, exfil-stage, payload-gen, route-hijack).
 
-### Step 8: Dynamic Tool Discovery from llm-wiki
+### Step 8: Kali Spoke Safety Gate
+
+Before installing anything, run safety checks. This protects Kali as
+production infrastructure.
+
+1. **Run health check:**
+   ```bash
+   bash scripts/check-kali-tools.sh
+   ```
+   Review output: disk usage, memory, current tool inventory.
+
+2. **Safety thresholds (ABORT if exceeded):**
+   - Disk usage >85%: do NOT install. Clean first.
+   - Free memory <256MB: do NOT install. Risk of OOM.
+   - If either threshold exceeded: report to operator, skip install steps.
+
+3. **Take pre-install snapshot:**
+   ```bash
+   bash scripts/install-kali-tools.sh --snapshot
+   ```
+   Saves package lists to `/opt/kali-tool-snapshots/` for rollback.
+
+4. **Dry-run before apply:**
+   ```bash
+   bash scripts/install-kali-tools.sh --dry-run
+   ```
+   Shows what WOULD be installed. Operator reviews before `--apply`.
+
+**Rollback procedure:** If install breaks something:
+```bash
+bash scripts/install-kali-tools.sh --rollback
+```
+Shows packages added since snapshot. Remove with `apt remove --purge`.
+
+### Step 9: Dynamic Tool Discovery from llm-wiki
 
 Before running static checks, read llm-wiki for additional tool
 requirements discovered during prior engagements.
@@ -141,11 +175,13 @@ requirements discovered during prior engagements.
    wishlist from blocked techniques)
 3. Merge discovered tools with static manifest below
 4. Any new tools found: add to appropriate tier and attempt install
+5. **Dynamic tools MUST pass same safety gate** (Step 8) — never bypass
+   disk/memory checks for wiki-discovered tools
 
 This makes the manifest self-growing — each engagement that hits a
 tooling gap feeds the next bootstrap run.
 
-### Step 9: Verify and Install Tools
+### Step 10: Verify and Install Tools
 
 Run tool checks through Kali self-agent (tuoni-mcp commands). Six tiers:
 
@@ -237,7 +273,41 @@ test -f /opt/tools/icmp_c2.py || echo "icmp_c2.py missing"
 
 Report summary: tools verified N, installed N, missing N (with names).
 
-### Step 10: Record State
+**Install via script (not ad-hoc commands):**
+```bash
+bash scripts/install-kali-tools.sh --apply          # all tiers
+bash scripts/install-kali-tools.sh --apply --tier 2  # APT only
+bash scripts/install-kali-tools.sh --apply --tier 3  # pip only
+```
+
+Never run raw `apt install` or `pip3 install` on Kali outside this script.
+Script enforces safety checks, snapshots, and idempotent installs.
+
+### Step 11: MCP Service Prerequisites
+
+Check and report status of services needed by new MCPs. These run as
+Docker containers on Kali:
+
+**BloodHound CE + Neo4j** (for BloodHound MCP):
+```bash
+ssh kali "docker ps --filter 'name=bloodhound' --filter 'name=neo4j' --format '{{.Names}}: {{.Status}}'"
+```
+If not running: operator deploys via docker-compose. Do NOT auto-deploy
+database services — requires operator approval and port allocation.
+
+**Nuclei templates** (for Nuclei MCP):
+```bash
+ssh kali "nuclei -update-templates 2>/dev/null; ls /root/nuclei-templates/ | wc -l"
+```
+
+**Hashcat** (already Tier 1 stock tool, verify GPU access):
+```bash
+ssh kali "hashcat --benchmark --machine-readable 2>/dev/null | head -5 || echo 'no GPU'"
+```
+
+Report MCP readiness alongside tool inventory.
+
+### Step 12: Record State
 
 Update engagement YAML:
 ```yaml
@@ -263,9 +333,13 @@ All must be true:
 - [ ] Tuoni API responding on :8443
 - [ ] Self-agent connected and executing commands
 - [ ] tuoni-plugins loaded (16 modules)
+- [ ] Safety gate passed (disk <85%, memory >256MB)
+- [ ] Pre-install snapshot taken
 - [ ] Stock Kali tools verified present
 - [ ] redis-tools + postgresql-client installed
 - [ ] Python packages installed (pexpect, paramiko, coercer, mitm6, etc.)
+- [ ] MCP service prereqs checked (BloodHound CE, Nuclei templates)
+- [ ] `check-kali-tools.sh` passes with 0 critical missing
 - [ ] Agent ID + tool manifest recorded in engagement YAML
 
 ## Attack Chain Reference

@@ -273,14 +273,62 @@ echo "Platform Health Check"
 echo "====================="
 echo ""
 
+run_kali_tools() {
+    echo "Kali Tools"
+    echo "----------"
+
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    source "$SCRIPT_DIR/lib/load-env.sh"
+
+    if [[ -z "${SPOKE_KALI_HOST:-}" ]]; then
+        warn "SPOKE_KALI_HOST not set" "Kali tool check skipped"
+        echo ""
+        return
+    fi
+
+    if ! ssh -o ConnectTimeout=5 -o BatchMode=yes kali echo "ok" >/dev/null 2>&1; then
+        warn "Kali SSH unreachable" "Check VPN and spoke-firewall.sh"
+        echo ""
+        return
+    fi
+
+    disk_pct=$(ssh -o ConnectTimeout=5 kali "df / | tail -1 | awk '{gsub(/%/,\"\",\$5); print \$5}'" 2>/dev/null || echo "?")
+    if [[ "$disk_pct" != "?" && "$disk_pct" -gt 85 ]]; then
+        fail "Kali disk at ${disk_pct}%" "Clean before installing tools"
+    elif [[ "$disk_pct" != "?" ]]; then
+        ok "Kali disk: ${disk_pct}%"
+    fi
+
+    snapshot_count=$(ssh -o ConnectTimeout=5 kali "ls /opt/kali-tool-snapshots/dpkg-*.list 2>/dev/null | wc -l" 2>/dev/null || echo "0")
+    if [[ "$snapshot_count" -eq 0 ]]; then
+        warn "No Kali tool snapshots" "Run: bash scripts/install-kali-tools.sh --snapshot"
+    else
+        ok "Kali tool snapshots: $snapshot_count"
+    fi
+
+    if command -v bash >/dev/null 2>&1 && [[ -f "$SCRIPT_DIR/check-kali-tools.sh" ]]; then
+        tool_result=$(bash "$SCRIPT_DIR/check-kali-tools.sh" --check-only 2>&1 | tail -3)
+        if echo "$tool_result" | grep -q "FAIL"; then
+            fail "Kali critical tools missing" "Run: bash scripts/check-kali-tools.sh"
+        else
+            ok "Kali tools verified"
+        fi
+    else
+        warn "check-kali-tools.sh not found" "Tool verification skipped"
+    fi
+
+    echo ""
+}
+
 case "$SECTION" in
-    all)     run_docker; run_mcp; run_deps; run_ci; run_spoke ;;
+    all)     run_docker; run_mcp; run_deps; run_ci; run_spoke; run_kali_tools ;;
     docker)  run_docker ;;
     mcp)     run_mcp ;;
     deps)    run_deps ;;
     ci)      run_ci ;;
     spoke)   run_spoke ;;
-    *)       echo "Unknown section: $SECTION"; echo "Available: docker, mcp, deps, ci, spoke, all"; exit 2 ;;
+    kali)    run_kali_tools ;;
+    *)       echo "Unknown section: $SECTION"; echo "Available: docker, mcp, deps, ci, spoke, kali, all"; exit 2 ;;
 esac
 
 echo "Health: ${PASS} ok, ${FAIL} failed, ${WARN} warnings"
