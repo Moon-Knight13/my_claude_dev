@@ -1,0 +1,7 @@
+# red-dev mode — exploit development + RE + CVE research.
+# No range-intel or outline (not doing infra queries).
+# No local-ollama.
+deny:
+  - "mcp__range-intel__*"
+  - "mcp__outline-readonly__*"
+  - "mcp__local-ollama__*"
