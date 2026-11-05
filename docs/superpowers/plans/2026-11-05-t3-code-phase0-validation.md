@@ -499,42 +499,51 @@ real work.
 
 ---
 
-## Results Template
+## Results (2026-11-05)
 
-```markdown
-# T3 Code Integration Results
+### Phase A: SSE Proxy — DEFERRED
+SSE proxy (#222) not yet built. Not blocking Phase B — T3 on host uses
+host Claude Code directly; range MCPs only needed for range-connected tasks
+which stay in container for now.
 
-## Phase A: SSE Proxy
+### Phase B: T3 Code — PARTIAL PASS
+
 | Gate | Result | Notes |
 |---|---|---|
-| supergateway installs | | |
-| range-intel via SSE | | |
-| tuoni-mcp via SSE | | |
-| outline-readonly via SSE | | |
-| Host claude with SSE MCPs | | |
-| Hooks fire on host | | |
+| T3 installs on host | **PASS** | `curl -fsSL https://t3.codes/install.sh \| sh` — running on localhost:3773 |
+| T3 detects Claude Code | **PASS** | Claude Code provider visible in T3 Settings |
+| Thread + task works | **PASS** | Thread created, pointed at my_claude_dev workspace, tasks execute |
+| UserPromptSubmit hooks fire | **PASS** | secret-scan.sh blocked fake AWS key; mode-inject.sh injected base mode |
+| PreToolUse hooks fire | **INCONCLUSIVE** | tuoni-guard test inconclusive — guarded paths only exist on range boxes |
+| T3 detects OpenCode | **DEFERRED** | OpenCode not installed — failover insurance, not blocking |
+| Provider switch works | **DEFERRED** | Requires OpenCode — defer until Anthropic outage or exercise day |
+| Context handoff quality | **DEFERRED** | Requires provider switch test |
+| Tailscale + mobile | **DEFERRED** | No exercise running — test when mobile monitoring actually needed |
 
-## Phase B: T3 Code
-| Gate | Result | Notes |
-|---|---|---|
-| T3 desktop installs | | |
-| T3 detects claude | | |
-| T3 detects opencode | | |
-| Thread + task works | | |
-| Provider switch works | | |
-| Context handoff quality | | |
-| Round-trip switch | | |
-| Tailscale + mobile | | |
+### Phase C: Multi-Project — NOT STARTED
 
-## Phase C: Multi-Project
-| Gate | Result | Notes |
-|---|---|---|
-| Second project works | | |
-| delegate_task works | | |
-| Cross-provider delegation | | |
+### Operational Model (validated)
 
-## Decision
-[ ] ADOPT — T3 as primary interface
-[ ] PARTIAL — T3 for orchestration/mobile only, container for ops
-[ ] REJECT — lightweight failover script instead
-```
+T3 on host and container Claude are **parallel tracks**, not replacements:
+
+| Surface | Use for |
+|---|---|
+| T3 (host, localhost:3773) | my_claude_dev repo work, non-range tasks, multi-project management |
+| Container Claude (devcontainer) | Range ops, engagement tasks, tuoni, anything needing range MCPs |
+
+Both share repos via git push/pull. T3 cannot reach container MCPs without
+Phase A SSE proxy.
+
+### Deferred Items and Triggers
+
+| Item | Trigger to revisit |
+|---|---|
+| Phase A (SSE proxy) | Need range MCPs from host Claude (e.g., T3 thread doing engagement work) |
+| Provider switching (B2) | Anthropic outage, model deprecation, or exercise day failover need |
+| Tailscale mobile (B3) | Exercise day mobile monitoring, or working away from desk |
+| Phase C (multi-project) | Second repo needs T3 thread alongside my_claude_dev |
+
+### Decision
+[x] **PARTIAL ADOPT** — T3 for host-based repo work and orchestration.
+Container stays primary for range-connected operations. Revisit when SSE
+proxy (#222) lands.
