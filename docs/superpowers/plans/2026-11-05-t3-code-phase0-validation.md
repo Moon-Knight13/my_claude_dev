@@ -287,15 +287,38 @@ t3 serve --tailscale-serve
 
 Verify laptop appears as environment on tailnet.
 
-- [ ] **Step 2: Install T3 mobile app**
+- [ ] **Step 2: Validate VPN coexistence**
 
-Add environment via pairing link. Verify thread list visible.
+Verify all three network overlays coexist:
+- ProtonVPN killswitch not blocking Tailscale traffic
+- DCM VPN range routes (172.21.x.x) still working
+- Tailscale CGNAT range (100.64.0.0/10) has no overlap with range
+- SSE proxy endpoints still reachable from T3
 
-- [ ] **Step 3: Send message from phone**
+```bash
+# Check routing table for conflicts
+ip route show table all | grep -E '100\.64|172\.21|proton'
+# Verify range access through VPN chain
+curl -s http://172.21.x.x/health  # adjust to real range endpoint
+# Verify Tailscale connectivity
+tailscale status
+```
+
+If conflicts found: investigate ProtonVPN `--accept-routes`, Tailscale
+userspace networking mode, or split-tunnel adjustments. VPN chain
+redesign deferred to homelab_infra overhaul — fix coexistence issues
+only, don't restructure.
+
+- [ ] **Step 3: Install T3 mobile app**
+
+Add environment via pairing link (use `--scope` for restricted perms).
+Verify thread list visible.
+
+- [ ] **Step 4: Send message from phone**
 
 Send a task from mobile, verify it executes on host claude.
 
-- [ ] **Step 4: Monitor from phone**
+- [ ] **Step 5: Monitor from phone**
 
 Start a task from desktop, switch to phone, watch progress.
 
