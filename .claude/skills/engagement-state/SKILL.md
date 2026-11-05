@@ -259,6 +259,21 @@ with the outcome description. This command auto-writes to correct paths:
 - `Notes_Mitre_ATTack_Framework/` — MITRE cross-link
 - `llm-wiki/log.md` — changelog row
 
+### Tooling Gap Feedback Loop
+
+When a technique fails with `result: blocked` and reason is a missing tool:
+
+1. Log finding in engagement YAML with `notes: tooling_gap — <tool_name>`
+2. Append tool to `llm-wiki/wiki/tools/tools-needed.md` via Obsidian:
+   ```
+   - <tool_name> | needed for: <technique_slug> | target: <hostname> | date
+   ```
+3. Update technique wiki page `## Tool Requirements` with specific tool name
+4. Next kali-bootstrap run reads `tools-needed.md` and installs discovered tools
+
+This creates a closed feedback loop: engagement discovers gap, wiki records
+it, bootstrap installs it, next engagement has the tool.
+
 ### Phase Gate Checklist
 
 After EACH technique execution or phase completion, BEFORE moving on:
@@ -267,6 +282,7 @@ After EACH technique execution or phase completion, BEFORE moving on:
 2. **Invoke `/log-finding`** with technique outcome (writes to llm-wiki automatically)
 3. **Write raw dump** to `llm-wiki/raw/<host>-<phase>-<date>.md` (immutable intake)
 4. **Store credentials** in Tuoni cred store (if any harvested), add ref to YAML
+5. **If tooling gap**: append to `llm-wiki/wiki/tools/tools-needed.md` (see above)
 
 If ANY gate item is skipped, the session MUST catch up before proceeding to
 the next target or phase. "I'll document later" is NOT acceptable — context

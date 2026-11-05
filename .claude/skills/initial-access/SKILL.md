@@ -38,6 +38,25 @@ Active in: **red-team** mode only.
 
 ## Phases
 
+### Phase 0: Tool Availability Check
+
+Before selecting attack vectors, verify available tooling:
+
+1. Read engagement YAML `tools_verified` section (populated by kali-bootstrap)
+2. If no `tools_verified`: check `degraded_mode` — if `router-only`, use
+   degraded attack paths only (see Degraded Mode section below)
+3. For each candidate attack vector, check its technique wiki page
+   (`llm-wiki/wiki/techniques/<slug>.md`) `## Tool Requirements` section
+4. **Skip vectors whose required tools are missing.** Report skipped vectors
+   and missing tools to operator.
+5. If technique has no wiki page yet: check tool requirement against
+   kali-bootstrap manifest (`llm-wiki/wiki/tools/kali-bootstrap-manifest.md`)
+
+This prevents wasting time on vectors that will fail due to tooling gaps.
+When a technique IS attempted and fails due to missing tools, log finding
+with `result: blocked, notes: tooling_gap — <tool_name> not available`.
+This auto-feeds `llm-wiki/wiki/tools/tools-needed.md` for next bootstrap.
+
 ### Phase 1: Technique Research
 
 For each operator-approved attack vector from recon:

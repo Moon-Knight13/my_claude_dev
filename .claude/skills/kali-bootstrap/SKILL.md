@@ -130,9 +130,24 @@ for full list: host-id, net-recon, vuln-assess, lateral-move, lateral-wmi,
 get-system, persist-swarm, cred-dump, ad-enum, agent-watcher, collect-intel,
 ioc-cleanup, log-clear, exfil-stage, payload-gen, route-hijack).
 
-### Step 8: Verify and Install Tools
+### Step 8: Dynamic Tool Discovery from llm-wiki
 
-Run tool checks through Kali self-agent (tuoni-mcp commands). Three tiers:
+Before running static checks, read llm-wiki for additional tool
+requirements discovered during prior engagements.
+
+1. Search Obsidian for technique pages with tool requirements:
+   `obsidian_search_vault` for `Tool Requirements` in `llm-wiki/wiki/techniques/`
+2. Read `llm-wiki/wiki/tools/tools-needed.md` if it exists (auto-populated
+   wishlist from blocked techniques)
+3. Merge discovered tools with static manifest below
+4. Any new tools found: add to appropriate tier and attempt install
+
+This makes the manifest self-growing — each engagement that hits a
+tooling gap feeds the next bootstrap run.
+
+### Step 9: Verify and Install Tools
+
+Run tool checks through Kali self-agent (tuoni-mcp commands). Six tiers:
 
 **Tier 1: Stock Kali tools (verify present)**
 
@@ -222,7 +237,7 @@ test -f /opt/tools/icmp_c2.py || echo "icmp_c2.py missing"
 
 Report summary: tools verified N, installed N, missing N (with names).
 
-### Step 9: Record State
+### Step 10: Record State
 
 Update engagement YAML:
 ```yaml
