@@ -1,379 +1,417 @@
-# T3 Code v2 Phase 0 Validation Plan
+# T3 Code v2 — Phased Integration Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Validate that T3 Code v2 can orchestrate Claude Code and OpenCode in our devcontainer setup, with working provider switching and context handoff.
+**Goal:** Add T3 Code v2 as orchestration layer above my_claude_dev. Provider failover, mobile monitoring, multi-project management, sub-agent delegation. Without disrupting current devcontainer workflow.
 
-**Architecture:** T3 Code server runs inside the devcontainer (not on host) because provider CLIs live there. Container already uses `--network=host`, so T3's web UI is accessible from host browser at `127.0.0.1:<port>`. T3 wraps providers; our `.claude/` config (modes, hooks, skills, MCPs) is unchanged — providers read it as usual.
+**Architecture (target state):**
 
-**Tech Stack:** T3 Code v0.1.7+, Claude Code CLI 2.x, OpenCode CLI, Node.js 24
+```
+Host (Ubuntu 26.06)
+├─ T3 Code Desktop (.deb)
+│  ├─ Orchestrator (provider switch, delegation, cron)
+│  ├─ Tailscale → mobile app
+│  └─ Projects: my_claude_dev, tuoni-plugins, others
+│
+├─ Provider: claude CLI (host install)
+│  ├─ ~/.claude/ (modes, hooks, skills — native)
+│  └─ MCPs via SSE: range-intel :8101, tuoni :8102, outline :8103
+│
+├─ Provider: opencode CLI (host install, failover)
+│  ├─ Same SSE MCP access
+│  └─ OpenRouter / Ollama backend
+│
+├─ SSE Proxy (supergateway)
+│  ├─ :8101 → range-intel (Providentia + GitLab)
+│  ├─ :8102 → tuoni-mcp (C2)
+│  └─ :8103 → outline-readonly (wiki)
+│
+├─ VPN → Range (172.21.x.x)
+│
+└─ Devcontainer (bridge network, #222)
+   ├─ Code execution sandbox
+   ├─ Untrusted MCPs (rea, hacktricks, mitre, lolbins, obsidian, ollama)
+   └─ Egress: SSE ports 8101-8103 to gateway only
+```
+
+**Tech Stack:** T3 Code v0.1.7+ (.deb), Claude Code CLI, OpenCode CLI, supergateway (npm), systemd user units
 
 **Spec:** `docs/planning/t3-code-integration-spec.md`
 
 ## Global Constraints
 
-- Phase 0 only. No production integration. All work is reversible.
-- T3 Code installed in container, not baked into Dockerfile. Removable with `npm uninstall -g t3`.
-- No changes to existing `.claude/` config, hooks, or skills.
-- No changes to devcontainer.json.
+- Current devcontainer workflow stays functional throughout. No breaking changes.
+- Each phase is independently valuable. Can stop after any phase.
+- All host installs are user-level (no root-owned services except .deb).
+- Existing `.claude/` config shared via bind mount — host and container see same modes/hooks/skills.
 - Host OS: Ubuntu 26.06, Ryzen AI 9 HX 370, 92GB RAM.
 
 ## Review Focus
 
-1. **Provider visibility:** T3 must detect both `claude` and `opencode` CLIs in container PATH — if not, entire integration is blocked.
-2. **Hook survival:** UserPromptSubmit hooks (mode-inject, secret-scan) must fire when T3 wraps Claude Code session — if not, mode system breaks.
-3. **MCP conflict:** T3 injects its `t3-code` MCP endpoint into providers. Must not collide with our existing MCP servers in `.mcp.json`.
-4. **Network assumption:** `--network=host` means T3's ports are directly accessible from host. If container networking changes to bridge (#222), T3 ports need forwarding.
-5. **State isolation:** T3's SQLite thread store must not interfere with engagement YAML, `.active-mode`, or `.claude/` config.
+1. **SSE proxy stability:** Range MCPs behind supergateway must handle reconnects, VPN drops, and concurrent requests without losing state.
+2. **Hook parity:** Host claude's UserPromptSubmit hooks must fire identically to container claude. Same mode-inject, secret-scan, ctp-bridge behavior.
+3. **MCP config divergence:** Host claude uses SSE URLs, container claude uses stdio. Two `.mcp.json` strategies needed — or one config that works for both.
+4. **T3 + Tailscale + VPN coexistence:** Tailscale 100.64.0.0/10 range must not conflict with range VPN routing.
+5. **Thread state durability:** T3 SQLite survives host reboot, T3 update, and doesn't conflict with engagement YAML.
 
 ---
 
-### Task 1: Install T3 Code in Container
+## Phase A: SSE Proxy for Range MCPs (#222)
+
+*This is the critical enabler. Without it, host claude has no range access.
+Can be built entirely within current devcontainer workflow — no T3 needed yet.*
+
+### Task A1: Install supergateway on host
 
 **Files:**
-- Create: `scripts/install-t3.sh` (reversible installer)
+- Create: `scripts/host/install-sse-proxy.sh`
+- Create: `scripts/host/range-mcp-proxy@.service` (systemd user unit template)
 
 **Interfaces:**
-- Consumes: Node.js 24, npm (already in container)
-- Produces: `t3` CLI in PATH, T3 server runnable
+- Consumes: npm (host), range MCP server source code
+- Produces: SSE endpoints at :8101, :8102, :8103
 
-- [ ] **Step 1: Write installer script**
+- [ ] **Step 1: Research supergateway vs mcp-proxy**
 
 ```bash
-#!/usr/bin/env bash
-# scripts/install-t3.sh — reversible T3 Code install for validation
-set -euo pipefail
+npm info supergateway version
+npm info @anthropic/mcp-proxy version 2>/dev/null
+```
 
-echo "Installing T3 Code..."
-npm install -g t3@latest
+Pick one. supergateway is npm, wraps stdio MCP as SSE. Check if it
+supports auth tokens on endpoints.
 
-echo "Verifying..."
+- [ ] **Step 2: Write install script**
+
+Script installs supergateway globally on host, creates systemd user
+unit template for each range MCP.
+
+- [ ] **Step 3: Write systemd unit template**
+
+```ini
+# range-mcp-proxy@.service
+[Unit]
+Description=Range MCP SSE Proxy - %i
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/supergateway \
+  --stdio "python3 -m %i" \
+  --port %I_PORT \
+  --auth-token %I_TOKEN
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+```
+
+Actual unit will need per-service port mapping and MCP command.
+
+- [ ] **Step 4: Test one MCP (range-intel) through SSE**
+
+```bash
+# Start proxy
+supergateway --stdio "python3 -m range_intel_mcp" --port 8101
+
+# Test from another terminal
+curl http://127.0.0.1:8101/sse
+```
+
+Expected: SSE connection established, MCP handshake works.
+
+- [ ] **Step 5: Test all three MCPs**
+
+Start all three proxies. Verify each responds to SSE connection.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add scripts/host/
+git commit -m "feat: SSE proxy scripts for range-facing MCPs (#222)"
+```
+
+### Task A2: Configure host claude for SSE MCPs
+
+**Files:**
+- Create: `scripts/host/setup-host-claude.sh`
+
+**Interfaces:**
+- Consumes: SSE endpoints from A1
+- Produces: Host claude with full MCP access via SSE
+
+- [ ] **Step 1: Install claude CLI on host (if not present)**
+
+```bash
+npm install -g @anthropic-ai/claude-code
+claude auth login
+```
+
+- [ ] **Step 2: Create host MCP config**
+
+Host claude needs `.mcp.json` with SSE URLs instead of stdio commands.
+Container `.mcp.json` stays unchanged (stdio).
+
+```json
+{
+  "mcpServers": {
+    "range-intel": {
+      "type": "sse",
+      "url": "http://127.0.0.1:8101/sse"
+    },
+    "tuoni-mcp": {
+      "type": "sse",
+      "url": "http://127.0.0.1:8102/sse"
+    },
+    "outline-readonly": {
+      "type": "sse",
+      "url": "http://127.0.0.1:8103/sse"
+    }
+  }
+}
+```
+
+Determine where this config lives — workspace `.mcp.json` can't have
+both SSE and stdio entries. May need environment detection.
+
+- [ ] **Step 3: Test host claude with SSE MCPs**
+
+```bash
+cd ~/repos/my_claude_dev
+claude
+# In session: "Query range-intel for target list"
+```
+
+Expected: Host claude reaches range-intel via SSE proxy.
+
+- [ ] **Step 4: Verify hooks fire on host**
+
+Host claude reads same `~/.claude/` and workspace `.claude/` config.
+Hooks should fire identically.
+
+```bash
+# In claude session: "/mode red-team"
+# Verify mode-inject.sh fires
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add scripts/host/
+git commit -m "feat: host claude SSE MCP config for T3 integration"
+```
+
+---
+
+## Phase B: T3 Code Install + Basic Validation
+
+*Only after Phase A proves host claude works with SSE MCPs.*
+
+### Task B1: Install T3 Code desktop on host
+
+**Files:**
+- Create: `scripts/host/install-t3.sh`
+
+- [ ] **Step 1: Download and install .deb**
+
+```bash
+# Download latest from GitHub releases
+wget https://github.com/pingdotgg/t3code/releases/latest/download/T3-Code-amd64.deb
+sudo apt install ./T3-Code-amd64.deb
+```
+
+- [ ] **Step 2: Verify T3 starts**
+
+```bash
 t3 --version
-
-echo "T3 Code installed. Run 't3' to start server."
-echo "Uninstall: npm uninstall -g t3"
-```
-
-- [ ] **Step 2: Run installer on host terminal**
-
-The user runs this from host terminal inside the devcontainer:
-
-```bash
-bash scripts/install-t3.sh
-```
-
-Expected: `t3 --version` prints version >= 0.1.7.
-
-- [ ] **Step 3: Verify T3 starts**
-
-```bash
-t3 --help
-```
-
-Expected: Help output showing available commands including `service`, `update`.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add scripts/install-t3.sh
-git commit -m "feat: add reversible T3 Code installer for Phase 0 validation"
-```
-
----
-
-### Task 2: Install OpenCode in Container
-
-**Files:**
-- Modify: `scripts/install-t3.sh` (add OpenCode install)
-
-**Interfaces:**
-- Consumes: npm or standalone installer
-- Produces: `opencode` CLI in PATH, authenticated or auth-ready
-
-- [ ] **Step 1: Check OpenCode install method**
-
-```bash
-# Try npm
-npm info opencode version 2>/dev/null
-# Or check if standalone installer exists
-curl -fsSL https://opencode.ai/install.sh --head 2>/dev/null
-```
-
-Determine correct install method. OpenCode may need OpenRouter API key
-for model access.
-
-- [ ] **Step 2: Install OpenCode**
-
-```bash
-npm install -g opencode
-# or
-curl -fsSL https://opencode.ai/install.sh | bash
-```
-
-Expected: `opencode --version` prints version.
-
-- [ ] **Step 3: Configure OpenCode auth**
-
-```bash
-opencode auth login
-# or set OPENROUTER_API_KEY in .env
-```
-
-Expected: OpenCode can reach at least one model (local Ollama or OpenRouter).
-
-- [ ] **Step 4: Verify OpenCode runs basic task**
-
-```bash
-echo "What is 2+2?" | opencode --no-interactive 2>/dev/null
-```
-
-Expected: Response from model. Confirms provider works standalone.
-
-- [ ] **Step 5: Commit updated installer**
-
-```bash
-git add scripts/install-t3.sh
-git commit -m "feat: add OpenCode to T3 validation installer"
-```
-
----
-
-### Task 3: T3 Server + Provider Discovery
-
-**Files:**
-- Create: `scripts/t3-validate.sh` (validation gate script)
-
-**Interfaces:**
-- Consumes: `t3` CLI, `claude` CLI, `opencode` CLI
-- Produces: Validation report — PASS/FAIL per gate
-
-- [ ] **Step 1: Start T3 server**
-
-```bash
 t3
 ```
 
-Expected: Server starts, prints URL (likely `http://127.0.0.1:3000`).
-Web UI accessible from host browser at that URL.
+Expected: T3 server starts, desktop app opens or web UI accessible.
 
-- [ ] **Step 2: Check provider discovery**
+- [ ] **Step 3: Configure providers**
 
-In T3 web UI or via CLI:
-- Claude Code should appear as available provider
-- OpenCode should appear as available provider
+In T3 Settings → Providers:
+- Enable Claude Code, set binary path if needed
+- Enable OpenCode, set binary path if needed
+- Verify both show as available
 
-If either is missing: check PATH visibility, check T3 provider detection
-docs. This is the primary gate — if T3 can't see providers, Phase 0 fails.
-
-- [ ] **Step 3: Create thread with Claude Code provider**
+- [ ] **Step 4: Create first thread**
 
 In T3 UI:
-1. Create new thread
-2. Select Claude Code as provider
-3. Set project workspace to `/workspace`
-4. Send: "Read CLAUDE.md and tell me what mode is active"
+1. Add my_claude_dev as project (workspace path)
+2. Create thread with Claude Code provider
+3. Send: "What mode is active? List available MCP tools."
 
-Expected: Claude Code runs, reads `.claude/.active-mode`, reports mode.
-This confirms T3 wraps Claude Code and our config is visible.
+Expected: Claude Code runs, hooks fire, MCPs accessible via SSE.
 
-- [ ] **Step 4: Verify hooks fire**
-
-Check that mode-inject.sh fired during step 3:
+- [ ] **Step 5: Commit installer**
 
 ```bash
-# Look for hook evidence in Claude Code output
-# The response should include mode context if hook fired
-# Also check for secret-scan hook evidence
+git add scripts/host/install-t3.sh
+git commit -m "feat: T3 Code desktop installer for host"
 ```
 
-Expected: Response includes mode awareness (system-prompt.md content
-was injected). If not, hooks broke under T3 wrapper.
+### Task B2: Provider switch validation
 
-- [ ] **Step 5: Verify MCP servers accessible**
+**Interfaces:**
+- Consumes: Running T3 thread from B1
+- Produces: Go/no-go on provider switching
 
-In T3 thread, send: "List available MCP tools from range-intel"
+- [ ] **Step 1: Build context (3-4 turns on Claude Code)**
 
-Expected: Claude Code can reach range-intel MCP (if range connected).
-If not connected, send: "What MCP servers are configured in .mcp.json?"
-and verify it reads the config.
+Send messages that build conversational context about a real task.
 
-- [ ] **Step 6: Write validation gate script**
+- [ ] **Step 2: Switch to OpenCode**
+
+Use T3 provider switcher. Observe:
+- Context handoff generation (time, content)
+- OpenCode session start
+- Whether OpenCode understands prior context
+
+- [ ] **Step 3: Switch back to Claude Code**
+
+Observe delta summary of OpenCode runs. Verify round-trip.
+
+- [ ] **Step 4: Document results**
+
+Record pass/fail for each gate in results template.
+
+### Task B3: Mobile + Tailscale setup
+
+- [ ] **Step 1: Configure Tailscale HTTPS**
 
 ```bash
-#!/usr/bin/env bash
-# scripts/t3-validate.sh — Phase 0 validation gates
-set -euo pipefail
-
-PASS=0; FAIL=0
-gate() {
-  if "$@" >/dev/null 2>&1; then
-    echo "PASS: $1"; ((PASS++))
-  else
-    echo "FAIL: $1"; ((FAIL++))
-  fi
-}
-
-gate t3 --version
-gate claude --version
-gate opencode --version
-gate test -f /workspace/.claude/.active-mode
-gate test -d /workspace/.claude/modes/base
-
-echo "---"
-echo "PASS: $PASS  FAIL: $FAIL"
-[ "$FAIL" -eq 0 ] && echo "ALL GATES PASSED" || echo "GATES FAILED — check output"
+t3 serve --tailscale-serve
 ```
 
-- [ ] **Step 7: Commit**
+Verify laptop appears as environment on tailnet.
 
-```bash
-git add scripts/t3-validate.sh
-git commit -m "feat: add T3 Phase 0 validation gate script"
-```
+- [ ] **Step 2: Install T3 mobile app**
+
+Add environment via pairing link. Verify thread list visible.
+
+- [ ] **Step 3: Send message from phone**
+
+Send a task from mobile, verify it executes on host claude.
+
+- [ ] **Step 4: Monitor from phone**
+
+Start a task from desktop, switch to phone, watch progress.
 
 ---
 
-### Task 4: Provider Switch — Claude to OpenCode
+## Phase C: Multi-Project + Delegation
 
-**Files:**
-- None (manual validation in T3 UI)
+*Only after Phase B proves T3 works for single-project use.*
 
-**Interfaces:**
-- Consumes: Running T3 thread from Task 3
-- Produces: Validation evidence — context handoff worked or failed
+### Task C1: Add second project to T3
 
-- [ ] **Step 1: Run multi-turn conversation on Claude Code**
+- [ ] Add tuoni-plugins as separate T3 project
+- [ ] Create thread, verify independent workspace
+- [ ] Verify different `.claude/` config per project (if applicable)
 
-In T3 thread from Task 3, send 3-4 messages building context:
+### Task C2: Sub-agent delegation
 
-1. "Read docs/planning/t3-code-integration-spec.md and summarize the open questions"
-2. "Which open question is highest risk?"
-3. "What would we need to change in devcontainer.json if we switch to bridge networking?"
-
-Expected: Claude Code maintains conversation context across turns.
-
-- [ ] **Step 2: Trigger provider switch to OpenCode**
-
-In T3 UI:
-1. Find provider switch control (model switcher or thread settings)
-2. Switch from Claude Code to OpenCode
-3. T3 should generate context handoff summary
-
-Expected: T3 shows handoff being generated. Note what's in the summary:
-does it capture goals, decisions, files discussed?
-
-- [ ] **Step 3: Continue conversation on OpenCode**
-
-Send: "Based on our prior discussion, what was the highest risk open question?"
-
-Expected: OpenCode has context from handoff summary and can answer
-coherently. Quality will be lower than Claude, but context should
-be preserved.
-
-- [ ] **Step 4: Switch back to Claude Code**
-
-1. Switch provider back to Claude Code
-2. Send: "What did we discuss while on the other provider?"
-
-Expected: Claude Code gets delta summary of OpenCode runs.
-Context preserved across round-trip.
-
-- [ ] **Step 5: Document findings**
-
-Record in validation notes:
-- Did provider switch work? (Y/N)
-- Was context handoff generated? (Y/N)
-- What was in the handoff? (list contents)
-- Did destination provider understand context? (Y/N)
-- How long did switch take? (seconds)
-- Did hooks fire on resumed Claude Code session? (Y/N)
-- Any errors or warnings? (exact text)
+- [ ] Test `delegate_task` from my_claude_dev thread
+- [ ] Verify child thread runs with correct workspace
+- [ ] Test cross-provider delegation (Claude parent → OpenCode child)
 
 ---
 
-### Task 5: Evaluate and Document Results
+## Non-Disruption Strategy
 
-**Files:**
-- Create: `docs/planning/t3-code-phase0-results.md`
+**How to test without slowing down current work:**
 
-**Interfaces:**
-- Consumes: Results from Tasks 1-4
-- Produces: Go/no-go decision for Phase 1
+### Principle: Parallel tracks, not sequential blocking
 
-- [ ] **Step 1: Fill results template**
+```
+Track 1 (unchanged): Devcontainer claude — all current work continues here
+Track 2 (new):       Host claude via T3 — validation and gradual adoption
+```
+
+### Phase A (SSE proxy): Zero disruption
+
+- SSE proxy runs on host as systemd user service
+- Container workflow unchanged — still uses stdio MCPs
+- Build proxy scripts in a worktree, test on host separately
+- Container doesn't know or care about SSE proxy existence
+
+### Phase B (T3 install): Zero disruption
+
+- T3 desktop app is a separate application on host
+- Does not modify container, devcontainer.json, or .claude/ config
+- Host claude is a separate CLI install — doesn't affect container claude
+- Can use T3 for new tasks while continuing container claude for active work
+
+### Phase C (adoption): Gradual migration
+
+- Start NEW work in T3 threads
+- Continue ACTIVE work in container claude
+- Migrate when a natural breakpoint occurs (engagement ends, PR merges)
+- Container claude stays available as fallback indefinitely
+
+### What runs where during transition
+
+| Work type | Where | Why |
+|---|---|---|
+| Active red-team engagement | Container claude | Don't disrupt mid-engagement |
+| New code review | T3 + host claude | Low-risk validation of T3 |
+| tuoni-plugins dev | T3 + host claude | Independent repo, good test |
+| Platform-ops maintenance | Either | Pick per-task |
+| Urgent range work | Container claude | Known-good path |
+| Mobile monitoring | T3 mobile app | New capability, no alternative |
+
+### Time investment
+
+| Phase | Effort | Can parallel with | Blocks |
+|---|---|---|---|
+| A: SSE proxy | 2-3 hours | Any current work | Phase B MCP access |
+| B: T3 + validation | 1-2 hours | Any current work | Phase C |
+| C: Multi-project | 1 hour | Any current work | Nothing |
+
+Total: ~5 hours spread across multiple sessions. No session is blocked
+waiting for T3 work. Every session can still use container claude for
+real work.
+
+---
+
+## Results Template
 
 ```markdown
-# T3 Code Phase 0 Results
+# T3 Code Integration Results
 
-Date: 2026-11-XX
-T3 Version: X.X.X
-Claude Code Version: X.X.X
-OpenCode Version: X.X.X
-
-## Gate Results
-
+## Phase A: SSE Proxy
 | Gate | Result | Notes |
 |---|---|---|
-| T3 installs in container | | |
-| T3 detects Claude Code | | |
-| T3 detects OpenCode | | |
-| Thread creation works | | |
-| .claude/ config visible | | |
-| Hooks fire under T3 | | |
-| MCP servers accessible | | |
+| supergateway installs | | |
+| range-intel via SSE | | |
+| tuoni-mcp via SSE | | |
+| outline-readonly via SSE | | |
+| Host claude with SSE MCPs | | |
+| Hooks fire on host | | |
+
+## Phase B: T3 Code
+| Gate | Result | Notes |
+|---|---|---|
+| T3 desktop installs | | |
+| T3 detects claude | | |
+| T3 detects opencode | | |
+| Thread + task works | | |
 | Provider switch works | | |
-| Context handoff generated | | |
-| Destination understands context | | |
-| Round-trip switch works | | |
-| Switch time acceptable | | |
+| Context handoff quality | | |
+| Round-trip switch | | |
+| Tailscale + mobile | | |
 
-## Open Questions Answered
-
-1. T3 + devcontainer: [answer]
-2. MCP passthrough: [answer]
-3. Hook compatibility: [answer]
-4. Config isolation: [answer]
-5. OpenCode skill gap: [answer]
-6. Provider switch API: [answer]
+## Phase C: Multi-Project
+| Gate | Result | Notes |
+|---|---|---|
+| Second project works | | |
+| delegate_task works | | |
+| Cross-provider delegation | | |
 
 ## Decision
-
-[ ] GO — proceed to Phase 1 (manual failover)
-[ ] NO-GO — reason: ___
-[ ] PIVOT — alternative approach: ___
+[ ] ADOPT — T3 as primary interface
+[ ] PARTIAL — T3 for orchestration/mobile only, container for ops
+[ ] REJECT — lightweight failover script instead
 ```
-
-- [ ] **Step 2: Write decision rationale**
-
-Based on gate results, write 3-5 sentences on whether T3 Code v2
-adds enough value over a lightweight failover script to justify
-the dependency and UX change.
-
-- [ ] **Step 3: Commit results**
-
-```bash
-git add docs/planning/t3-code-phase0-results.md
-git commit -m "docs: T3 Code Phase 0 validation results"
-```
-
----
-
-## Execution Notes
-
-**What operator does on host:**
-- Open host browser to T3 web UI after Task 3 Step 1
-- Interact with T3 UI for Tasks 3-4 (thread creation, provider switching)
-- Approve any auth prompts for providers
-
-**What can be scripted from container:**
-- Tasks 1-2 (install T3, install OpenCode)
-- Task 3 Step 6 (validation gate script)
-- Task 5 (results document)
-
-**What needs manual interaction:**
-- Task 3 Steps 1-5 (T3 UI interaction, verifying visual output)
-- Task 4 all steps (provider switching is UI-driven)
-
-**Estimated time:** 1-2 hours for full validation including install.
-
-**Abort criteria:** If Task 3 Step 2 fails (T3 can't see providers), stop. Research T3 provider detection for containerized CLIs before retrying.
