@@ -37,6 +37,7 @@ _detect_mcp_name() {
             *rea-agents*|*rea-mcp*)     echo "rea-mcp"; return ;;
             *ollama*)                   echo "local-ollama"; return ;;
             *bloodhound*|*BloodHound*)  echo "bloodhound-mcp"; return ;;
+            *hashcat*)                  echo "hashcat-mcp"; return ;;
             *nuclei-mcp*|*nuclei_mcp*)  echo "nuclei-mcp"; return ;;
         esac
     done

@@ -130,6 +130,18 @@ read -r -d '' CATALOG << CATALOG_JSON || true
     "env": {
       "NUCLEI_MCP_SERVER_PORT": "0"
     }
+  },
+  "bloodhound-mcp": {
+    "command": "$WRAPPER",
+    "args": ["$PYTHON_CMD", "BloodHound-MCP.py"],
+    "cwd": "$PROJECT_DIR/mcp-servers/bloodhound-mcp"
+  },
+  "hashcat-mcp": {
+    "command": "$WRAPPER",
+    "args": ["$PYTHON_CMD", "$PROJECT_DIR/mcp-servers/.venv/share/hashcat-mcp/hashcat_mcp_server.py"],
+    "env": {
+      "HASHCAT_MODES_CSV": "$PROJECT_DIR/mcp-servers/.venv/share/hashcat-mcp/hashcat_modes.csv"
+    }
   }
 }
 CATALOG_JSON
@@ -139,12 +151,12 @@ CATALOG_JSON
 # are silently skipped (forward-compatible with planned servers like eip-mcp).
 # "all" is a special pseudo-mode that includes every server.
 declare -A MODE_SERVERS
-MODE_SERVERS[all]="obsidian-mcp rea-mcp hacktricks-mcp mitre-mcp lolbins-mcp cve-mcp nuclei-mcp local-ollama range-intel outline-readonly tuoni-mcp"
+MODE_SERVERS[all]="obsidian-mcp rea-mcp hacktricks-mcp mitre-mcp lolbins-mcp cve-mcp nuclei-mcp local-ollama range-intel outline-readonly tuoni-mcp bloodhound-mcp hashcat-mcp"
 MODE_SERVERS[platform-ops]="local-ollama"
-MODE_SERVERS[red-team]="tuoni-mcp range-intel outline-readonly obsidian-mcp hacktricks-mcp mitre-mcp lolbins-mcp cve-mcp nuclei-mcp"
-MODE_SERVERS[red-dev]="tuoni-mcp rea-mcp hacktricks-mcp mitre-mcp obsidian-mcp lolbins-mcp cve-mcp"
+MODE_SERVERS[red-team]="tuoni-mcp range-intel outline-readonly obsidian-mcp hacktricks-mcp mitre-mcp lolbins-mcp cve-mcp nuclei-mcp bloodhound-mcp hashcat-mcp"
+MODE_SERVERS[red-dev]="tuoni-mcp rea-mcp hacktricks-mcp mitre-mcp obsidian-mcp lolbins-mcp cve-mcp bloodhound-mcp hashcat-mcp"
 MODE_SERVERS[green-dev]="range-intel outline-readonly"
-MODE_SERVERS[purple]="tuoni-mcp range-intel outline-readonly obsidian-mcp hacktricks-mcp mitre-mcp lolbins-mcp cve-mcp nuclei-mcp"
+MODE_SERVERS[purple]="tuoni-mcp range-intel outline-readonly obsidian-mcp hacktricks-mcp mitre-mcp lolbins-mcp cve-mcp nuclei-mcp bloodhound-mcp hashcat-mcp"
 
 # --- Argument handling ---
 MODE="${1:-all}"
