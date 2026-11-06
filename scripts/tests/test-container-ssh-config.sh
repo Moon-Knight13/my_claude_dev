@@ -26,6 +26,7 @@ run_script() {
     mkdir -p "$test_home/.ssh"
     (
         export HOME="$test_home"
+        export DEVCONTAINER=true
         export _CLAUDE_ENV_LOADED=1
         "$@" bash "$SCRIPT" 2>&1
     )
