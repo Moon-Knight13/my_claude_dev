@@ -362,11 +362,15 @@ Not every project wants everything the template ships. `template.conf` at the
 repository root records which optional subsystems a derived repo uses:
 
 ```sh
-SUBSYSTEM_ROUTING=true   # local-model delegation (needs an Ollama endpoint)
-SUBSYSTEM_BOARD=true     # GitHub Project board: /next-issue, /run-epic
-SUBSYSTEM_BMAD=true      # BMAD planning skill pack
-SUBSYSTEM_CAVEMAN=true   # caveman response-style plugin
-SUBSYSTEM_DAY0=true      # day-0 provisioning scripts
+SUBSYSTEM_ROUTING=true      # local-model delegation (needs an Ollama endpoint)
+SUBSYSTEM_BOARD=true        # GitHub Project board: /next-issue, /run-epic
+SUBSYSTEM_BMAD=true         # BMAD planning skill pack
+SUBSYSTEM_CAVEMAN=true      # caveman response-style plugin
+SUBSYSTEM_TUONI=true        # Tuoni C2 MCP (shell-dot/tuoni-mcp)
+SUBSYSTEM_DAY0=true         # day-0 provisioning scripts
+SUBSYSTEM_HASHCAT=true      # Hashcat MCP for hash cracking orchestration
+SUBSYSTEM_NUCLEI=true       # Nuclei MCP for template-filtered vuln scanning
+SUBSYSTEM_BLOODHOUND=true   # BloodHound CE MCP for AD graph queries
 ```
 
 Everything defaults to `true`, including when the file is missing entirely, so
@@ -397,6 +401,52 @@ the validator, `devcontainer.json`, and `CLAUDE.md` coherent.
   cost is not disk: its skill descriptions load into the system prompt of
   every session in the repo.
 - **Board** — cheap to keep; it costs nothing per session unless invoked.
+- **Hashcat** — only useful with GPU-equipped Kali spoke. Needs hashcat binary
+  on Kali and the SSH wrapper (`scripts/hashcat-ssh-wrapper.sh`).
+- **Nuclei** — needs Go toolchain at install time. The nuclei binary
+  auto-downloads if missing.
+- **BloodHound** — needs BloodHound CE running on Kali spoke with Neo4j bolt
+  exposed (default port 7687). Read-only graph queries.
+
+### MCP setup: BloodHound CE
+
+BloodHound CE ships its own Neo4j instance. On Kali spoke:
+
+1. Install BloodHound CE per [SpecterOps docs](https://support.bloodhoundenterprise.io/hc/en-us/categories/9275164393243-BloodHound-Community-Edition).
+2. Ensure Neo4j bolt is listening on port 7687 (default).
+3. Set credentials in `.env`:
+   ```
+   BLOODHOUND_URI=bolt://<KALI_HOST>:7687
+   BLOODHOUND_USERNAME=neo4j
+   BLOODHOUND_PASSWORD=<your-password>
+   ```
+4. The `bloodhound-mcp` server connects via these vars. Verify with `spoke-health`.
+
+### MCP setup: Hashcat
+
+Hashcat runs on Kali spoke (GPU access); the MCP proxies commands via SSH.
+
+1. Install hashcat on Kali: `apt install hashcat`.
+2. Set in `.env`:
+   ```
+   HASHCAT_PATH=/usr/bin/hashcat
+   HASHCAT_MCP_HOST=<KALI_HOST>
+   HASHCAT_MCP_PORT=8080
+   ```
+3. The SSH wrapper (`scripts/hashcat-ssh-wrapper.sh`) tunnels MCP traffic to Kali.
+4. Install the MCP: `bash scripts/install-hashcat-mcp.sh`.
+
+### MCP setup: Nuclei
+
+Nuclei is a Go-based vulnerability scanner with template-driven checks.
+
+1. Go toolchain required at install time.
+2. Set in `.env`:
+   ```
+   NUCLEI_PATH=/usr/bin/nuclei
+   ```
+3. Install the MCP: `bash scripts/install-nuclei-mcp.sh`.
+4. Nuclei binary auto-downloads if not found at `NUCLEI_PATH`.
 
 ## BMAD Workflow
 
