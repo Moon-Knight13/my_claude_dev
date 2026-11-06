@@ -70,6 +70,13 @@ EOF
         # Container: ProxyJump through hub. Host: direct (VPN access).
         local db_proxy=""
         [[ "$SURFACE" == "container" ]] && db_proxy="    ProxyJump hub"
+        # Host: use IdentityFile if a known hub key exists
+        local db_identity=""
+        if [[ "$SURFACE" == "host" ]]; then
+            for _k in ~/.ssh/mcd_hub_frame ~/.ssh/id_ed25519; do
+                [[ -f "$_k" ]] && { db_identity="    IdentityFile $_k"; break; }
+            done
+        fi
         cat <<EOF
 
 Host deploybox $db_host
@@ -77,6 +84,7 @@ Host deploybox $db_host
     User $db_user
     Port $db_port
 ${db_proxy:+$db_proxy
+}${db_identity:+$db_identity
 }    ForwardAgent yes
     StrictHostKeyChecking accept-new
 EOF
@@ -91,6 +99,13 @@ EOF
         # going through hub directly. Keeps kali alive if deploybox is removed.
         local kali_proxy=""
         [[ "$SURFACE" == "container" ]] && kali_proxy="    ProxyJump hub"
+        # Host: use IdentityFile if a known hub key exists
+        local kali_identity=""
+        if [[ "$SURFACE" == "host" ]]; then
+            for _k in ~/.ssh/mcd_hub_frame ~/.ssh/id_ed25519; do
+                [[ -f "$_k" ]] && { kali_identity="    IdentityFile $_k"; break; }
+            done
+        fi
         cat <<EOF
 
 Host kali $kali_host
@@ -98,6 +113,7 @@ Host kali $kali_host
     User $kali_user
     Port $kali_port
 ${kali_proxy:+$kali_proxy
+}${kali_identity:+$kali_identity
 }    ForwardAgent yes
     StrictHostKeyChecking accept-new
 EOF
