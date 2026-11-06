@@ -64,6 +64,10 @@ mcp-servers/bloodhound-mcp/
 dist/
 build/
 coverage/
+*.egg-info/
+
+# MCP runtime databases
+hashcat_sessions.db
 
 # Generated engagement reports (may contain sensitive engagement data)
 reports/
