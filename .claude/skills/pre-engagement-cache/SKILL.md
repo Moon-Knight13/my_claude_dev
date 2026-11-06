@@ -1,6 +1,6 @@
 ---
 name: pre-engagement-cache
-description: "Cache Providentia, GitLab, and wiki intel into Obsidian before red-team engagement. Run in green-dev mode when range-intel and outline MCPs are connected. Use when operator says 'cache intel', 'prep for engagement', or before mode switch to red-team."
+description: "Cache Providentia, GitLab, and wiki intel into Obsidian before red-team engagement. Supports selective loading (--lite, --sources) to control token cost. Run in green-dev mode when range-intel and outline MCPs are connected. Use when operator says 'cache intel', 'prep for engagement', 'cache --lite', or before mode switch to red-team."
 modes: [red-team, purple]
 ---
 
@@ -16,6 +16,67 @@ MCPs are connected.
 - obsidian-mcp connected to vault
 - Engagement YAML exists with `targets` list populated
 - Operator has confirmed target list (RT-TGT-001)
+
+## Token Cost Budget
+
+Each source contributes tokens when its cached data is later read into
+conversation context by downstream skills (recon, initial-access, etc.).
+Estimates per target (7 targets = multiply by 7):
+
+| Source | Tokens/target | 7 targets | Notes |
+|--------|--------------|-----------|-------|
+| Providentia host record | ~800 | ~5,600 | OS, IPs, services, role, network |
+| GitLab README | ~2,000 | ~14,000 | Varies wildly (500–5,000). Deploy notes, defaults, vulns |
+| Wiki vuln docs | ~1,500 | ~10,500 | Per matching vuln page from outline |
+| CVE trending cross-ref | ~400 | ~2,800 | Only if matches found |
+| Wiki playbooks | ~1,200 | ~8,400 | Per matching role playbook |
+| Wiki doctrine | ~1,000 | ~7,000 | Architecture + doctrine (shared, not per-target) |
+| Plugin inventory | ~300 | ~300 | One-time, not per-target |
+| **Full cache total** | **~7,200** | **~48,600** | Worst case ~50k tokens before any work begins |
+
+At 20 targets: ~130k tokens. Context pressure becomes real.
+
+### Lite Summary Format
+
+When `--lite` is active, downstream skills receive a compressed summary
+per target instead of full cached pages:
+
+```
+<hostname> | <ip> | <os> | Top ports: <3 key ports> | Top vulns: <3 CVE IDs or short names> | Role: <role>
+```
+
+Approx 80–120 tokens per target. 7 targets = ~700 tokens. 20 targets = ~2,000.
+
+Skills that need full detail read specific target pages from Obsidian
+on-demand via `obsidian_read_note`.
+
+## Selective Loading Modes
+
+### Default (full cache)
+
+`cache intel` or `prep for engagement` — runs all steps, loads everything
+into Obsidian. Downstream skills read full pages into context.
+
+### Lite mode
+
+`cache intel --lite` or `cache --lite` — caches everything to Obsidian
+(full data preserved) but only loads compressed summaries into context.
+Full data available on-demand from Obsidian when a skill targets a
+specific host.
+
+### Source-selective mode
+
+`cache intel --sources providentia,gitlab` — cache only named sources.
+Valid source names: `providentia`, `gitlab`, `wiki-vulns`, `wiki-playbooks`,
+`wiki-doctrine`, `cve-trending`, `plugins`.
+
+Combine with lite: `cache intel --lite --sources providentia,gitlab`.
+
+### Target-selective mode
+
+`cache intel --targets <host1>,<host2>` — cache only named targets
+instead of full target list from engagement YAML. Useful for focused
+recon on specific hosts.
 
 ## Procedure
 
@@ -51,14 +112,30 @@ Verify tuoni-plugins deployment and record available capabilities:
 This prevents "use cred-dump plugin" instructions failing because plugins
 aren't deployed — a known failure mode from redteam-test2.
 
+### Step 1.8: Parse Selective Loading Flags
+
+Parse operator command for flags:
+- `--lite`: set `lite_mode = true`. Cache full data to Obsidian but only
+  load summaries into context.
+- `--sources <list>`: set `selected_sources` to comma-separated list.
+  Valid: `providentia`, `gitlab`, `wiki-vulns`, `wiki-playbooks`,
+  `wiki-doctrine`, `cve-trending`, `plugins`. Default: all.
+- `--targets <list>`: set `selected_targets` to comma-separated hostnames.
+  Default: all targets from engagement YAML.
+
+If no flags: full cache mode (backward compatible).
+
 ### Step 2: Read Engagement Targets
 
 Parse engagement YAML `targets` section. Extract list of target hostnames.
+If `--targets` flag present, filter to only named targets.
 
 If no targets defined: warn operator and stop. Caching without a target
 list produces noise, not intel.
 
 ### Step 3: Cache Providentia Data
+
+**Skip if** `--sources` set and `providentia` not in list.
 
 For each target hostname:
 1. Query `range_host` via range-intel MCP
@@ -78,6 +155,8 @@ If target not found in Providentia: warn and continue (may be external target).
 
 ### Step 4: Cache GitLab READMEs
 
+**Skip if** `--sources` set and `gitlab` not in list.
+
 For each target hostname:
 1. Query `range_host` with README content via range-intel MCP
 2. Write to Obsidian: `llm-wiki/raw/gitlab/<hostname>.md`
@@ -88,6 +167,8 @@ If no README exists: skip silently (not all boxes have READMEs).
 
 ### Step 5: Cache Wiki Vulnerability Docs
 
+**Skip if** `--sources` set and `wiki-vulns` not in list.
+
 1. `outline_collection_structure` for vulns-docs collection — understand doc tree
 2. Search outline for vulns-docs collection entries relevant to targets
 3. For each relevant page:
@@ -96,12 +177,16 @@ If no README exists: skip silently (not all boxes have READMEs).
 
 ### Step 5.3: CVE Trending Intelligence (NEW)
 
+**Skip if** `--sources` set and `cve-trending` not in list.
+
 1. `cve_trending`: check currently trending CVEs with high EPSS scores
 2. Cross-reference against target services from Providentia data
 3. If matches found, write to `llm-wiki/wiki/vulnerabilities/trending-<date>.md`
 4. Flag matching CVEs in engagement YAML `next_steps` as high-priority vectors
 
 ### Step 5.5: Cache Wiki Playbooks (NEW)
+
+**Skip if** `--sources` set and `wiki-playbooks` not in list.
 
 1. Search outline for wiki playbooks matching target roles (firewall, DC, mail, etc.)
 2. For each relevant playbook:
@@ -110,6 +195,8 @@ If no README exists: skip silently (not all boxes have READMEs).
 3. Parse playbook steps into engagement YAML `next_steps` as checklist items
 
 ### Step 6: Cache Wiki Doctrine
+
+**Skip if** `--sources` set and `wiki-doctrine` not in list.
 
 1. Search outline for architecture and doctrine docs
 2. Write to Obsidian: `llm-wiki/wiki/doctrine/<topic>.md`
@@ -130,15 +217,42 @@ Set cache timestamp:
 cache_timestamp: <ISO-8601 timestamp>
 ```
 
+### Step 7.5: Generate Context Summaries (Lite Mode)
+
+**Only when** `--lite` is active.
+
+For each cached target, generate compressed summary line:
+```
+<hostname> | <ip> | <os> | Top ports: <3 key ports> | Top vulns: <3 CVE IDs> | Role: <role>
+```
+
+Write all summaries to `llm-wiki/raw/cache-summary-<engagement-id>.md`.
+This file is what downstream skills load into context instead of full pages.
+
+Set in engagement YAML:
+```yaml
+cache_mode: lite
+cache_summary_path: llm-wiki/raw/cache-summary-<engagement-id>.md
+```
+
+When `cache_mode: lite`, downstream skills (recon, initial-access, etc.)
+MUST read the summary file first, then `obsidian_read_note` for specific
+targets only when full detail is needed.
+
 ### Step 8: Report
 
 Print summary:
-- Targets cached: N
+- **Mode**: full | lite | selective (list sources)
+- Targets cached: N (of M total)
+- Sources cached: list of sources run
+- Sources skipped: list of sources not run (if `--sources` active)
 - Providentia records: N
 - GitLab READMEs: N
 - Wiki pages: N
 - Targets with NO Providentia data: list (these need investigation)
 - Cache timestamp: <ISO-8601>
+- **Estimated context tokens**: total based on token cost table above
+- **Lite mode savings**: if lite, show full vs lite token estimate
 - Warning if any target had no data from any source
 
 ## Staleness Warning
@@ -150,8 +264,10 @@ may have changed (new enclaves, IP changes, network re-segmentation).
 ## Exit Criteria
 
 All must be true:
-- [ ] All target Providentia records cached (or warned if missing)
-- [ ] All target GitLab READMEs cached (where they exist)
-- [ ] Relevant wiki docs cached
+- [ ] All selected target Providentia records cached (or warned if missing)
+- [ ] All selected target GitLab READMEs cached (where they exist)
+- [ ] Selected wiki docs cached (all if no `--sources` filter)
 - [ ] `cache_timestamp` set in engagement YAML
-- [ ] Summary printed with any warnings
+- [ ] `cache_mode` set in engagement YAML (full or lite)
+- [ ] If lite: summary file generated at `cache_summary_path`
+- [ ] Summary printed with token cost estimate and any warnings
