@@ -68,6 +68,11 @@ else
     echo "hacktricks-mcp already installed."
 fi
 
+# --- SSH spoke aliases ---
+echo ""
+echo "── SSH spoke aliases ──"
+bash "$SCRIPT_DIR/setup-container-ssh.sh"
+
 # --- Guard config check ---
 echo ""
 echo "── Guard configuration ──"
@@ -86,7 +91,8 @@ else
     echo "    GUARD_SAFETY_ALLOWLIST="
     echo "    GUARD_GIT_ALLOWLIST="
     echo ""
-    echo "  Without GUARD_SECRET_PATHS, agent tools can read SSH keys and .env files."
+    echo "  Note: builtin floor protects .env, SSH keys, and GPG regardless."
+    echo "  GUARD_SECRET_PATHS adds paths beyond the floor."
 fi
 
 # --- Summary ---

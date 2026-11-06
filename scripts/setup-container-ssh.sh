@@ -1,17 +1,15 @@
 #!/usr/bin/env bash
-# setup-container-ssh.sh — generate ~/.ssh/config inside the devcontainer
-# from .env spoke variables. Called by project-setup.sh on container start.
+# setup-container-ssh.sh — generate ~/.ssh/config spoke aliases from .env.
+#
+# Works in TWO modes:
+#   Container: ProxyJump through hub (host.docker.internal / 127.0.0.1).
+#              Called by project-setup.sh on container start.
+#   Host:      Direct to deploybox (VPN), kali/range-git via deploybox.
+#              Called by host-setup.sh. No hub hop needed (host IS hub).
 #
 # Reads SPOKE_* and HUB_SSH_USER from .env (via load-env.sh) and writes SSH
-# Host blocks so ProxyJump through host.docker.internal works transparently.
-# Idempotent: replaces the managed section on every run, preserves anything
-# the user added outside the markers.
-#
-# Requires: the host ran scripts/local/bootstrap-hub.sh and has an SSH server
-# accepting agent-forwarded keys on localhost.
-#
-# In host-network mode host.docker.internal doesn't resolve; fall back to
-# 127.0.0.1 which reaches the same SSH server on the host.
+# Host blocks. Idempotent: replaces the managed section on every run,
+# preserves anything the user added outside the markers.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -26,24 +24,34 @@ MARKER_END="# --- END managed by setup-container-ssh.sh ---"
 mkdir -p "$SSH_DIR"
 chmod 700 "$SSH_DIR"
 
-# Resolve hub hostname: host.docker.internal when available, else 127.0.0.1
-# (host-network mode doesn't inject the magic hostname).
-if getent hosts host.docker.internal &>/dev/null; then
-    HUB_HOSTNAME="host.docker.internal"
+# Detect surface: host or container
+if [[ "${DEVCONTAINER:-}" == "true" ]]; then
+    SURFACE="container"
+    # Resolve hub hostname: host.docker.internal when available, else 127.0.0.1
+    if getent hosts host.docker.internal &>/dev/null; then
+        HUB_HOSTNAME="host.docker.internal"
+    else
+        HUB_HOSTNAME="127.0.0.1"
+    fi
+    HUB_USER="${HUB_SSH_USER:-}"
+    if [[ -z "$HUB_USER" ]]; then
+        echo "  --  HUB_SSH_USER not set in .env — skipping SSH config generation"
+        echo "      Set it to your host username so ProxyJump works."
+        exit 0
+    fi
 else
-    HUB_HOSTNAME="127.0.0.1"
-fi
-
-HUB_USER="${HUB_SSH_USER:-}"
-if [[ -z "$HUB_USER" ]]; then
-    echo "  --  HUB_SSH_USER not set in .env — skipping SSH config generation"
-    echo "      Set it to your host username so ProxyJump works."
-    exit 0
+    SURFACE="host"
 fi
 
 build_config() {
     cat <<EOF
 $MARKER_BEGIN
+# Surface: $SURFACE
+EOF
+
+    # Hub block: container only (host IS the hub)
+    if [[ "$SURFACE" == "container" ]]; then
+        cat <<EOF
 
 Host hub
     HostName $HUB_HOSTNAME
@@ -53,19 +61,23 @@ Host hub
     ServerAliveInterval 30
     ServerAliveCountMax 3
 EOF
+    fi
 
     local db_host="${SPOKE_DEPLOYBOX_HOST:-}"
     local db_user="${SPOKE_DEPLOYBOX_USER:-gt}"
     local db_port="${SPOKE_DEPLOYBOX_PORT:-22}"
     if [[ -n "$db_host" ]]; then
+        # Container: ProxyJump through hub. Host: direct (VPN access).
+        local db_proxy=""
+        [[ "$SURFACE" == "container" ]] && db_proxy="    ProxyJump hub"
         cat <<EOF
 
 Host deploybox $db_host
     HostName $db_host
     User $db_user
     Port $db_port
-    ProxyJump hub
-    ForwardAgent yes
+${db_proxy:+$db_proxy
+}    ForwardAgent yes
     StrictHostKeyChecking accept-new
 EOF
     fi
@@ -74,20 +86,24 @@ EOF
     local kali_user="${SPOKE_KALI_USER:-root}"
     local kali_port="${SPOKE_KALI_SSH_PORT:-22}"
     if [[ -n "$kali_host" ]]; then
+        # Container: ProxyJump through hub. Host: direct (VPN).
+        # Kali is reachable from host without deploybox — same as container
+        # going through hub directly. Keeps kali alive if deploybox is removed.
+        local kali_proxy=""
+        [[ "$SURFACE" == "container" ]] && kali_proxy="    ProxyJump hub"
         cat <<EOF
 
 Host kali $kali_host
     HostName $kali_host
     User $kali_user
     Port $kali_port
-    ProxyJump hub
-    ForwardAgent yes
+${kali_proxy:+$kali_proxy
+}    ForwardAgent yes
     StrictHostKeyChecking accept-new
 EOF
     fi
 
     local git_host="${RANGE_GIT_HOST:-}"
-    # Strip scheme and trailing slash so a URL pasted as host still works.
     git_host="${git_host#https://}"
     git_host="${git_host#http://}"
     git_host="${git_host%/}"
@@ -136,10 +152,22 @@ fi
 chmod 600 "$SSH_CONFIG"
 
 # Summary
-echo "  --  Hub: ${HUB_USER}@${HUB_HOSTNAME}"
+if [[ "$SURFACE" == "container" ]]; then
+    echo "  --  Hub: ${HUB_USER}@${HUB_HOSTNAME}"
+    local_via="via hub"
+else
+    echo "  --  Surface: host (no hub hop)"
+    local_via="direct"
+fi
 # shellcheck disable=SC2015
-[[ -n "${SPOKE_DEPLOYBOX_HOST:-}" ]] && echo "  --  Deploy box: ${SPOKE_DEPLOYBOX_USER:-gt}@${SPOKE_DEPLOYBOX_HOST} (via hub)" || true
+[[ -n "${SPOKE_DEPLOYBOX_HOST:-}" ]] && echo "  --  Deploy box: ${SPOKE_DEPLOYBOX_USER:-gt}@${SPOKE_DEPLOYBOX_HOST} ($local_via)" || true
 # shellcheck disable=SC2015
-[[ -n "${SPOKE_KALI_HOST:-}" ]] && echo "  --  Kali: ${SPOKE_KALI_USER:-rt}@${SPOKE_KALI_HOST} (via hub)" || true
+if [[ -n "${SPOKE_KALI_HOST:-}" ]]; then
+    if [[ "$SURFACE" == "container" ]]; then
+        echo "  --  Kali: ${SPOKE_KALI_USER:-rt}@${SPOKE_KALI_HOST} (via hub)"
+    else
+        echo "  --  Kali: ${SPOKE_KALI_USER:-rt}@${SPOKE_KALI_HOST} (direct)"
+    fi
+fi
 # shellcheck disable=SC2015
 [[ -n "${RANGE_GIT_HOST:-}" && -n "${RANGE_GIT_USER:-}" ]] && echo "  --  Range git: ${RANGE_GIT_USER}@${RANGE_GIT_HOST}:${RANGE_GIT_SSH_PORT:-10022} (via deploybox)" || true
