@@ -85,7 +85,10 @@ Before touching target, research WHERE credentials live for this platform:
    - `analyze_opsec_risk`: assess detection risk before each harvest command
 3. **Wiki vulns-docs** (outline-readonly): prior team findings for this host/role
 4. **GitLab README** (range-intel): deploy-time credentials, default passwords
-5. **MITRE ATT&CK** (mitre-mcp): T1003 (OS Credential Dumping) sub-techniques
+5. **Hashcat MCP** (hashcat-mcp): hash type identification and cracking strategy
+   - `search_hash_types`: identify what hash modes apply before dumping
+   - `estimate_crack_time`: assess feasibility before investing agent time
+6. **MITRE ATT&CK** (mitre-mcp): T1003 (OS Credential Dumping) sub-techniques
    - `get_data_sources` for T1003: understand what detection covers this technique
    - **Fallback if mitre-mcp unavailable**: use `lolbins analyze_opsec_risk` for
      detection assessment + `hacktricks_quick_lookup "credential dumping detection"`
@@ -134,6 +137,25 @@ Execute harvesting from agent (through tuoni-mcp):
    - LSA secrets
    - DPAPI protected data
    - Credential Manager vault
+
+### Phase 3.5: Auto-Crack via Hashcat MCP (when hashes recovered)
+
+When Phase 3 yields crackable hashes (NTLM, NTLMv2, Kerberos TGS, etc.):
+
+1. **Identify hash type** (hashcat-mcp `identify_hash` or `smart_identify_hash`):
+   - Feed raw hash value, get hashcat mode number and confidence
+2. **Auto-attack strategy** (hashcat-mcp `auto_attack_strategy`):
+   - Provide hash + identified type, MCP picks mode/rules/wordlists
+   - No manual hashcat syntax needed
+3. **Crack** (hashcat-mcp `crack_hash` or `crack_multiple_hashes`):
+   - Runs on Kali spoke where hashcat + GPU available
+   - Monitor via `get_session_status` for long-running jobs
+4. **Analyze results** (hashcat-mcp `analyze_cracked_passwords`):
+   - Pattern analysis for spray planning (Phase 5)
+   - Feed cracked passwords to Phase 4 storage as plaintext type
+
+Skip this phase for: SSH keys, API tokens, certificates, plaintext passwords
+(already usable — go direct to Phase 4).
 
 ### Phase 4: Credential Processing — MANDATORY GATES
 

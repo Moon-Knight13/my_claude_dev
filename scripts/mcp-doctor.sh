@@ -75,6 +75,16 @@ _check_var TUONI_USERNAME false ".env → tuoni-mcp"
 _check_var TUONI_PASSWORD false ".env → tuoni-mcp"
 
 echo ""
+echo "  BloodHound / Neo4j:"
+_check_var BLOODHOUND_URI false ".env → bloodhound-mcp"
+_check_var BLOODHOUND_USERNAME false ".env → bloodhound-mcp"
+_check_var BLOODHOUND_PASSWORD false ".env → bloodhound-mcp"
+
+echo ""
+echo "  Hashcat MCP:"
+_check_var HASHCAT_PATH false ".env → hashcat-mcp"
+
+echo ""
 echo "  Ghidra / REA:"
 _check_var GHIDRA_INSTALL_DIR false "load-env.sh default → rea-mcp"
 _check_var JAVA_HOME false "load-env.sh default → rea-mcp"
@@ -161,6 +171,27 @@ if [[ -n "${SPOKE_KALI_HOST:-}" ]]; then
 fi
 
 _probe_url "Ollama" "${OLLAMA_HOST:-}"
+
+# BloodHound Neo4j probe (bolt:// → convert to HTTP for health check)
+_bh_uri="${BLOODHOUND_URI:-}"
+if [[ -n "$_bh_uri" ]]; then
+    _bh_http="${_bh_uri/bolt:\/\//http://}"
+    _bh_http="${_bh_http/7687/7474}"
+    _probe_url "BloodHound Neo4j" "$_bh_http"
+fi
+
+# --- Nuclei MCP check ---
+_gobin="${GOBIN:-$(go env GOPATH 2>/dev/null)/bin}"
+if [[ -x "${_gobin}/nuclei-mcp" ]]; then
+    echo "  $PASS  nuclei-mcp binary at ${_gobin}/nuclei-mcp"
+else
+    echo "  $WARN  nuclei-mcp not found (run: bash scripts/install-nuclei-mcp.sh)"
+fi
+if command -v nuclei >/dev/null 2>&1; then
+    echo "  $PASS  nuclei scanner available"
+else
+    echo "  $WARN  nuclei scanner not found — nuclei-mcp will attempt auto-download"
+fi
 
 # --- Ghidra install check ---
 echo ""
