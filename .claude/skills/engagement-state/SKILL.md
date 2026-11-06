@@ -1,6 +1,6 @@
 ---
 name: engagement-state
-description: "Create, update, query, and resume engagement state (YAML). Triggers: 'engagement', 'state', 'resume engagement', 'what targets', 'new engagement', 'add target', 'record technique', 'what creds'."
+description: "Create, update, query, resume, and archive engagement state (YAML). Triggers: 'engagement', 'state', 'resume engagement', 'what targets', 'new engagement', 'add target', 'record technique', 'what creds', 'archive engagement', 'clean slate'."
 modes: [red-team, purple]
 ---
 
@@ -165,6 +165,58 @@ or skill detects existing engagement file.
    - Next steps from previous session
 5. Ask operator: "Resume this engagement? Any scope changes?"
 
+### Archive Engagement
+
+Trigger: operator says "archive engagement", "clean slate", "new engagement"
+(when an active engagement already exists), or "start fresh".
+
+Purpose: preserve historical data while resetting active state so next
+engagement starts from Providentia ground truth, not stale cached data.
+
+1. Read current engagement YAML from `engagements/<id>.yaml`.
+2. Set `status: archived` and `archived_at: <ISO-8601>` in the YAML.
+3. Create `engagements/archive/` directory if it does not exist.
+4. Move `engagements/<id>.yaml` to `engagements/archive/<id>.yaml`.
+5. Obsidian tag update — for all notes tagged `#engagement/<id>`:
+   - Add `#archived` tag via `obsidian_add_tags`.
+   - Do NOT delete or modify note content. Technique knowledge persists.
+6. Preserved data (NOT touched during archive):
+   - `llm-wiki/wiki/techniques/` pages — these are cross-engagement learnings.
+   - `llm-wiki/wiki/vulnerabilities/` pages — reusable vulnerability intel.
+   - `Notes_Mitre_ATTack_Framework/` pages — MITRE cross-references.
+   - Providentia accuracy tracker pages — operator feedback loop.
+7. Cleared data (scoped to archived engagement only):
+   - Active engagement YAML removed from `engagements/` (moved to archive).
+   - `llm-wiki/raw/providentia/` and `llm-wiki/raw/gitlab/` cache files
+     are stale — warn operator but do NOT auto-delete (operator may want
+     to diff old vs new).
+8. If operator said "new engagement" or "clean slate", immediately proceed
+   to Create Engagement flow after archive completes.
+9. Report:
+   - Engagement `<id>` archived to `engagements/archive/<id>.yaml`
+   - N Obsidian notes tagged `#archived`
+   - Technique pages preserved: N
+   - Cache files flagged stale: N
+   - Ready for new engagement creation
+
+#### Staleness Guard
+
+When resuming or creating a new engagement, check for stale cached data:
+1. Read `cache_timestamp` from engagement YAML (or from archived engagement
+   if operator is starting fresh after archive).
+2. If `cache_timestamp` is older than 24 hours: warn operator.
+3. If no `cache_timestamp` exists: warn — cache was never populated.
+4. Recommend running `pre-engagement-cache` after new engagement creation
+   to refresh from current Providentia ground truth.
+
+#### Listing Archived Engagements
+
+Trigger: "list engagements", "past engagements", "engagement history".
+
+1. List files in `engagements/archive/`.
+2. For each, read `engagement_id`, `start_date`, `archived_at`, target count.
+3. Report table: ID, dates, target count, status.
+
 ### Update Next Steps
 
 Trigger: "next steps", "plan next", "what's next", or end of session.
@@ -296,7 +348,8 @@ across all engagements.
 
 ## File Locations
 
-- `engagements/<id>.yaml` — engagement state (gitignored)
+- `engagements/<id>.yaml` — active engagement state (gitignored)
+- `engagements/archive/<id>.yaml` — archived engagement state (gitignored)
 - `engagements/` directory — created automatically, added to `.gitignore`
 - Obsidian vault `my_notes` — tactical documentation (via obsidian-mcp)
   - `llm-wiki/raw/` — immutable intake dumps
