@@ -50,6 +50,9 @@ Test MCP servers that depend on spoke connectivity:
 - **range-intel:** `mcp__range-intel__range_environments` — should return environment list
 - **outline-readonly:** `mcp__outline-readonly__outline_search` with a known term
 - **tuoni-mcp:** `tuoni_agents_list` — should return (possibly empty) agent list
+- **bloodhound-mcp:** any tool call (e.g. list domains) — confirms Neo4j connectivity
+- **hashcat-mcp:** any tool call (e.g. list capabilities) — confirms hashcat binary accessible
+- **nuclei-mcp:** any tool call (e.g. list templates) — confirms nuclei scanner available
 
 ### Step 4: Mode Readiness
 
@@ -59,9 +62,9 @@ Based on results, report which modes are available:
 |------|----------|
 | platform-ops | Nothing (always available) |
 | green-dev | range-intel + outline-readonly + deploybox SSH |
-| red-team | All of green-dev + tuoni-mcp + kali SSH |
-| red-dev | tuoni-mcp + kali SSH |
-| purple | All of red-team |
+| red-team | All of green-dev + tuoni-mcp + kali SSH + bloodhound-mcp + nuclei-mcp |
+| red-dev | tuoni-mcp + kali SSH + hashcat-mcp |
+| purple | All of red-team + hashcat-mcp |
 
 ### Step 5: Report
 
@@ -83,6 +86,9 @@ MCP Server       Status
 range-intel      OK
 outline-readonly OK
 tuoni-mcp        OK
+bloodhound-mcp   OK
+hashcat-mcp      OK
+nuclei-mcp       OK
 
 Mode Readiness
 ──────────────

@@ -83,6 +83,8 @@ _check_var BLOODHOUND_PASSWORD false ".env → bloodhound-mcp"
 echo ""
 echo "  Hashcat MCP:"
 _check_var HASHCAT_PATH false ".env → hashcat-mcp"
+_check_var HASHCAT_MCP_HOST false ".env → hashcat-mcp"
+_check_var HASHCAT_MCP_PORT false ".env → hashcat-mcp"
 
 echo ""
 echo "  Ghidra / REA:"
@@ -178,6 +180,16 @@ if [[ -n "$_bh_uri" ]]; then
     _bh_http="${_bh_uri/bolt:\/\//http://}"
     _bh_http="${_bh_http/7687/7474}"
     _probe_url "BloodHound Neo4j" "$_bh_http"
+fi
+
+# --- Hashcat binary check ---
+_hashcat_bin="${HASHCAT_PATH:-hashcat}"
+if command -v "$_hashcat_bin" >/dev/null 2>&1; then
+    echo "  $PASS  hashcat binary available: $(command -v "$_hashcat_bin")"
+elif [[ -x "$_hashcat_bin" ]]; then
+    echo "  $PASS  hashcat binary at $HASHCAT_PATH"
+else
+    echo "  $WARN  hashcat not found at '${_hashcat_bin}' — hashcat-mcp will fail"
 fi
 
 # --- Nuclei MCP check ---
