@@ -1,7 +1,7 @@
 ---
 name: kali-bootstrap
 description: "Verify Tuoni self-agent on Kali + deploy plugins. Run before engagement, during green-dev phase. Use when operator says 'bootstrap kali', 'check kali', or before first red-team mode switch."
-modes: [red-team, purple, red-dev]
+modes: [green-dev, red-team, purple, red-dev]
 ---
 
 # Kali Bootstrap
@@ -130,6 +130,87 @@ for full list: host-id, net-recon, vuln-assess, lateral-move, lateral-wmi,
 get-system, persist-swarm, cred-dump, ad-enum, agent-watcher, collect-intel,
 ioc-cleanup, log-clear, exfil-stage, payload-gen, route-hijack).
 
+### Step 7.5: Tool Verification and Install
+
+Verify required engagement tools on Kali via self-agent. Run each check
+through the tuoni-mcp command execution flow (search → describe → prepare →
+execute → get result).
+
+#### System binaries
+
+Check each binary with `which`:
+
+```bash
+for tool in nmap hydra smbclient impacket-secretsdump impacket-wmiexec impacket-psexec impacket-smbexec xfreerdp3 crackmapexec netexec rpcclient enum4linux medusa sshpass; do
+  which "$tool" 2>/dev/null && echo "PRESENT: $tool" || echo "MISSING: $tool"
+done
+```
+
+Install missing system tools via apt (group by package):
+
+| Binary | Package |
+|--------|---------|
+| nmap | nmap |
+| hydra | hydra |
+| smbclient | smbclient |
+| impacket-secretsdump, impacket-wmiexec, impacket-psexec, impacket-smbexec | impacket-scripts |
+| xfreerdp3 | freerdp3-x11 |
+| crackmapexec | crackmapexec |
+| netexec | netexec |
+| rpcclient | smbclient |
+| enum4linux | enum4linux |
+| medusa | medusa |
+| sshpass | sshpass |
+
+If any missing:
+```bash
+apt-get update && apt-get install -y <missing-packages>
+```
+
+Re-verify after install. If a tool still missing, report to operator — may
+need manual install or Kali repo refresh (`apt update`).
+
+#### Python packages
+
+Check via pip:
+
+```bash
+python3 -c "import pexpect; print('PRESENT: pexpect')" 2>/dev/null || echo "MISSING: pexpect"
+python3 -c "import paramiko; print('PRESENT: paramiko')" 2>/dev/null || echo "MISSING: paramiko"
+```
+
+Install missing:
+```bash
+pip3 install pexpect paramiko
+```
+
+#### Custom tools (environment-dependent)
+
+Check for `icmp_c2.py`:
+```bash
+test -f /opt/tools/icmp_c2.py && echo "PRESENT: icmp_c2.py" || echo "MISSING: icmp_c2.py"
+```
+
+If missing and environment requires it: SCP from deploy infrastructure or
+notify operator. Not all environments use this tool — skip if not in
+engagement plan.
+
+#### Reporting
+
+Print summary table:
+
+```
+Tool Verification Summary
+─────────────────────────
+PRESENT: nmap, hydra, smbclient, ...
+MISSING: <none> | <list>
+INSTALLED: <list of tools installed this run>
+FAILED: <list of tools that could not be installed>
+```
+
+If any tool in FAILED: warn operator and do NOT proceed to Step 8 until
+operator acknowledges. Missing tools degrade engagement capability.
+
 ### Step 8: Record State
 
 Update engagement YAML:
@@ -147,4 +228,6 @@ All must be true:
 - [ ] Tuoni API responding on :8443
 - [ ] Self-agent connected and executing commands
 - [ ] tuoni-plugins loaded (14 modules)
+- [ ] System tools verified (nmap, hydra, smbclient, impacket-suite, xfreerdp3, crackmapexec/netexec, rpcclient, enum4linux, medusa, sshpass)
+- [ ] Python packages verified (pexpect, paramiko)
 - [ ] Agent ID recorded in engagement YAML
