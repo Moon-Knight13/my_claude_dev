@@ -43,11 +43,7 @@ run_step() {
 
 echo "Provisioning devcontainer..."
 
-if [ -z "${DOCKER_HOST_NETWORK:-}" ]; then
-    run_step "firewall"          sudo /usr/local/bin/init-firewall.sh
-else
-    echo "  ⊘ firewall: skipped (host networking)"
-fi
+run_step "firewall"          sudo /usr/local/bin/init-firewall.sh
 run_step "caveman"           bash scripts/install-caveman.sh
 run_step "bmad-install"      bash scripts/install-bmad.sh
 run_step "bmad-bootstrap"    bash scripts/bootstrap-bmad.sh
