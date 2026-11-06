@@ -61,6 +61,15 @@
             "command": "$CLAUDE_PROJECT_DIR/scripts/hooks/response-scanner.sh"
           }
         ]
+      },
+      {
+        "matcher": "mcp__tuoni-mcp__tuoni_command_get",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/auto-log-finding.sh"
+          }
+        ]
       }
     ],
     "Stop": [
