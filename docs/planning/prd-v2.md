@@ -2,7 +2,7 @@
 title: "my_claude_dev v2 — AI-Driven Cyber Operations Operator Framework"
 status: final
 created: 2026-10-28
-updated: 2026-11-04
+updated: 2026-11-06
 ---
 
 # PRD: my_claude_dev v2 — AI-Driven Cyber Operations Operator Framework
@@ -15,7 +15,7 @@ Cyber range operators wear multiple hats — red team, blue-side development, pu
 
 A single hub framework on the operator's laptop provides mode-aware, AI-orchestrated sessions across all operational contexts. Mode switching reconfigures tools, permissions, OPSEC posture, and documentation pipeline. Spoke systems (C2 servers, deploy boxes, visual access) connect through the hub. The framework learns from each engagement — discoveries flow back into tooling, making every future operation more capable.
 
-**One bootstrap. Five operational modes. Continuous improvement.**
+**One bootstrap. Six operational modes + base router. Continuous improvement.**
 
 ## 3. Target User
 
@@ -46,18 +46,30 @@ Claude Code    (execution — MCP servers, hooks, guards, spoke connectivity)
 | **red-dev** | Exploit development, RE, CVE research + vuln documentation | Optional (for PoC testing) |
 | **green-dev** | Range infrastructure — build, deploy, configure | Required |
 | **purple** | Attack + detect + score + engagement enrichment | Required |
+| **homelab** | Homelab infrastructure — Ansible, NixOS, Docker, service onboarding | Not required |
 
 ### 5.2 Mode Switching
 
 Mode switch writes `.claude/.active-mode` and takes effect on the next prompt via `mode-inject.sh` UserPromptSubmit hook, which injects the mode's `system-prompt.md` as additional context. No session restart required.
 
-| Level | Mechanism | Phase |
-|-------|-----------|-------|
-| **MVP** | Operator invokes `/mode red-team` skill. Hook injects mode rules on next prompt. No restart | Manual, explicit |
-| **v1.5** | Claude suggests mode switch based on task context. Operator confirms | AI-suggested, human-approved |
-| **v2** | Master orchestrator spawns mode-agents as subagents with mode instructions injected as prompt context. No file rewrite needed for subagents | Autonomous, orchestrated |
+Each mode directory (`.claude/modes/<mode>/`) contains: `system-prompt.md`, `tool-policy.yaml` (deterministic MCP deny list), and `settings.json` fragment. Base mode has no tool-policy (intentionally permissive for routing/health). All other modes deny offensive MCPs they do not need.
 
-Reference implementations: PsyChaos/claude-operator (sentinel injection), foxj77/claudectx (profile swap), kevinzai/cc-commander (skill-based).
+| Level | Mechanism | Phase | Status |
+|-------|-----------|-------|--------|
+| **MVP** | Operator invokes `/mode red-team` skill. Hook injects mode rules on next prompt. No restart | Manual, explicit | Shipped |
+| **v1.5** | ~~Claude suggests mode switch based on task context. Operator confirms~~ | ~~AI-suggested, human-approved~~ | Skipped — superseded by v2 |
+| **v2** | Master agent (base mode) dispatches T3 threads with mode in delegate brief. Project-routes.yaml maps T3 projects to default modes. mode-inject hook detects project/mode mismatch | Autonomous, orchestrated | Shipped |
+
+**v2 detail — T3 Code master-agent pattern:** Base mode is the router, never the executor. Master agent reads `project-routes.yaml` at routing time and either switches mode before acting (in-session) or includes mode context in the delegate brief (T3 thread dispatch). `mode-inject.sh` checks `T3_PROJECT_REPO_KEY` against project-routes.yaml and emits a mismatch warning if active mode differs from the project default.
+
+**Project-mode routing** (`.claude/modes/project-routes.yaml`):
+- `my_claude_dev` → platform-ops
+- `tuoni-plugins` → red-dev
+- `homelab_planning`, `foundryvtt-docker`, `medicat-usb` → homelab
+- `DnD` → base (matched by T3 project title)
+- Default (no route match) → base
+
+Reference implementations (informed MVP design): PsyChaos/claude-operator (sentinel injection), foxj77/claudectx (profile swap), kevinzai/cc-commander (skill-based).
 
 ### 5.3 platform-ops Mode
 
@@ -163,6 +175,26 @@ Attack + detect + score + engagement enrichment. Full red-team capability plus b
 
 **Permissions:** Red-team permissions + SIEM/EDR read access.
 
+### 5.8 homelab Mode
+
+Personal homelab infrastructure — Ansible, NixOS, Docker, service onboarding. Entirely separate from range operations.
+
+**FR-HL1:** Ansible playbook/role development for homelab infrastructure (NixOS hosts, Docker services).
+
+**FR-HL2:** Docker Compose service definitions and deployment (FoundryVTT, Jellyfin, etc.).
+
+**FR-HL3:** NixOS configuration and flake management.
+
+**FR-HL4:** Network configuration, DNS management, backup and monitoring setup.
+
+**FR-HL5:** Smart TV management, debloating research, Medicat USB workflows.
+
+**Tools:** local-ollama (code assistance), Obsidian MCP (homelab knowledge base), standard development tools.
+
+**Permissions:** No offensive tools. No range connectivity. No engagement state.
+
+**Projects:** homelab_planning (primary), foundryvtt-docker, medicat-usb.
+
 ## 6. Hub Infrastructure
 
 Cross-cutting features that every mode relies on.
@@ -232,13 +264,13 @@ Phase-based skills with entry/exit criteria, natural-language OS conditionals, e
 
 ## 9. Multi-Agent Orchestration (v2)
 
-**FR-MA1:** Mode-agents — orchestrator spawns subagents with mode-specific instructions injected as prompt context. Each agent operates in its mode's tool/permission scope.
+**FR-MA1:** Mode-agents — master agent (base mode) dispatches T3 threads with mode-specific instructions in delegate brief. Each thread operates in its mode's tool/permission scope via mode-inject hook. **Status: shipped.**
 
 **FR-MA2:** Engagement loop — red-dev agent (build PoC) → red-team agent (test realistic E2E) → purple agent (observe detection) → iterate. Shared state through engagement YAML.
 
 **FR-MA3:** Agent safety — evidence-based success (not self-reported), OPSEC validation by purple agent, exit criteria checklists, max iteration count, budget caps, full guard stack per agent.
 
-**FR-MA4:** T3 Code integration — evaluate T3 Code (pingdotgg/t3code) as orchestration control plane for mode-agents. Provides session management, workspace checkpoints, Git worktree support, per-turn diffs.
+**FR-MA4:** T3 Code integration — T3 Code adopted as orchestration control plane. Master agent stays router-only; implementation delegated to T3 threads. Project-routes.yaml provides deterministic project-to-mode mapping. **Status: shipped.** Three-layer architecture (§4) confirmed in production.
 
 ## 10. Non-Functional Requirements
 
@@ -264,7 +296,7 @@ Phase-based skills with entry/exit criteria, natural-language OS conditionals, e
 | NFR-O1 | Works offline from range (platform-ops, red-dev without live targets) |
 | NFR-O2 | Failover: Opus 4.6 → OpenCode + local model → CLI helpers |
 | NFR-O3 | Bootstrap under 15 minutes: clone → .env → setup → first mode [ASSUMPTION] |
-| NFR-O4 | Session restart on mode switch acceptable (CLAUDE.md not hot-reloaded) |
+| NFR-O4 | Session restart on mode switch no longer required (mode-inject hook bypasses CLAUDE.md reload constraint) |
 | NFR-O5 | Spoke connectivity failure degrades gracefully. VPN loss: Obsidian cache for intel, wait for reconnect. Tuoni crash: SSH to Kali, restart service. Deploy box loss: red-team unaffected, GitLab still reachable, catapult waits for reallocation. IP change: update `.env`, re-run `spoke-firewall.sh`. Mode still usable for local work |
 
 ### Data
@@ -312,9 +344,10 @@ Phase-based skills with entry/exit criteria, natural-language OS conditionals, e
 | Feature | Phase |
 |---------|-------|
 | red-dev, green-dev, purple modes | v1.1 |
-| AI-suggested mode switching | v1.5 |
-| Multi-agent orchestration | v2 |
-| T3 Code integration | v2 |
+| homelab mode (6th operational mode) | v1.1 — **shipped** |
+| AI-suggested mode switching | ~~v1.5~~ — **skipped**, superseded by v2 master-agent pattern |
+| Multi-agent orchestration (T3 master-agent) | v2 — **shipped** |
+| T3 Code integration + project-routes.yaml | v2 — **shipped** |
 | Wazuh/Velociraptor/Elastic MCP | v1.1 (purple) |
 | GhidraMCP, eip-mcp, codebase-memory-mcp | v1.1 (red-dev) |
 | Visual spoke computer-use AI integration | v1.5 |
@@ -334,7 +367,7 @@ Phase-based skills with entry/exit criteria, natural-language OS conditionals, e
 
 ## 14. Constraints
 
-- **CLAUDE.md not hot-reloaded** — mode switch requires session restart. Confirmed constraint, not a bug.
+- **CLAUDE.md not hot-reloaded** — original constraint. Bypassed: mode-inject.sh hook injects mode's system-prompt.md as additionalContext on every prompt. No session restart required for mode switch.
 - **Public repository** — no operational details in code, commits, issues, or documentation.
 - **Authorized scope only** — all offensive work confined to authorized range, on organization-owned boxes.
 - **Human-in-the-loop** — all mutating range commands confirmed by operator. No auto-approve path.
