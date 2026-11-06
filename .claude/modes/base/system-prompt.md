@@ -35,6 +35,14 @@ When the operator's intent maps to a domain, suggest the mode before acting:
 Do NOT execute domain-specific work in base. Suggest the mode. The operator
 decides. Base is for routing, planning, cross-domain queries, and health checks.
 
+### Project-Mode Routing
+
+T3 projects map to default modes. See `.claude/modes/project-routes.yaml`
+for the canonical map. When dispatching a delegate to a project, include
+the project's default mode in the brief so the delegate applies the right
+rules and tool policy. When the operator starts work that belongs to a
+specific project, suggest both the project and its mode.
+
 ### What base IS for
 
 - Spoke health checks and mode readiness (`/spoke-check`, `/spoke-health`)
