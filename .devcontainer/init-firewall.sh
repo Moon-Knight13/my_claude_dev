@@ -179,7 +179,7 @@ if [ -z "$HOST_GATEWAY" ]; then
 fi
 echo "Host gateway detected as: $HOST_GATEWAY"
 
-# Allow outbound access to host for local model and spoke tunnels.
+# Allow outbound access to host for local model, spoke tunnels, and MCP SSE proxies.
 # The host is reached differently per runtime: docker bridge exposes it as the
 # default gateway, while podman/pasta maps it to a dedicated address behind
 # host.docker.internal / host.containers.internal (the mirrored default route
@@ -189,8 +189,12 @@ echo "Host gateway detected as: $HOST_GATEWAY"
 # Port 22: SSH to host — spoke systems (deploy box, Kali/Tuoni) are reached
 #   via SSH tunnels through the host's VPN. Container cannot reach range
 #   directly; the host controls what is tunneled. Defense-in-depth preserved.
+# Ports 8101-8103: MCP SSE proxies — range-facing MCPs (range-intel, tuoni-mcp,
+#   outline-readonly) run on host behind auth-checking SSE proxies. Container
+#   connects via host.docker.internal. Each endpoint requires a Bearer token.
 iptables -A OUTPUT -d "$HOST_GATEWAY" -p tcp --dport 11434 -j ACCEPT
 iptables -A OUTPUT -d "$HOST_GATEWAY" -p tcp --dport 22 -j ACCEPT
+iptables -A OUTPUT -d "$HOST_GATEWAY" -p tcp --dport 8101:8103 -j ACCEPT
 for host_name in host.docker.internal host.containers.internal; do
     host_ip=$(getent hosts "$host_name" | awk '{print $1; exit}' || true)
     if [[ -n "$host_ip" && "$host_ip" != "$HOST_GATEWAY" ]]; then
@@ -200,7 +204,8 @@ for host_name in host.docker.internal host.containers.internal; do
         fi
         iptables -A OUTPUT -d "$host_ip" -p tcp --dport 11434 -j ACCEPT
         iptables -A OUTPUT -d "$host_ip" -p tcp --dport 22 -j ACCEPT
-        echo "Local model + spoke tunnel egress allowed to $host_name ($host_ip)"
+        iptables -A OUTPUT -d "$host_ip" -p tcp --dport 8101:8103 -j ACCEPT
+        echo "Local model + spoke tunnel + MCP SSE proxy egress allowed to $host_name ($host_ip)"
     fi
 done
 

@@ -53,10 +53,44 @@ else
     VAULT_PATH="$HOME/Documents/my_notes"
 fi
 
+# --- Networking mode detection ---
+# Bridge mode: container on docker bridge, range MCPs via SSE proxy on host.
+# Host mode: container shares host network, range MCPs via stdio directly.
+# Non-container: running on host, range MCPs via stdio directly.
+USE_SSE_PROXY=false
+if [[ "${DEVCONTAINER:-}" == "true" && -z "${DOCKER_HOST_NETWORK:-}" ]]; then
+    USE_SSE_PROXY=true
+fi
+
+SSE_HOST="${MCP_PROXY_HOST:-host.docker.internal}"
+
 # --- Server catalog ---
 # Every MCP server the hub can run. Modes select a subset by name.
 # Paths use $PROJECT_DIR so the catalog works on both host and container.
 # Defined as a jq-parseable JSON literal using variable interpolation.
+#
+# Range-facing MCPs (range-intel, tuoni-mcp, outline-readonly) have two forms:
+#   stdio  — direct spawn (host networking or non-container)
+#   SSE    — connect via SSE proxy on host (bridge networking)
+
+if [[ "$USE_SSE_PROXY" == "true" ]]; then
+    # Bridge mode: range MCPs connect via SSE proxy running on host
+    if [[ -n "${MCP_PROXY_TOKEN:-}" ]]; then
+        RANGE_INTEL_JSON="\"range-intel\": { \"url\": \"http://$SSE_HOST:8101/sse\", \"headers\": { \"Authorization\": \"Bearer $MCP_PROXY_TOKEN\" } }"
+        TUONI_MCP_JSON="\"tuoni-mcp\": { \"url\": \"http://$SSE_HOST:8102/sse\", \"headers\": { \"Authorization\": \"Bearer $MCP_PROXY_TOKEN\" } }"
+        OUTLINE_JSON="\"outline-readonly\": { \"url\": \"http://$SSE_HOST:8103/sse\", \"headers\": { \"Authorization\": \"Bearer $MCP_PROXY_TOKEN\" } }"
+    else
+        RANGE_INTEL_JSON="\"range-intel\": { \"url\": \"http://$SSE_HOST:8101/sse\" }"
+        TUONI_MCP_JSON="\"tuoni-mcp\": { \"url\": \"http://$SSE_HOST:8102/sse\" }"
+        OUTLINE_JSON="\"outline-readonly\": { \"url\": \"http://$SSE_HOST:8103/sse\" }"
+    fi
+    echo "SSE proxy mode: range MCPs via http://$SSE_HOST:{8101-8103}/sse"
+else
+    RANGE_INTEL_JSON="\"range-intel\": { \"command\": \"$WRAPPER\", \"args\": [\"$PYTHON_CMD\", \"-m\", \"range_intel.server\"], \"cwd\": \"$PROJECT_DIR/mcp-servers/range-intel\", \"env\": { \"PYTHONPATH\": \"$PROJECT_DIR/mcp-servers/range-intel/src\" } }"
+    TUONI_MCP_JSON="\"tuoni-mcp\": { \"command\": \"$WRAPPER\", \"args\": [\"$PYTHON_CMD\", \"-m\", \"tuoni_mcp\"], \"env\": { \"TUONI_VERIFY_TLS\": \"false\", \"TUONI_MCP_PROFILES\": \"agent-ops,access,discovery,authoring,administration\" } }"
+    OUTLINE_JSON="\"outline-readonly\": { \"command\": \"$WRAPPER\", \"args\": [\"node\", \"$PROJECT_DIR/mcp-servers/outline-readonly/src/server.js\"] }"
+fi
+
 read -r -d '' CATALOG << CATALOG_JSON || true
 {
   "obsidian-mcp": {
@@ -83,26 +117,9 @@ read -r -d '' CATALOG << CATALOG_JSON || true
     "command": "$WRAPPER",
     "args": ["npx", "-y", "ollama-mcp-server"]
   },
-  "range-intel": {
-    "command": "$WRAPPER",
-    "args": ["$PYTHON_CMD", "-m", "range_intel.server"],
-    "cwd": "$PROJECT_DIR/mcp-servers/range-intel",
-    "env": {
-      "PYTHONPATH": "$PROJECT_DIR/mcp-servers/range-intel/src"
-    }
-  },
-  "outline-readonly": {
-    "command": "$WRAPPER",
-    "args": ["node", "$PROJECT_DIR/mcp-servers/outline-readonly/src/server.js"]
-  },
-  "tuoni-mcp": {
-    "command": "$WRAPPER",
-    "args": ["$PYTHON_CMD", "-m", "tuoni_mcp"],
-    "env": {
-      "TUONI_VERIFY_TLS": "false",
-      "TUONI_MCP_PROFILES": "agent-ops,access,discovery,authoring,administration"
-    }
-  },
+  $RANGE_INTEL_JSON,
+  $OUTLINE_JSON,
+  $TUONI_MCP_JSON,
   "cve-mcp": {
     "command": "$WRAPPER",
     "args": ["npx", "-y", "cve-mcp@0.2.0"]

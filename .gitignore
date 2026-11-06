@@ -53,6 +53,9 @@ tuoni-plugins/
 # Cloned MCP server repos (installed by scripts/install-*.sh, not template assets)
 mcp-servers/bloodhound-mcp/
 
+# MCP SSE proxy runtime state (PID files, logs)
+.run/
+
 # Devcontainer / tooling runtime artifacts (created in-container, not template assets)
 .gitconfig
 .cache/
