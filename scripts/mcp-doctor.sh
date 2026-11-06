@@ -224,6 +224,14 @@ else
     echo "$WARN  JDK not found at ${JAVA_HOME:-<unset>}"
 fi
 
+# --- GhidraMCP check ---
+_ghidra_mcp_dir="${PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/mcp-servers/ghidra-mcp"
+if [[ -d "$_ghidra_mcp_dir" ]] && [[ -f "$_ghidra_mcp_dir/server.py" ]]; then
+    echo "  $PASS  ghidra-mcp installed at $_ghidra_mcp_dir"
+else
+    echo "  $WARN  ghidra-mcp not installed (run: bash scripts/install-ghidra-mcp.sh)"
+fi
+
 echo ""
 if [[ "$_status" -eq 0 ]]; then
     echo "All checks passed."

@@ -1,6 +1,6 @@
 ---
 name: reverse-engineering
-description: "Binary analysis and reverse engineering workflow using rea-mcp. Use when operator says 'reverse engineer', 'RE', 'analyze binary', 'decompile', 'disassemble', or 'patch diff'."
+description: "Binary analysis and reverse engineering workflow using rea-mcp and ghidra-mcp. Use when operator says 'reverse engineer', 'RE', 'analyze binary', 'decompile', 'disassemble', 'patch diff', or 'ghidra'."
 modes: [red-dev]
 ---
 
@@ -9,7 +9,7 @@ modes: [red-dev]
 ## When to use
 
 Binary analysis, vulnerability research, exploit development, patch diffing.
-Wraps rea-mcp tools into an operator workflow.
+Wraps rea-mcp and ghidra-mcp tools into an operator workflow.
 
 Active in: **red-dev** mode.
 
@@ -18,6 +18,7 @@ Active in: **red-dev** mode.
 - [ ] rea-mcp server running (check MCP server list)
 - [ ] Target binary accessible (local path or pulled from target)
 - [ ] Operator has stated analysis goal (vuln hunt, patch diff, protocol RE, etc.)
+- [ ] ghidra-mcp server running (optional — required for Ghidra-specific analysis)
 
 ## Procedure
 
@@ -114,6 +115,19 @@ Every completed analysis produces (in Obsidian or engagement docs):
 - **IoC indicators** — strings, byte patterns, behavioral signatures
 - **Remediation** (if applicable) — what the fix should look like
 
+### GhidraMCP — Ghidra-Specific Analysis
+
+When ghidra-mcp is connected, use it for Ghidra-native capabilities that complement rea-mcp:
+
+- **Headless decompilation** — Ghidra's decompiler produces different (sometimes better) output than other backends. Compare when rea-mcp output is unclear.
+- **Class and type hierarchy** — Ghidra's type recovery and class reconstruction for C++/ObjC binaries.
+- **Symbol search** — Ghidra's symbol table queries across loaded programs.
+- **Memory mapping** — Ghidra's memory map view for segment analysis.
+
+Tool selection: prefer rea-mcp for interactive analysis sessions (open/navigate/annotate). Use ghidra-mcp when Ghidra-specific features add value (second decompiler opinion, type recovery, batch headless analysis of multiple binaries).
+
+ghidra-mcp requires: Ghidra backend installed (`scripts/install-ghidra-backend.sh`), `GHIDRA_INSTALL_DIR` and `JAVA_HOME` set.
+
 ## Tips
 
 - Start broad (overview, strings, exports), narrow to specific functions.
@@ -121,3 +135,4 @@ Every completed analysis produces (in Obsidian or engagement docs):
 - Name everything as you go. Unnamed functions multiply confusion.
 - For large binaries: use `search_procedures` and string xrefs to skip to interesting code instead of reading linearly.
 - Close binaries when switching targets. Open sessions consume resources.
+- Two decompilers: when one produces unclear output, try the other (rea-mcp vs ghidra-mcp).

@@ -10,3 +10,4 @@ deny:
   - "mcp__lolbins-mcp__*"
   - "mcp__cve-mcp__*"
   - "mcp__rea-mcp__*"
+  - "mcp__ghidra-mcp__*"
