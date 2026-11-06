@@ -277,8 +277,8 @@ def format_table(scored):
     return "\n".join(lines)
 
 
-def query_technique(scored, technique_id, target=None):
-    """Return detail for a single technique, optionally filtered by target."""
+def query_technique(scored, technique_id):
+    """Return detail for a single technique."""
     for s in scored:
         if s["technique_id"] == technique_id:
             return s
@@ -317,6 +317,13 @@ def main():
         if eng:
             engagements.append(eng)
 
+    if args.target:
+        for eng in engagements:
+            eng["techniques_tried"] = [
+                t for t in eng.get("techniques_tried", [])
+                if t.get("target", "unknown") == args.target
+            ]
+
     techniques = aggregate_techniques(engagements, config)
     scored = compute_scores(techniques, config)
 
@@ -333,7 +340,7 @@ def main():
         scored = detect_accuracy_gaps(scored, prov_vulns, config)
 
     if args.query:
-        result = query_technique(scored, args.query, args.target)
+        result = query_technique(scored, args.query)
         if result:
             if args.format == "json":
                 print(json.dumps(result, indent=2, default=str))
