@@ -35,6 +35,43 @@ with a local abliterated model.
 **Archived:** The local model orchestrator, sensitivity routing, and SP1a gate
 are archived on the `archive/sp1a-gate` branch.
 
+## Framework Vision
+
+This repository is an **operator hub framework** — a portfolio project
+demonstrating how a single Claude session with MCP integrations, safety controls,
+and mode-based isolation can serve as a multi-environment platform for security
+operations and software development.
+
+**Current state:** Built and operational for one environment (a dedicated cyber
+range) with 6 modes, 15+ MCP servers, a tested safety harness, and CI security
+gates.
+
+**Where it's going (v3):** Generalize to multiple independent environments — CTF
+platforms, penetration testing engagements, bug bounty programs, general software
+development, and homelab infrastructure — each with its own mode set, knowledge
+base, and model failover chain. Planned additions:
+
+- **New modes:** `dev` (general coding), `ctf` (challenge solving), `pentest`
+  (client engagements), `bounty` (bug bounty programs)
+- **T3-native routing:** T3 Code projects as environment profiles, threads as
+  mode sessions with full context isolation — replaces hook-injected mode
+  switching for better multi-session safety
+- **Model failover:** Cost-aware chain from Claude MAX through homelab vLLM,
+  cloud GPU, down to local Ollama — no single-provider dependency
+- **Vault-per-mode knowledge bases:** Obsidian vaults with semantic search MCP,
+  giving agents accumulated operator experience per domain
+- **Environment profiles:** Replace flat `.env` with per-environment config
+  selecting available modes, MCP servers, spoke connections, and vaults
+
+This is a **framework, not a weapon**. No operational data, credentials, or
+target-specific configuration lives in this repository. Offensive skills are
+infrastructure-coupled (they require range connectivity and C2 server access to
+function). The safety harness is fail-closed and tested. The architecture is more
+comparable to a CI/CD platform than to an exploit toolkit.
+
+See [`docs/ARCHITECTURE_VISION.md`](docs/ARCHITECTURE_VISION.md) for the full v3
+planning document.
+
 ## MCP Servers
 
 All servers live under `mcp-servers/`:
@@ -194,7 +231,7 @@ scripts/             Bootstrap, CI helpers, and template validator
 .devcontainer/       Dev environment (for developing this repo)
 .claude/commands/    Claude Code skills
 .github/             Workflows (CI, secret scan, semgrep, container scan); issue & PR templates
-docs/                SAFETY_HARNESS.md, TEMPLATE_GUIDE.md, BMAD_WORKFLOW.md, KANBAN_WORKFLOW.md
+docs/                SAFETY_HARNESS.md, ARCHITECTURE_VISION.md, TEMPLATE_GUIDE.md, BMAD_WORKFLOW.md, KANBAN_WORKFLOW.md
 ```
 
 ## Prerequisites
