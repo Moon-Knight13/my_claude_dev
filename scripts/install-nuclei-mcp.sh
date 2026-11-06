@@ -23,7 +23,6 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 NUCLEI_MCP_REPO="addcontent/nuclei-mcp"
 NUCLEI_MCP_VERSION="${NUCLEI_MCP_VERSION:-v0.1.0}"
-NUCLEI_MCP_PACKAGE="github.com/${NUCLEI_MCP_REPO}/cmd/nuclei-mcp@${NUCLEI_MCP_VERSION}"
 MARKER_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 MARKER_FILE="$MARKER_DIR/.template-nuclei-mcp-ref"
 mkdir -p "$MARKER_DIR"
