@@ -50,6 +50,9 @@ npm-debug.log*
 # Nested repos (separate git history, must not be tracked in parent)
 tuoni-plugins/
 
+# Cloned MCP server repos (installed by scripts/install-*.sh, not template assets)
+mcp-servers/bloodhound-mcp/
+
 # Devcontainer / tooling runtime artifacts (created in-container, not template assets)
 .gitconfig
 .cache/
