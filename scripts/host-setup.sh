@@ -68,6 +68,27 @@ else
     echo "hacktricks-mcp already installed."
 fi
 
+# --- Guard config check ---
+echo ""
+echo "── Guard configuration ──"
+ENV_FILE="$PROJECT_DIR/.env"
+if [[ -f "$ENV_FILE" ]] && grep -q "^GUARD_SECRET_PATHS=" "$ENV_FILE" 2>/dev/null; then
+    echo "Guard config: found in .env"
+    grep "^GUARD_" "$ENV_FILE" | sed 's/=.*$/=.../' | while read -r line; do echo "  $line"; done
+else
+    echo "Guard config: NOT in .env"
+    echo ""
+    echo "  Add guard vars to .env for host-mode security."
+    echo "  Copy from .env.example (section: Guard configuration):"
+    echo ""
+    echo "    GUARD_SECRET_PATHS=~/.ssh/id_* **/.env ~/.gnupg/**"
+    echo "    GUARD_PII_PATHS="
+    echo "    GUARD_SAFETY_ALLOWLIST="
+    echo "    GUARD_GIT_ALLOWLIST="
+    echo ""
+    echo "  Without GUARD_SECRET_PATHS, agent tools can read SSH keys and .env files."
+fi
+
 # --- Summary ---
 echo ""
 VENV_DIR="$PROJECT_DIR/mcp-servers/.venv"

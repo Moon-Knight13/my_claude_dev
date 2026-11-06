@@ -204,9 +204,21 @@ _ctp_path_in() {
     return 1
 }
 
-# ctp_is_secret_path <path> — 0 if the path matches a configured secret glob, so
-# its contents (credentials) must never be read into a transcript.
-ctp_is_secret_path() { _ctp_path_in "$1" "$CTP_SECRET_PATHS"; }
+# Secret path floor — always guarded, never overridable from config or env.
+# Same design as CTP_PII_BUILTIN: a setup step you can forget is a control that
+# fails open. .env holds API tokens and passwords; SSH keys are credentials;
+# GPG keyrings are signing material. These are fixed, known paths — there is no
+# reason to make protecting them opt-in.
+# shellcheck disable=SC2088
+CTP_SECRET_BUILTIN='**/.env ~/.ssh/id_* ~/.gnupg/**'
+
+# ctp_is_secret_path <path> — 0 if the path matches the always-on built-in list
+# OR a configured secret glob. Two lists, checked in order — the built-in one
+# is NOT a default for the configured one (same reasoning as CTP_PII_BUILTIN).
+ctp_is_secret_path() {
+    _ctp_path_in "$1" "$CTP_SECRET_BUILTIN" && return 0
+    _ctp_path_in "$1" "$CTP_SECRET_PATHS"
+}
 
 # The orchestrator's private config directory, guarded ALWAYS — not opt-in, and
 # not overridable from config or the caller's environment (assigned outright, not
