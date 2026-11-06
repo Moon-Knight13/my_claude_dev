@@ -110,13 +110,26 @@ EOF
     local git_user="${RANGE_GIT_USER:-}"
     local git_port="${RANGE_GIT_SSH_PORT:-10022}"
     if [[ -n "$git_host" && -n "$git_user" ]]; then
+        # Container: via deploybox (no direct range access).
+        # Host: direct (VPN gives direct access, same as other range services).
+        local git_proxy=""
+        [[ "$SURFACE" == "container" ]] && git_proxy="    ProxyJump deploybox"
+        # Host: use IdentityFile if a known range key exists
+        local git_identity=""
+        if [[ "$SURFACE" == "host" ]]; then
+            for _k in ~/.ssh/mcd_hub_frame ~/.ssh/DCM; do
+                [[ -f "$_k" ]] && { git_identity="    IdentityFile $_k"; break; }
+            done
+        fi
         cat <<EOF
 
 Host range-git $git_host
     HostName $git_host
     User $git_user
     Port $git_port
-    ProxyJump deploybox
+${git_proxy:+$git_proxy
+}${git_identity:+$git_identity
+}    IdentitiesOnly yes
     StrictHostKeyChecking accept-new
 EOF
     fi
@@ -170,4 +183,10 @@ if [[ -n "${SPOKE_KALI_HOST:-}" ]]; then
     fi
 fi
 # shellcheck disable=SC2015
-[[ -n "${RANGE_GIT_HOST:-}" && -n "${RANGE_GIT_USER:-}" ]] && echo "  --  Range git: ${RANGE_GIT_USER}@${RANGE_GIT_HOST}:${RANGE_GIT_SSH_PORT:-10022} (via deploybox)" || true
+if [[ -n "${RANGE_GIT_HOST:-}" && -n "${RANGE_GIT_USER:-}" ]]; then
+    if [[ "$SURFACE" == "container" ]]; then
+        echo "  --  Range git: ${RANGE_GIT_USER}@${RANGE_GIT_HOST}:${RANGE_GIT_SSH_PORT:-10022} (via deploybox)"
+    else
+        echo "  --  Range git: ${RANGE_GIT_USER}@${RANGE_GIT_HOST}:${RANGE_GIT_SSH_PORT:-10022} (direct)"
+    fi
+fi
