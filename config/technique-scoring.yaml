@@ -1,0 +1,37 @@
+# Technique scoring model configuration
+# Used by scripts/technique-scoring.py to rank techniques for orchestrator grounding.
+#
+# Composite score = W_empirical * empirical_rate
+#                 + W_epss * epss_score
+#                 + W_stealth * stealth_rating
+#                 + penalties
+
+weights:
+  empirical: 0.60
+  epss: 0.25
+  stealth: 0.15
+
+# Partial results count as this fraction of a success
+partial_weight: 0.5
+
+# Recency decay: exponential half-life in days.
+# Outcomes older than half_life contribute 50% weight, 2x half_life = 25%, etc.
+recency:
+  enabled: true
+  half_life_days: 90
+
+# Auto-deprioritization: 0% success across N+ engagements = penalty applied
+deprioritize:
+  min_engagements: 3
+  penalty: -0.50
+
+# Minimum attempts before score is considered reliable.
+# Below this threshold, score is flagged as "low_confidence".
+confidence_threshold: 3
+
+# Providentia accuracy gap detection.
+# Flag techniques where Providentia vuln data says exploitable
+# but empirical success rate is 0% across 2+ attempts.
+accuracy_gap:
+  enabled: true
+  min_attempts: 2
