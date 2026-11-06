@@ -319,8 +319,8 @@
 
   <section>
     <p class="eyebrow">For engineers</p>
-    <h2>The six moving parts</h2>
-    <p class="section-note">Each is a self-contained piece of the template. Together they turn a blank repo into a governed, AI-assisted delivery pipeline.</p>
+    <h2>The seven moving parts</h2>
+    <p class="section-note">Each is a self-contained piece of the platform. Seven operational modes — from platform-ops to red-team to homelab — activate different subsets of these parts.</p>
     <dl class="comp">
       <div>
         <dt>Devcontainer<span class="tag">.devcontainer/</span></dt>
@@ -346,13 +346,17 @@
         <dt>CI security gates<span class="tag">.github/workflows/</span></dt>
         <dd><b>gitleaks</b> secret scanning, <b>semgrep</b> SAST (incl. MITRE ATLAS AI/ML rules), <b>Trivy</b> container scanning, and every <b>scripts/tests</b> suite (gates, guards, orchestrator) against local mocks — all enforced, not advisory.</dd>
       </div>
+      <div>
+        <dt>MCP servers<span class="tag">mcp-servers/ · .claude/settings.json</span></dt>
+        <dd><b>15+ MCP servers</b> for targeting intel, C2 control, vulnerability scanning, technique reference, and knowledge management — each mode activates only the servers it needs. Range-facing servers reach spokes through an <b>SSE proxy</b>.</dd>
+      </div>
     </dl>
   </section>
 
   <section>
     <p class="eyebrow">Under the hood</p>
     <h2>How the pieces actually work</h2>
-    <p class="section-note">Five close-ups: the sealed environment, the two engines behind the routing, the token compressor, getting onto a shared dev box, and the gates every change runs.</p>
+    <p class="section-note">Six close-ups: the sealed environment, the two engines behind the routing, the MCP server stack, the token compressor, getting onto a shared dev box, and the gates every change runs.</p>
 
     <div class="dgram">
       <div class="dgram-h"><h3>The devcontainer</h3><span class="path">.devcontainer/</span></div>
@@ -414,6 +418,26 @@
       </div>
       <p class="d-note">A task is classified by type and risk; any hard trigger — auth, networking, 8+ files — always escalates to Claude. The same decision shows up as the <b>Route</b> field on the board card.</p>
       <p class="d-note">The local endpoint <b>differs by surface</b>. In the devcontainer the model runs on the host; on a remote box it runs on the developer's own machine and arrives over a reverse SSH tunnel only if the developer opts in (the tunnel is unauthenticated to other users of the shared box). When nothing answers, routing falls back to Claude and the work still completes — local is an optimisation, never a dependency.</p>
+    </div>
+
+    <div class="dgram">
+      <div class="dgram-h"><h3>MCP server stack</h3><span class="path">mcp-servers/ · .claude/settings.json</span></div>
+      <div class="pipe">
+        <div class="check"><div class="cn">outline-readonly</div><div class="cw">Read-only wiki access for doctrine, rules, and planning docs.</div><div class="cs">Node.js · hub</div></div>
+        <div class="check"><div class="cn">range-intel</div><div class="cw">Providentia range data + GitLab VM README vulnerability profiles for targeting intel.</div><div class="cs">Python · hub</div></div>
+        <div class="check"><div class="cn">tuoni-mcp</div><div class="cw">C2 agent management — commands, listeners, payloads, credentials.</div><div class="cs">official · range</div></div>
+        <div class="check"><div class="cn">BloodHound</div><div class="cw">Active Directory attack path analysis and domain enumeration.</div><div class="cs">range · new</div></div>
+        <div class="check"><div class="cn">Nuclei</div><div class="cw">Template-based vulnerability scanning against range targets.</div><div class="cs">range · new</div></div>
+        <div class="check"><div class="cn">Hashcat</div><div class="cw">Password hash cracking and credential recovery.</div><div class="cs">range · new</div></div>
+        <div class="check"><div class="cn">HackTricks</div><div class="cw">Technique reference — privilege escalation, persistence, lateral movement.</div><div class="cs">reference</div></div>
+        <div class="check"><div class="cn">MITRE ATT&amp;CK</div><div class="cw">Technique IDs, groups, software, coverage analysis.</div><div class="cs">reference</div></div>
+        <div class="check"><div class="cn">CVE</div><div class="cw">Vulnerability enrichment — NVD, EPSS, KEV, exploit search.</div><div class="cs">reference</div></div>
+        <div class="check"><div class="cn">LOLBins</div><div class="cw">Living-off-the-land binary lookup and detection analysis.</div><div class="cs">reference</div></div>
+        <div class="check"><div class="cn">Obsidian</div><div class="cw">Per-mode knowledge vault access and note management.</div><div class="cs">knowledge · hub</div></div>
+        <div class="check"><div class="cn">REA</div><div class="cw">Reverse engineering — binary analysis, decompilation, instrumentation.</div><div class="cs">analysis</div></div>
+        <div class="check"><div class="cn">local-ollama</div><div class="cw">Local model inference for low-risk and sensitive work.</div><div class="cs">hub · zero cost</div></div>
+      </div>
+      <p class="d-note"><b>Range-facing servers</b> (range-intel, tuoni-mcp, BloodHound, Nuclei, Hashcat) reach the range network through an <b>SSE proxy</b> — the devcontainer uses bridge networking, and the proxy translates stdio MCP connections to SSE endpoints on the host, which forward to range-connected spokes. <b>Reference servers</b> (HackTricks, MITRE, CVE, LOLBins) query public knowledge bases. <b>Hub servers</b> run locally on the operator's machine. Each mode activates only its needed subset.</p>
     </div>
 
     <div class="dgram">
@@ -720,7 +744,7 @@
 
         <path class="ln" d="M612 120 H628" marker-end="url(#sp1a-ah)"/>
       </svg>
-      <p class="d-note"><b>Why:</b> hook-injected mode rules degrade in long sessions (context bleed, routing ambiguity). T3 threads give structural context isolation, persistent mode sessions, and a clean audit trail. <b>Security improves:</b> hooks are project-scoped and fire on all threads, including delegate children. The <span class="path">.active-mode</span> shared-state gap is solved by project-per-mode-group.</p>
+      <p class="d-note"><b>Why:</b> hook-injected mode rules degrade in long sessions (context bleed, routing ambiguity). T3 threads give structural context isolation, persistent mode sessions, and a clean audit trail. <b>Security improves:</b> hooks are project-scoped and fire on all threads, including delegate children. The <span class="path">.active-mode</span> shared-state gap is solved by project-per-mode-group. <b>Partially operational:</b> T3 Code is already the orchestration surface — the master agent delegates implementation to threads and stays router-only. <span class="path">project-routes.yaml</span> maps modes to projects with mismatch detection in the mode-inject hook.</p>
     </div>
 
     <div class="dgram">
