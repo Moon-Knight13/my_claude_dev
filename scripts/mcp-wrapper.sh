@@ -39,6 +39,7 @@ _detect_mcp_name() {
             *bloodhound*|*BloodHound*)  echo "bloodhound-mcp"; return ;;
             *hashcat*)                  echo "hashcat-mcp"; return ;;
             *nuclei-mcp*|*nuclei_mcp*)  echo "nuclei-mcp"; return ;;
+            *ghidra-mcp*|*ghidra_mcp*) echo "ghidra-mcp"; return ;;
         esac
     done
     echo "unknown"
