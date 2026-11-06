@@ -44,6 +44,13 @@ For each operator-approved attack vector from recon:
 
 0. **Range vuln profiles** (range-intel `range_vuln_lookup`): check if range-intel
    already has vulnerability data for this target before external research
+0b. **BloodHound attack paths** (bloodhound-mcp — AD environments):
+   - Query attack paths from current access to target (DA, EA, specific accounts)
+   - Identify kerberoastable SPNs on shortest paths — prioritize for credential attacks
+   - Check delegation abuse chains (unconstrained, constrained, RBCD)
+   - Map ADCS misconfiguration vectors (ESC1-ESC8)
+   - Check NTLM relay opportunities to target DCs
+   - Use results to select and prioritize attack vectors below
 1. **HackTricks** (hacktricks-mcp): use efficient workflow:
    - `hacktricks_quick_lookup` for first-pass exploitation overview
    - `search_hacktricks` → `get_hacktricks_outline` → `get_hacktricks_section` for depth

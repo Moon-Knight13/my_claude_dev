@@ -39,17 +39,23 @@ is insufficient for the question.
 5. **Tuoni Discovery** via tuoni-mcp (`tuoni_discovery_hosts_list`)
    - Live C2 state: existing agents, discovered hosts from prior ops
    - ALWAYS queried fresh, never cached
-6. **Obsidian notes** via obsidian-mcp
+6. **BloodHound** via bloodhound-mcp (AD environments only)
+   - Attack path queries: shortest path to DA, kerberoastable users, delegation abuse
+   - NTLM relay vectors, certificate services vulns, AD hygiene
+   - Natural language queries — no manual Cypher needed
+   - Requires bloodhound-python collection data loaded into Neo4j
+7. **Obsidian notes** via obsidian-mcp
    - Operator tactical knowledge from prior engagements
    - Check raw/ for prior recon dumps, wiki/ for compiled intel
 
 ### Tier 3 — Reference (research)
 
-7. **HackTricks** via hacktricks-mcp — attack techniques for this platform/service
-8. **MITRE ATT&CK** via mitre-mcp — technique IDs, detection strategies
-9. **LOLBins** via lolbins-mcp — living-off-the-land binary abuse (Windows + Linux)
-10. **CVE intelligence** via cve-mcp — CVE details, EPSS scores, KEV, exploits
-11. **Web research** — last resort when all above insufficient
+8. **Nuclei** via nuclei-mcp — template-filtered vuln scanning with structured findings
+9. **HackTricks** via hacktricks-mcp — attack techniques for this platform/service
+10. **MITRE ATT&CK** via mitre-mcp — technique IDs, detection strategies
+11. **LOLBins** via lolbins-mcp — living-off-the-land binary abuse (Windows + Linux)
+12. **CVE intelligence** via cve-mcp — CVE details, EPSS scores, KEV, exploits
+13. **Web research** — last resort when all above insufficient
 
 ## Phases
 
@@ -96,6 +102,22 @@ high-value findings — document them.
 ### Phase 3: Vulnerability Analysis
 
 Cross-reference active recon results with Tier 3 sources:
+
+**Nuclei template scanning** (nuclei-mcp — structured vuln scan from Kali):
+- `basic_scan`: quick scan against target with default templates
+- `nuclei_scan`: full scan with severity/template filters based on recon findings
+  - Filter by severity: critical, high, medium based on target risk profile
+  - Filter by template tags matching identified services (e.g. apache, nginx, ssh)
+- `list_templates` / `get_template`: review available templates before scanning
+- Nuclei complements tuoni `vuln-assess` plugin: nuclei scans FROM Kali, plugin runs ON target
+
+**BloodHound AD path analysis** (bloodhound-mcp — AD environments only):
+- Query shortest paths from compromised user to high-value targets (DA, EA)
+- Identify kerberoastable accounts on attack paths
+- Detect NTLM relay opportunities and delegation abuse chains
+- Map certificate services (ADCS) vulnerabilities
+- Example NL queries: "shortest path from kerberoastable to DA",
+  "find NTLM relay-vulnerable DCs", "show delegation abuse paths"
 
 **CVE enrichment pipeline** (cve-mcp — run for each identified service version):
 - `cve_by_product`: search CVEs by product name + version from Providentia/recon
