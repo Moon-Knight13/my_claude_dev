@@ -53,6 +53,7 @@ Test MCP servers that depend on spoke connectivity:
 - **bloodhound-mcp:** any tool call (e.g. list domains) — confirms Neo4j connectivity
 - **hashcat-mcp:** any tool call (e.g. list capabilities) — confirms hashcat binary accessible
 - **nuclei-mcp:** any tool call (e.g. list templates) — confirms nuclei scanner available
+- **ghidra-mcp:** any tool call (e.g. list functions) — confirms Ghidra headless backend reachable
 
 ### Step 4: Mode Readiness
 
@@ -63,7 +64,7 @@ Based on results, report which modes are available:
 | platform-ops | Nothing (always available) |
 | green-dev | range-intel + outline-readonly + deploybox SSH |
 | red-team | All of green-dev + tuoni-mcp + kali SSH + bloodhound-mcp + nuclei-mcp |
-| red-dev | tuoni-mcp + kali SSH + hashcat-mcp |
+| red-dev | tuoni-mcp + kali SSH + hashcat-mcp + ghidra-mcp (optional) |
 | purple | All of red-team + hashcat-mcp |
 
 ### Step 5: Report
@@ -89,6 +90,7 @@ tuoni-mcp        OK
 bloodhound-mcp   OK
 hashcat-mcp      OK
 nuclei-mcp       OK
+ghidra-mcp       OK
 
 Mode Readiness
 ──────────────

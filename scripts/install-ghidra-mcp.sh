@@ -125,6 +125,8 @@ else
         "https://github.com/${GHIDRA_MCP_REPO}.git" "$GHIDRA_MCP_DIR"
 fi
 
+test -f "$GHIDRA_MCP_DIR/server.py" || { fail "entry point server.py not found in ${GHIDRA_MCP_DIR}"; exit 1; }
+
 # ── Install dependencies ────────────────────────────────────────────────
 if [[ -f "$GHIDRA_MCP_DIR/requirements.txt" ]]; then
     echo "Installing ghidra-mcp dependencies..."
