@@ -99,6 +99,24 @@ Trigger: after executing an offensive technique, "record technique",
 3. If credentials were obtained, add credential REF (see below).
 4. Write updated YAML.
 
+### Query Technique Scores (Orchestrator Grounding)
+
+Trigger: before selecting attack vectors, "rank techniques", "what works",
+"prioritize attack", or during initial-access/lateral-move planning.
+
+Invoke the `technique-scoring` skill or run directly:
+
+```bash
+python3 scripts/technique-scoring.py --format json --top 10
+python3 scripts/technique-scoring.py --query T1003.001 --format json
+python3 scripts/technique-scoring.py --gaps --providentia-cache llm-wiki/raw/providentia/vulns.yaml
+```
+
+Scores are computed from all engagement YAMLs (active + archived). The
+orchestrator should prefer techniques with high empirical success rates on
+this range over theoretical Providentia/EPSS scores. See
+`config/technique-scoring.yaml` for weights and thresholds.
+
 ### Add Credential Reference
 
 Trigger: credentials harvested during engagement.
@@ -185,6 +203,9 @@ engagement starts from Providentia ground truth, not stale cached data.
    - `llm-wiki/wiki/vulnerabilities/` pages — reusable vulnerability intel.
    - `Notes_Mitre_ATTack_Framework/` pages — MITRE cross-references.
    - Providentia accuracy tracker pages — operator feedback loop.
+   - `engagements/archive/<id>.yaml` — technique scoring reads archived
+     engagement data to compute cross-engagement success rates. See
+     `technique-scoring` skill for orchestrator grounding.
 7. Cleared data (scoped to archived engagement only):
    - Active engagement YAML removed from `engagements/` (moved to archive).
    - `llm-wiki/raw/providentia/` and `llm-wiki/raw/gitlab/` cache files

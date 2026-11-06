@@ -319,7 +319,7 @@
 
   <section>
     <p class="eyebrow">For engineers</p>
-    <h2>The seven moving parts</h2>
+    <h2>The eight moving parts</h2>
     <p class="section-note">Each is a self-contained piece of the platform. Seven operational modes — from platform-ops to red-team to homelab — activate different subsets of these parts.</p>
     <dl class="comp">
       <div>
@@ -350,13 +350,17 @@
         <dt>MCP servers<span class="tag">mcp-servers/ · .claude/settings.json</span></dt>
         <dd><b>15+ MCP servers</b> for targeting intel, C2 control, vulnerability scanning, technique reference, and knowledge management — each mode activates only the servers it needs. Range-facing servers reach spokes through an <b>SSE proxy</b>.</dd>
       </div>
+      <div>
+        <dt>Technique scoring<span class="tag">scripts/technique-scoring.py</span></dt>
+        <dd>Aggregates technique outcomes across engagements into <b>composite scores</b> for orchestrator grounding — ranking attack techniques by empirical success rate, recency, and stealth so the orchestrator picks what actually works.</dd>
+      </div>
     </dl>
   </section>
 
   <section>
     <p class="eyebrow">Under the hood</p>
     <h2>How the pieces actually work</h2>
-    <p class="section-note">Six close-ups: the sealed environment, the two engines behind the routing, the MCP server stack, the token compressor, getting onto a shared dev box, and the gates every change runs.</p>
+    <p class="section-note">Seven close-ups: the sealed environment, the two engines behind the routing, the MCP server stack, the token compressor, getting onto a shared dev box, the gates every change runs, and the technique scoring engine.</p>
 
     <div class="dgram">
       <div class="dgram-h"><h3>The devcontainer</h3><span class="path">.devcontainer/</span></div>
@@ -473,6 +477,17 @@
         <div class="check"><div class="cn">weekly audit</div><div class="cw">Scheduled repo-wide security sweep.</div><div class="cs">repository-audit.yml</div></div>
       </div>
       <p class="d-note">Every gate is required, not advisory — a red check keeps the pull request from merging. These run in CI; the on-box runtime controls are below.</p>
+    </div>
+
+    <div class="dgram">
+      <div class="dgram-h"><h3>Technique scoring engine</h3><span class="path">scripts/technique-scoring.py · config/technique-scoring.yaml</span></div>
+      <div class="pipe">
+        <div class="check"><div class="cn">aggregate</div><div class="cw">Scans all engagement YAMLs (active + archived) and collects every technique attempt with its result, target, and timestamp.</div><div class="cs">engagements/</div></div>
+        <div class="check"><div class="cn">score</div><div class="cw">Computes a composite score per technique: <b>empirical success rate</b> (recency-weighted), EPSS, and stealth — configurable weights.</div><div class="cs">weighted</div></div>
+        <div class="check"><div class="cn">flag</div><div class="cw">Auto-deprioritizes techniques that keep failing, flags low-confidence scores, and detects <b>Providentia accuracy gaps</b> (range says exploitable, empirical rate says zero).</div><div class="cs">gap detect</div></div>
+        <div class="check"><div class="cn">ground</div><div class="cw">The ranked output feeds the orchestrator so technique selection is based on <b>what actually worked</b>, not assumptions.</div><div class="cs">orchestrator</div></div>
+      </div>
+      <p class="d-note">Supports per-target filtering (<span class="path">--target</span>) and single-technique query (<span class="path">--query</span>). Scores accumulate across engagements — every operation makes the next one's technique selection better.</p>
     </div>
   </section>
 
