@@ -5,6 +5,9 @@ implement it, and open a PR. This is how an agent session "picks up an issue."
 
 ## Preconditions
 
+- Board subsystem is enabled: check `source scripts/lib/subsystems.sh && subsystem_enabled BOARD`.
+  If disabled (`SUBSYSTEM_BOARD=false` in `template.conf`), stop and tell the user
+  the board subsystem is off — use plain GitHub issues instead.
 - The board exists (`.ai/project.env` present) and you are on a clean working tree.
 
 ## Instructions

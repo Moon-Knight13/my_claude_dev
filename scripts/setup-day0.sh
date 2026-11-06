@@ -20,6 +20,8 @@ cd "$_SCRIPT_DIR/.." || exit 0
 
 # shellcheck disable=SC1090,SC1091
 source "$_SCRIPT_DIR/lib/template-detect.sh"
+# shellcheck disable=SC1090,SC1091
+source "$_SCRIPT_DIR/lib/subsystems.sh"
 
 echo "Day-0 auto-setup"
 echo "================"
@@ -169,11 +171,15 @@ if gh auth status >/dev/null 2>&1; then
         APPLY=true ADMIN_BYPASS=true bash scripts/bootstrap-github-settings.sh \
             || echo "  !!  bootstrap-github-settings.sh failed (continuing)"
     fi
-    if gh auth status 2>&1 | grep -qF "'project'" \
-        && [[ ! -f .ai/project-bootstrap-completed ]]; then
-        echo "  >>  gh has 'project' scope — bootstrapping Kanban board (bootstrap-project.sh)…"
-        APPLY=true bash scripts/bootstrap-project.sh \
-            || echo "  !!  bootstrap-project.sh failed (continuing)"
+    if subsystem_enabled BOARD; then
+        if gh auth status 2>&1 | grep -qF "'project'" \
+            && [[ ! -f .ai/project-bootstrap-completed ]]; then
+            echo "  >>  gh has 'project' scope — bootstrapping Kanban board (bootstrap-project.sh)…"
+            APPLY=true bash scripts/bootstrap-project.sh \
+                || echo "  !!  bootstrap-project.sh failed (continuing)"
+        fi
+    else
+        echo "  --  Board subsystem disabled (SUBSYSTEM_BOARD=false) — skipping board bootstrap."
     fi
 else
     echo "  --  gh not authenticated yet — skipping GitHub/board bootstraps (see next steps)."

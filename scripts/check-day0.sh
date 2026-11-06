@@ -102,16 +102,20 @@ fi
 # Match the quoted 'project' scope token — an unanchored "project" also matches
 # the read-only 'read:project' scope, which cannot create/manage the board.
 GH_SCOPE=false
-if [[ "$GH_AUTHED" == "true" ]]; then
-    if gh auth status 2>&1 | grep -qF "'project'"; then
-        GH_SCOPE=true
-        check "gh has Projects scope" "pass" ""
+if subsystem_enabled BOARD; then
+    if [[ "$GH_AUTHED" == "true" ]]; then
+        if gh auth status 2>&1 | grep -qF "'project'"; then
+            GH_SCOPE=true
+            check "gh has Projects scope" "pass" ""
+        else
+            check "gh has Projects scope" "fail" \
+                "Grant it with: gh auth refresh -s project  — then re-run: bash scripts/setup-day0.sh"
+        fi
     else
-        check "gh has Projects scope" "fail" \
-            "Grant it with: gh auth refresh -s project  — then re-run: bash scripts/setup-day0.sh"
+        check "gh has Projects scope" "skip" "gh not authenticated"
     fi
 else
-    check "gh has Projects scope" "skip" "gh not authenticated"
+    echo "  --  gh Projects scope: not needed (SUBSYSTEM_BOARD=false)"
 fi
 
 # 4. Claude CLI authenticated (browser login; credentials live in the config
@@ -235,14 +239,18 @@ else
 fi
 
 # 10. Kanban board bootstrapped. setup-day0.sh applies it once gh has the
-# project scope.
-if [[ -f ".ai/project-bootstrap-completed" ]]; then
-    check "Kanban board bootstrapped" "pass" ""
-elif [[ "$GH_AUTHED" == "true" && "$GH_SCOPE" == "true" ]]; then
-    check "Kanban board bootstrapped" "fail" \
-        "Run: bash scripts/setup-day0.sh  (creates the Project board)"
+# project scope. Skipped entirely when the board subsystem is disabled.
+if subsystem_enabled BOARD; then
+    if [[ -f ".ai/project-bootstrap-completed" ]]; then
+        check "Kanban board bootstrapped" "pass" ""
+    elif [[ "$GH_AUTHED" == "true" && "$GH_SCOPE" == "true" ]]; then
+        check "Kanban board bootstrapped" "fail" \
+            "Run: bash scripts/setup-day0.sh  (creates the Project board)"
+    else
+        check "Kanban board bootstrapped" "skip" "gh not authenticated or missing project scope"
+    fi
 else
-    check "Kanban board bootstrapped" "skip" "gh not authenticated or missing project scope"
+    echo "  --  Kanban board: disabled (SUBSYSTEM_BOARD=false)"
 fi
 
 # ── Optional ──────────────────────────────────────────────────────────────────

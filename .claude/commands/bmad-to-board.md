@@ -5,6 +5,9 @@ artifact and create an epic plus its stories as GitHub issues on the project boa
 
 ## Preconditions
 
+- Board subsystem is enabled: check `source scripts/lib/subsystems.sh && subsystem_enabled BOARD`.
+  If disabled (`SUBSYSTEM_BOARD=false` in `template.conf`), stop and tell the user
+  the board subsystem is off — create issues directly with `gh issue create` instead.
 - The board exists (`.ai/project.env` present). If not, tell the user to run
   `APPLY=true bash scripts/bootstrap-project.sh` first.
 - A BMAD Task-Decomposition artifact exists (e.g. under `.ai/`). If the user has

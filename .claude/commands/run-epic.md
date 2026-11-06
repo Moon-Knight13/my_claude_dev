@@ -4,6 +4,12 @@ Take ownership of an epic and drive its child stories to completion, fanning wor
 out to subagents without collisions. This is the "human picks up an epic and
 manages subagents" flow.
 
+## Preconditions
+
+- Board subsystem is enabled: check `source scripts/lib/subsystems.sh && subsystem_enabled BOARD`.
+  If disabled (`SUBSYSTEM_BOARD=false` in `template.conf`), stop and tell the user
+  the board subsystem is off — use plain GitHub issues instead.
+
 ## Usage
 
 `/run-epic <epic-issue#>`
