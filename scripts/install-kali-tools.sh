@@ -31,19 +31,19 @@ ROLLBACK=false
 SNAPSHOT_ONLY=false
 TIER_FILTER=""
 
-for arg in "$@"; do
-    case "$arg" in
+while (( $# > 0 )); do
+    case "$1" in
         --dry-run) DRY_RUN=true; APPLY=false ;;
         --apply) APPLY=true; DRY_RUN=false ;;
         --rollback) ROLLBACK=true ;;
         --snapshot) SNAPSHOT_ONLY=true ;;
-        --tier) shift; TIER_FILTER="${1:-}" ;;
-        2|3|4|5|6) [[ -z "$TIER_FILTER" ]] && TIER_FILTER="$arg" ;;
+        --tier) TIER_FILTER="${2:-}"; shift ;;
+        2|3|4|5|6) [[ -z "$TIER_FILTER" ]] && TIER_FILTER="$1" ;;
         --help|-h)
             echo "Usage: $0 [--dry-run|--apply|--rollback|--snapshot] [--tier N]"
             exit 0 ;;
     esac
-    shift 2>/dev/null || true
+    shift
 done
 
 if [[ -z "$KALI_HOST" ]]; then
@@ -182,7 +182,14 @@ install_pip() {
 
 install_binary() {
     local name="$1" url="$2" dest="$3"
-    if run_kali "test -x $dest"; then
+    if [[ "$url" != https://* ]]; then
+        echo "  REJECT $name: URL must start with https://"
+        ((failed++)) || true
+        return
+    fi
+    local safe_url
+    safe_url=$(printf '%q' "$url")
+    if run_kali "test -x $(printf '%q' "$dest")"; then
         echo "  SKIP $name (exists at $dest)"
         ((skipped++)) || true
         return
@@ -193,13 +200,13 @@ install_binary() {
     fi
     echo "  DOWNLOADING: $name"
     run_kali "mkdir -p $(dirname "$dest")"
-    if run_kali "curl -sL -o $dest '$url' && chmod +x $dest"; then
+    if run_kali "curl -sL -o $(printf '%q' "$dest") $safe_url && chmod +x $(printf '%q' "$dest")"; then
         echo "  OK $name -> $dest"
-        run_kali "ln -sf $dest /usr/local/bin/$name 2>/dev/null || true"
+        run_kali "ln -sf $(printf '%q' "$dest") /usr/local/bin/$(printf '%q' "$name") 2>/dev/null || true"
         ((installed++)) || true
     else
         echo "  FAIL $name"
-        run_kali "rm -f $dest"
+        run_kali "rm -f $(printf '%q' "$dest")"
         ((failed++)) || true
     fi
 }

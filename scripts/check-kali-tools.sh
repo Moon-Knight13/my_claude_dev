@@ -22,17 +22,17 @@ TIER_FILTER=""
 JSON_MODE=false
 CHECK_ONLY=false
 
-for arg in "$@"; do
-    case "$arg" in
-        --tier) shift; TIER_FILTER="${1:-}" ;;
-        1|2|3|4|5|6) [[ -n "$TIER_FILTER" ]] || TIER_FILTER="$arg" ;;
+while (( $# > 0 )); do
+    case "$1" in
+        --tier) TIER_FILTER="${2:-}"; shift ;;
+        1|2|3|4|5|6) [[ -n "$TIER_FILTER" ]] || TIER_FILTER="$1" ;;
         --json) JSON_MODE=true ;;
         --check-only) CHECK_ONLY=true ;;
         --help|-h)
             echo "Usage: $0 [--tier N] [--json] [--check-only]"
             exit 0 ;;
     esac
-    shift 2>/dev/null || true
+    shift
 done
 
 if [[ -z "$KALI_HOST" ]]; then

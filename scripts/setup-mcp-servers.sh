@@ -85,26 +85,17 @@ read -r -d '' CATALOG << 'CATALOG_JSON' || true
     "command": "/workspace/scripts/mcp-wrapper.sh",
     "args": ["python3", "-m", "bloodhound_mcp"],
     "env": {
-      "BH_NEO4J_URI": "bolt://${SPOKE_KALI_HOST:-localhost}:7687",
-      "BH_NEO4J_USER": "${BH_NEO4J_USER:-neo4j}",
-      "BH_NEO4J_PASSWORD": "${BH_NEO4J_PASSWORD:-}"
+      "BH_NEO4J_PORT": "7687",
+      "BH_NEO4J_USER": "neo4j"
     }
   },
   "hashcat-mcp": {
     "command": "/workspace/scripts/mcp-wrapper.sh",
-    "args": ["python3", "-m", "hashcat_mcp"],
-    "env": {
-      "HASHCAT_HOST": "${SPOKE_KALI_HOST:-localhost}",
-      "HASHCAT_SSH_USER": "${SPOKE_KALI_USER:-rt}"
-    }
+    "args": ["python3", "-m", "hashcat_mcp"]
   },
   "nuclei-mcp": {
     "command": "/workspace/scripts/mcp-wrapper.sh",
-    "args": ["/workspace/.cache/nuclei-mcp/nuclei-mcp"],
-    "env": {
-      "NUCLEI_HOST": "${SPOKE_KALI_HOST:-localhost}",
-      "NUCLEI_SSH_USER": "${SPOKE_KALI_USER:-rt}"
-    }
+    "args": ["/workspace/.cache/nuclei-mcp/nuclei-mcp"]
   }
 }
 CATALOG_JSON
