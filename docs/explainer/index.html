@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Claude Secure Template — what it is &amp; how it works</title>
+<title>my_claude_dev — multi-environment operator hub</title>
 <style>
   :root {
     --ground: #EEF1F4;
@@ -264,11 +264,11 @@
 <div class="wrap">
   <header>
     <span class="badge">secure&nbsp;<b>by&nbsp;default</b>&nbsp;·&nbsp;human&nbsp;in&nbsp;the&nbsp;loop</span>
-    <p class="eyebrow">Claude Secure Template</p>
-    <h1>A guarded workshop where AI does the work and nothing ships unchecked.</h1>
-    <p class="lede">A production-ready starting point for building software with Claude.
-      Work comes in, gets <span class="hl">routed</span> to whoever should do it — a person, Claude,
-      or a cheaper local model — and every change passes the same security gates before it merges.</p>
+    <p class="eyebrow">my_claude_dev</p>
+    <h1>A multi-environment operator hub with safety built in.</h1>
+    <p class="lede">A framework for running AI-assisted security operations and software development from a single Claude session.
+      Work is <span class="hl">mode-isolated</span>, routed to the right model by risk,
+      and every change passes the same security gates before it merges.</p>
   </header>
 
   <div class="board" aria-label="How work flows through the template">
@@ -634,6 +634,137 @@
     </div>
   </section>
 
+  <section aria-labelledby="v3-h">
+    <span class="badge planned">status&nbsp;<b>planned</b>&nbsp;·&nbsp;design&nbsp;2026-11-06&nbsp;·&nbsp;nothing&nbsp;built&nbsp;yet</span>
+    <p class="eyebrow">Roadmap · v3 vision</p>
+    <h2 id="v3-h">Next: multi-environment operator hub</h2>
+    <p class="section-note">The current architecture serves one environment (a dedicated cyber range). v3 generalizes the framework to support independent operational domains — CTF challenges, penetration tests, bug bounties, software development, and homelab infrastructure — each with its own modes, knowledge bases, and model failover.</p>
+
+    <div class="dgram">
+      <div class="dgram-h"><h3>New operational modes</h3><span class="path">planned · .claude/modes/</span></div>
+      <div class="cards">
+        <div class="card">
+          <h3>dev</h3>
+          <p>General software development. No offensive tools, full coding toolchain. The default for non-security work.</p>
+        </div>
+        <div class="card">
+          <h3>ctf</h3>
+          <p>CTF platform challenges (HTB, THM, Proving Grounds). Flag-oriented, no OPSEC requirements. Per-challenge threads.</p>
+        </div>
+        <div class="card">
+          <h3>pentest</h3>
+          <p>Client penetration testing. SOW-scoped, formal reporting, alternative C2 integration. Per-engagement threads.</p>
+        </div>
+        <div class="card">
+          <h3>bounty</h3>
+          <p>Bug bounty programs. Program policy as scope definition, web-focused tooling, no C2 needed.</p>
+        </div>
+      </div>
+      <p class="d-note">Existing modes (base, platform-ops, green-dev, red-team, red-dev, purple, homelab) remain unchanged. Each new mode follows the same structure: system prompt, settings, and tool policy.</p>
+    </div>
+
+    <div class="dgram">
+      <div class="dgram-h"><h3>T3-native routing</h3><span class="path">planned · replaces hook-injected mode switching</span></div>
+      <svg class="sp1a-svg" viewBox="0 0 760 260" role="img" aria-labelledby="t3-svg-t t3-svg-d">
+        <title id="t3-svg-t">T3 routing architecture</title>
+        <desc id="t3-svg-d">A hub thread routes work to T3 projects (environment profiles), each containing mode-scoped threads. Projects provide hook isolation and per-project mode state.</desc>
+
+        <!-- hub -->
+        <rect class="bx-gate" x="20" y="90" width="130" height="60" rx="8"/>
+        <text class="t-k k-gate" x="85" y="113" text-anchor="middle">HUB THREAD</text>
+        <text class="t-s" x="85" y="131" text-anchor="middle">base · router</text>
+
+        <!-- arrow to projects -->
+        <path class="ln" d="M152 120 H200" marker-end="url(#sp1a-ah)"/>
+
+        <!-- projects column -->
+        <rect class="zone-h" x="210" y="16" width="170" height="228" rx="10"/>
+        <text class="t-k k-gate" x="224" y="38">T3 PROJECTS</text>
+        <text class="t-s" x="224" y="54">= environment profiles</text>
+
+        <rect class="bx" x="224" y="68" width="142" height="32" rx="5"/>
+        <text class="t-s" x="295" y="89" text-anchor="middle">Range ops</text>
+        <rect class="bx" x="224" y="108" width="142" height="32" rx="5"/>
+        <text class="t-s" x="295" y="129" text-anchor="middle">CTF</text>
+        <rect class="bx" x="224" y="148" width="142" height="32" rx="5"/>
+        <text class="t-s" x="295" y="169" text-anchor="middle">Pentest</text>
+        <rect class="bx" x="224" y="188" width="142" height="32" rx="5"/>
+        <text class="t-s" x="295" y="209" text-anchor="middle">Homelab / Dev</text>
+
+        <!-- arrow to threads -->
+        <path class="ln" d="M382 120 H430" marker-end="url(#sp1a-ah)"/>
+
+        <!-- threads column -->
+        <rect class="zone-s" x="440" y="16" width="170" height="228" rx="10"/>
+        <text class="t-k k-steel" x="454" y="38">T3 THREADS</text>
+        <text class="t-s" x="454" y="54">= mode sessions</text>
+
+        <rect class="bx" x="454" y="68" width="142" height="32" rx="5"/>
+        <text class="t-s" x="525" y="89" text-anchor="middle">red-team · op-1</text>
+        <rect class="bx" x="454" y="108" width="142" height="32" rx="5"/>
+        <text class="t-s" x="525" y="129" text-anchor="middle">ctf · box-47</text>
+        <rect class="bx" x="454" y="148" width="142" height="32" rx="5"/>
+        <text class="t-s" x="525" y="169" text-anchor="middle">pentest · client-a</text>
+        <rect class="bx" x="454" y="188" width="142" height="32" rx="5"/>
+        <text class="t-s" x="525" y="209" text-anchor="middle">homelab · vllm</text>
+
+        <!-- security note -->
+        <rect class="bx-gate" x="630" y="50" width="120" height="160" rx="8"/>
+        <text class="t-k k-gate" x="690" y="72" text-anchor="middle">HOOKS</text>
+        <text class="t-s" x="690" y="92" text-anchor="middle">project-scoped</text>
+        <text class="t-s" x="690" y="110" text-anchor="middle">fire on ALL</text>
+        <text class="t-s" x="690" y="128" text-anchor="middle">threads in</text>
+        <text class="t-s" x="690" y="146" text-anchor="middle">project</text>
+        <text class="t-s k-gate" x="690" y="172" text-anchor="middle">guard stack</text>
+        <text class="t-s k-gate" x="690" y="190" text-anchor="middle">mode-tool-gate</text>
+
+        <path class="ln" d="M612 120 H628" marker-end="url(#sp1a-ah)"/>
+      </svg>
+      <p class="d-note"><b>Why:</b> hook-injected mode rules degrade in long sessions (context bleed, routing ambiguity). T3 threads give structural context isolation, persistent mode sessions, and a clean audit trail. <b>Security improves:</b> hooks are project-scoped and fire on all threads, including delegate children. The <span class="path">.active-mode</span> shared-state gap is solved by project-per-mode-group.</p>
+    </div>
+
+    <div class="dgram">
+      <div class="dgram-h"><h3>Model failover chain</h3><span class="path">planned · cost-aware</span></div>
+      <div class="pipe">
+        <div class="check" style="border-left-color:var(--accent)"><div class="cn">Tier 0 · Claude MAX</div><div class="cw"><b>Primary.</b> Opus 4.6, full capability. Subscription, already paid. Used for all complex reasoning, architecture, and security work.</div><div class="cs">cloud · subscription</div></div>
+        <div class="check"><div class="cn">Tier 1 · Homelab vLLM</div><div class="cw"><b>First failover.</b> Abliterated open-weight model on controlled infrastructure. Zero marginal cost. Also handles prompts that hit content policy blocks.</div><div class="cs">self-hosted · zero cost</div></div>
+        <div class="check"><div class="cn">Tier 2 · Cloud GPU</div><div class="cw"><b>Insurance.</b> Serverless vLLM on cloud GPU provider. Same model as homelab. Pay-per-second when homelab is down.</div><div class="cs">cloud · pay-per-use</div></div>
+        <div class="check"><div class="cn">Tier 3 · Local Ollama</div><div class="cw"><b>Emergency.</b> On-laptop, degraded capability. Zero cost. Always available as last resort.</div><div class="cs">local · zero cost</div></div>
+      </div>
+      <p class="d-note">Failover triggers: 5xx, timeout, rate limit, content policy block. Content policy blocks skip directly to Tier 1 (abliterated model handles legitimate security research prompts). The failover harness is a provider-agnostic CLI (OpenCode) with MCP support.</p>
+    </div>
+
+    <div class="dgram">
+      <div class="dgram-h"><h3>Vault-per-mode knowledge bases</h3><span class="path">planned · Obsidian + semantic search MCP</span></div>
+      <div class="cards">
+        <div class="card">
+          <h3>Domain isolation</h3>
+          <p>Each mode gets its own Obsidian vault. CTF notes stay out of pentest searches. A shared reference vault (MITRE, cheatsheets) is available to all modes.</p>
+        </div>
+        <div class="card">
+          <h3>Semantic search</h3>
+          <p>A new vault-search MCP backed by local embeddings (nomic-embed-text on homelab) gives agents context-aware retrieval beyond keyword matching.</p>
+        </div>
+        <div class="card">
+          <h3>Accumulating advantage</h3>
+          <p>Knowledge bases grow with use. Every engagement, challenge, and research session feeds the vault. The model is swappable; the accumulated experience is not.</p>
+        </div>
+      </div>
+      <p class="d-note">Build sequence: structure vaults, deploy embedding model (homelab), build vault-search-mcp (platform-ops), populate organically during work. Tier 1 search (obsidian-mcp keyword) works today.</p>
+    </div>
+
+    <div class="dgram">
+      <div class="dgram-h"><h3>What makes this a framework, not a weapon</h3><span class="path">portfolio positioning</span></div>
+      <div class="pipe">
+        <div class="check"><div class="cn">no operational data</div><div class="cw">No credentials, targets, findings, or engagement-specific configuration in the repository. Operational data lives in vaults and environment profiles outside the repo.</div><div class="cs">by design</div></div>
+        <div class="check"><div class="cn">infra-coupled skills</div><div class="cw">Offensive skills require range connectivity and C2 server access to function. Without the infrastructure, they are inert documentation.</div><div class="cs">by design</div></div>
+        <div class="check"><div class="cn">safety harness</div><div class="cw">Fail-closed, tested, documented, and demonstrable. Published alongside offensive capability — not hidden from it.</div><div class="cs">documented</div></div>
+        <div class="check"><div class="cn">open architecture</div><div class="cw">Less directly weaponizable than open-source C2 frameworks and attack path analysis tools that are widely published and used in the industry.</div><div class="cs">context</div></div>
+      </div>
+      <p class="d-note">Full v3 architecture: <span class="path">docs/ARCHITECTURE_VISION.md</span> in the repository.</p>
+    </div>
+  </section>
+
   <footer>
     <p style="margin:0 0 4px;font-family:var(--sans);font-weight:640;color:var(--ink)">Where to go deeper</p>
     <div class="docs">
@@ -644,6 +775,7 @@
       <span>docs/KANBAN_WORKFLOW.md</span>
       <span>docs/SP1A_ARCHITECTURE.md (planned)</span>
       <span>docs/SP1A_FLEET.md</span>
+      <span>docs/ARCHITECTURE_VISION.md (v3 planned)</span>
     </div>
     <p class="fine">The repository README is the source of truth; this overview is a briefing companion. Apache-2.0.</p>
   </footer>

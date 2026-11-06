@@ -1,0 +1,6 @@
+# red-team mode — offensive ops + research + engagement docs.
+# Full access to offensive and reference MCPs.
+# No local-ollama (not needed for ops).
+deny:
+  - "mcp__local-ollama__*"
+  - "mcp__rea-mcp__*"

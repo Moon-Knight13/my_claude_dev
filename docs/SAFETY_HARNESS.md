@@ -227,6 +227,33 @@ depth, not a boundary.
 bypassable / box-only), so a demo can start by showing the harness declaring its
 own posture.
 
+## T3 thread model and hook scoping
+
+When using T3 Code for multi-thread orchestration (the planned v3 routing
+architecture), hooks behave as follows:
+
+- **Hooks are project-scoped.** They use `$CLAUDE_PROJECT_DIR` and fire on
+  **all threads** within a T3 project — including threads launched by
+  `t3_thread_launch` and children spawned by `delegate_task`.
+- **The guard stack fires regardless of thread origin.** A delegate child
+  inherits the project context, so `pretooluse-ctp.sh`, `mode-tool-gate.sh`,
+  and the full guard stack apply to every tool call in every thread.
+- **`.active-mode` is shared state within a project.** This is a known gap:
+  two threads in the same project that need different modes will read the same
+  `.active-mode` file. The mitigation is **project-per-mode-group** — each T3
+  project gets its own `.claude/` directory with its own `.active-mode` and
+  `tool-policy.yaml`, so threads within a project always share the correct
+  mode context.
+- **Cross-thread messaging** is a new attack surface under T3 routing. It is
+  mitigated by the existing defense-in-depth: the guard stack fires on all
+  tool calls regardless of whether they originate from a direct prompt, a
+  delegated task, or a cross-thread message.
+
+Net effect: T3-native routing **improves** security over hook-injected modes
+by adding context isolation (no cross-mode bleed) while preserving all existing
+hard gates. See [`ARCHITECTURE_VISION.md`](ARCHITECTURE_VISION.md) for the full
+security assessment.
+
 ## References
 
 - Rules and rationale: [`PROJECT.md`](PROJECT.md) — *Build-tooling commands*,

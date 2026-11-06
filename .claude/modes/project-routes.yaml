@@ -1,0 +1,23 @@
+# Project-to-mode routing map.
+#
+# When the master agent (base mode) dispatches work to a T3 project,
+# this map determines the default mode for that project's threads.
+# The master agent reads this at routing time and either:
+#   1. Switches mode before acting (if staying in-session)
+#   2. Includes mode context in the delegate brief
+#
+# Format: repo canonical key (lowercase) -> mode name
+
+routes:
+  "github.com/moon-knight13/my_claude_dev": "platform-ops"
+  "github.com/moon-knight13/tuoni-plugins": "red-dev"
+  "github.com/moon-knight13/homelab_planning": "homelab"
+  "github.com/moon-knight13/foundryvtt-docker": "homelab"
+  "github.com/moon-knight13/medicat-usb": "homelab"
+
+# Non-repo projects (matched by T3 project title)
+project_names:
+  "DnD": "base"
+
+# Default when no route matches
+default: "base"

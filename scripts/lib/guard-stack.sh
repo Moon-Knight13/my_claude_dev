@@ -111,6 +111,20 @@ guard_stack_load() { # guard_stack_load [hook|executor]
         source "$_GS_GITGUARD_LIB"
         gitguard_load_config "${GIT_GUARD_CONF:-$HOME/.config/git-guard.conf}" || true
     fi
+
+    # .env integration: GUARD_* env vars (set by the caller sourcing load-env.sh)
+    # extend or replace config-file values. On remote boxes where .env has no
+    # GUARD_* vars, this is a no-op and config files govern.
+    #
+    # Path lists EXTEND (additive = more protection; same principle as the builtin
+    # floor — can only make content guarded, never remove it).
+    # Allowlists REPLACE (the .env list is authoritative when set).
+    # shellcheck disable=SC2034  # globals consumed cross-file by guard predicates
+    [[ -n "${GUARD_SECRET_PATHS:-}" ]]     && CTP_SECRET_PATHS="${CTP_SECRET_PATHS:+$CTP_SECRET_PATHS }$GUARD_SECRET_PATHS"
+    [[ -n "${GUARD_PII_PATHS:-}" ]]        && CTP_PII_PATHS="${CTP_PII_PATHS:+$CTP_PII_PATHS }$GUARD_PII_PATHS"
+    [[ -n "${GUARD_SAFETY_ALLOWLIST:-}" ]] && _SAFETY_ALLOWLIST="$GUARD_SAFETY_ALLOWLIST"
+    [[ -n "${GUARD_GIT_ALLOWLIST:-}" ]]    && _GITGUARD_ALLOWLIST="$GUARD_GIT_ALLOWLIST"
+
     return 0
 }
 

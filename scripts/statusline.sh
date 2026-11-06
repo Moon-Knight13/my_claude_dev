@@ -20,7 +20,15 @@ if [ ! -t 0 ]; then
 fi
 
 # --- Caveman badge ---
+# Resolve caveman statusline: env override > auto-detect from plugin cache.
+# install-caveman.sh hardcodes a container path; on host the version dir differs.
 CAVEMAN_STATUSLINE_CMD="${CAVEMAN_STATUSLINE_CMD:-}"
+if [ -z "$CAVEMAN_STATUSLINE_CMD" ] || [ ! -f "$CAVEMAN_STATUSLINE_CMD" ]; then
+    for _d in "$HOME"/.claude/plugins/cache/caveman/caveman/*/src/hooks \
+              "$HOME"/.claude/plugins/cache/claude-plugins-official/caveman/*/src/hooks; do
+        [ -f "$_d/caveman-statusline.sh" ] && { CAVEMAN_STATUSLINE_CMD="$_d/caveman-statusline.sh"; break; }
+    done
+fi
 CAVEMAN_OUT=""
 if [ -n "$CAVEMAN_STATUSLINE_CMD" ] && [ -f "$CAVEMAN_STATUSLINE_CMD" ]; then
     CAVEMAN_OUT=$(printf '%s' "$STDIN_BUF" | bash "$CAVEMAN_STATUSLINE_CMD" 2>/dev/null) || true
@@ -39,13 +47,19 @@ if [ -f "$MODE_FILE" ] && [ ! -L "$MODE_FILE" ]; then
     esac
 fi
 
-# Combine: mode first, then caveman
-OUTPUT=""
-[ -n "$MODE_OUT" ] && OUTPUT="$MODE_OUT"
-if [ -n "$CAVEMAN_OUT" ]; then
-    [ -n "$OUTPUT" ] && OUTPUT="$OUTPUT "
-    OUTPUT="$OUTPUT$CAVEMAN_OUT"
+# --- T3 badge ---
+T3_OUT=""
+if [ "${CLAUDE_CODE_ENTRYPOINT:-}" = "t3-code" ]; then
+    T3_OUT=$'\033[38;5;45m[T3]\033[0m'
 fi
+
+# Combine: T3 > mode > caveman
+OUTPUT=""
+for _badge in "$T3_OUT" "$MODE_OUT" "$CAVEMAN_OUT"; do
+    [ -n "$_badge" ] || continue
+    [ -n "$OUTPUT" ] && OUTPUT="$OUTPUT "
+    OUTPUT="$OUTPUT$_badge"
+done
 
 [ -n "$OUTPUT" ] && printf '%s' "$OUTPUT"
 exit 0

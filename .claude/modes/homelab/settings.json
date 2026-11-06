@@ -1,0 +1,4 @@
+{
+  "_mode": "homelab",
+  "_comment": "Homelab mode settings. Inherits base hooks from .claude/settings.json."
+}

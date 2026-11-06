@@ -12,20 +12,22 @@ architectural rationale that informed the PRD but belong in downstream documents
 
 ## Mode Switching Implementation
 
-**Constraint:** CLAUDE.md is not hot-reloaded mid-session. Confirmed via multiple
-Claude Code GitHub issues (#69571, #46737, #22085). No `/reload` command has
-shipped. Multiple RFCs open (#15858, #17306, #53538, #62656), none landed.
+**Original constraint (superseded):** CLAUDE.md is not hot-reloaded mid-session.
+Confirmed via multiple Claude Code GitHub issues (#69571, #46737, #22085).
 
-**Pattern:** File replacement. Three open-source implementations validated this:
+**Workaround shipped:** UserPromptSubmit hook (`mode-inject.sh`) reads
+`.claude/.active-mode` and injects the mode's `system-prompt.md` as
+`additionalContext` on every prompt. No file rewrite, no session restart.
+This bypasses the CLAUDE.md reload constraint entirely.
+
+**Reference implementations (informed design):**
 - PsyChaos/claude-operator — sentinel injection into CLAUDE.md
 - foxj77/claudectx — full profile swap (CLAUDE.md + settings.json + MCP config)
 - kevinzai/cc-commander — skill-based mode preset loading
 
-All use file replacement, not symlinks or env vars. Session restart expected.
-
-**Our approach:** `/mode` skill writes CLAUDE.md + settings.json from mode
-templates. v2 subagents receive mode instructions via prompt injection (no file
-rewrite needed).
+**Our approach:** `/mode` skill writes `.active-mode` file. Hook injects rules
+on next prompt. v2 subagents receive mode instructions via prompt injection
+(no file rewrite needed for subagents either).
 
 ## Spoke Connectivity — Specific-IP Firewall Allow via Docker Bridge NAT
 

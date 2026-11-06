@@ -52,6 +52,13 @@ _find_stack() {
 }
 _STACK="$(_find_stack)" \
     || _deny_unavailable "ctp guard stack not found, so this call cannot be checked and is denied (fail closed). Install it with: bash scripts/install-ctp-bridge.sh"
+
+# Load .env before the guard stack so GUARD_* vars are available as env vars.
+# On host, .env is the single config source; on remote boxes it may not exist.
+_STACK_DIR="$(dirname "$_STACK")"
+# shellcheck source=scripts/lib/load-env.sh disable=SC1091
+source "$_STACK_DIR/load-env.sh" 2>/dev/null || true
+
 # shellcheck source=scripts/lib/guard-stack.sh disable=SC1091
 source "$_STACK"
 # Required layers missing ⇒ we cannot classify anything, so deny rather than let

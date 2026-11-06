@@ -1,0 +1,6 @@
+# purple mode — attack + detect + score.
+# Full red-team access plus monitoring.
+# No local-ollama, no rea-mcp.
+deny:
+  - "mcp__local-ollama__*"
+  - "mcp__rea-mcp__*"

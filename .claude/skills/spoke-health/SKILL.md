@@ -1,7 +1,7 @@
 ---
 name: spoke-health
 description: "Check connectivity and health of all hub spokes. Use when operator says 'check health', 'spoke status', 'am I connected', or before switching to an operational mode."
-modes: [platform-ops, red-team, purple, red-dev, green-dev]
+modes: [base, platform-ops, red-team, purple, red-dev, green-dev]
 ---
 
 # Spoke Health Check
@@ -12,15 +12,22 @@ seems degraded.
 
 ## Procedure
 
-### Step 1: SSH Proxy Chain
+### Step 0: Load Environment
 
-Test each hop in order. If a hop fails, everything below it is unreachable.
+Source .env so SPOKE_* vars are available for HTTPS checks:
 
 ```bash
-ssh -o ConnectTimeout=5 hub echo "ok"           # host gateway
-ssh -o ConnectTimeout=10 deploybox echo "ok"     # deploy spoke (via hub)
-ssh -o ConnectTimeout=10 kali echo "ok"          # weapons spoke (via hub)
-ssh -o ConnectTimeout=15 -T range-git 2>&1 | head -1  # GitLab SSH (via deploybox)
+source "$CLAUDE_PROJECT_DIR/scripts/lib/load-env.sh"
+```
+
+### Step 1: SSH Spokes
+
+Hub is this machine — do not test it. Test outbound spokes only:
+
+```bash
+ssh -o ConnectTimeout=10 deploybox echo "ok"     # deploy spoke
+ssh -o ConnectTimeout=10 kali echo "ok"          # weapons spoke
+ssh -o ConnectTimeout=15 -T range-git 2>&1 | head -1  # GitLab SSH
 ```
 
 Report each hop: OK or FAIL with error.
@@ -63,7 +70,6 @@ Output a table:
 ```
 Spoke            Protocol  Status  Latency
 ─────────────────────────────────────────
-Hub (127.0.0.1)  SSH       OK      0.1s
 Deploybox        SSH       OK      0.3s
 Kali             SSH       OK      0.4s
 GitLab           SSH       OK      0.6s

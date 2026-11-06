@@ -28,57 +28,83 @@ if [ ! -d "$MCP_PKG_DIR/node_modules/hacktricks-mcp" ]; then
     npm install --prefix "$MCP_PKG_DIR" hacktricks-mcp@1.3.0 --silent 2>&1 || true
 fi
 
+# --- Resolve paths ---
+# Detect host vs container and set paths accordingly.
+WRAPPER="$PROJECT_DIR/scripts/mcp-wrapper.sh"
+PKG_DIR="$PROJECT_DIR/.mcp-packages"
+
+# Host vs container: use venv python for Python-based MCPs on host.
+VENV_DIR="$PROJECT_DIR/mcp-servers/.venv"
+if [[ "${DEVCONTAINER:-}" != "true" ]] && [[ -d "$VENV_DIR/bin" ]]; then
+    PYTHON_CMD="$VENV_DIR/bin/python3"
+else
+    PYTHON_CMD="python3"
+fi
+
+# Obsidian vault: container mounts at /home/node/vault, host uses OBSIDIAN_VAULT_PATH from .env
+# shellcheck source=scripts/lib/load-env.sh
+source "$SCRIPT_DIR/lib/load-env.sh" 2>/dev/null || true
+if [[ -d "/home/node/vault" ]]; then
+    VAULT_PATH="/home/node/vault"
+elif [[ -n "${OBSIDIAN_VAULT_PATH:-}" ]]; then
+    # Expand ~ if present
+    VAULT_PATH="${OBSIDIAN_VAULT_PATH/#\~/$HOME}"
+else
+    VAULT_PATH="$HOME/Documents/my_notes"
+fi
+
 # --- Server catalog ---
 # Every MCP server the hub can run. Modes select a subset by name.
-# Defined as a jq-parseable JSON literal.
-read -r -d '' CATALOG << 'CATALOG_JSON' || true
+# Paths use $PROJECT_DIR so the catalog works on both host and container.
+# Defined as a jq-parseable JSON literal using variable interpolation.
+read -r -d '' CATALOG << CATALOG_JSON || true
 {
   "obsidian-mcp": {
-    "command": "/workspace/scripts/mcp-wrapper.sh",
-    "args": ["npx", "-y", "obsidian-mcp@2.0.1", "serve", "--vault", "my_notes=/home/node/vault"]
+    "command": "$WRAPPER",
+    "args": ["npx", "-y", "obsidian-mcp@2.0.1", "serve", "--vault", "my_notes=$VAULT_PATH"]
   },
   "rea-mcp": {
-    "command": "/workspace/scripts/mcp-wrapper.sh",
+    "command": "$WRAPPER",
     "args": ["npx", "-y", "rea-agents@6.8.0", "mcp"]
   },
   "hacktricks-mcp": {
-    "command": "/workspace/scripts/mcp-wrapper.sh",
-    "args": ["node", "/workspace/.mcp-packages/node_modules/hacktricks-mcp/dist/index.js"]
+    "command": "$WRAPPER",
+    "args": ["node", "$PKG_DIR/node_modules/hacktricks-mcp/dist/index.js"]
   },
   "mitre-mcp": {
-    "command": "/workspace/scripts/mcp-wrapper.sh",
+    "command": "$WRAPPER",
     "args": ["npx", "-y", "mitre-attack-mcp@1.0.1"]
   },
   "lolbins-mcp": {
-    "command": "/workspace/scripts/mcp-wrapper.sh",
+    "command": "$WRAPPER",
     "args": ["npx", "-y", "living-off-the-land-lolbins-mcp-server@0.1.0"]
   },
   "local-ollama": {
-    "command": "/workspace/scripts/mcp-wrapper.sh",
+    "command": "$WRAPPER",
     "args": ["npx", "-y", "ollama-mcp-server"]
   },
   "range-intel": {
-    "command": "/workspace/scripts/mcp-wrapper.sh",
-    "args": ["python3", "-m", "range_intel.server"],
-    "cwd": "/workspace/mcp-servers/range-intel",
+    "command": "$WRAPPER",
+    "args": ["$PYTHON_CMD", "-m", "range_intel.server"],
+    "cwd": "$PROJECT_DIR/mcp-servers/range-intel",
     "env": {
-      "PYTHONPATH": "/workspace/mcp-servers/range-intel/src"
+      "PYTHONPATH": "$PROJECT_DIR/mcp-servers/range-intel/src"
     }
   },
   "outline-readonly": {
-    "command": "/workspace/scripts/mcp-wrapper.sh",
-    "args": ["node", "/workspace/mcp-servers/outline-readonly/src/server.js"]
+    "command": "$WRAPPER",
+    "args": ["node", "$PROJECT_DIR/mcp-servers/outline-readonly/src/server.js"]
   },
   "tuoni-mcp": {
-    "command": "/workspace/scripts/mcp-wrapper.sh",
-    "args": ["python3", "-m", "tuoni_mcp"],
+    "command": "$WRAPPER",
+    "args": ["$PYTHON_CMD", "-m", "tuoni_mcp"],
     "env": {
       "TUONI_VERIFY_TLS": "false",
       "TUONI_MCP_PROFILES": "agent-ops,access,discovery,authoring,administration"
     }
   },
   "cve-mcp": {
-    "command": "/workspace/scripts/mcp-wrapper.sh",
+    "command": "$WRAPPER",
     "args": ["npx", "-y", "cve-mcp@0.2.0"]
   },
   "bloodhound-mcp": {
