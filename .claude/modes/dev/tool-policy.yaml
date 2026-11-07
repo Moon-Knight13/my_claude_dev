@@ -1,0 +1,16 @@
+# dev mode — general software development.
+# No offensive tools, no range MCPs, no RE tools.
+deny:
+  - "mcp__tuoni-mcp__*"
+  - "mcp__range-intel__*"
+  - "mcp__outline-readonly__*"
+  - "mcp__obsidian-mcp__*"
+  - "mcp__hacktricks-mcp__*"
+  - "mcp__mitre-mcp__*"
+  - "mcp__lolbins-mcp__*"
+  - "mcp__cve-mcp__*"
+  - "mcp__rea-mcp__*"
+  - "mcp__ghidra-mcp__*"
+  - "mcp__hashcat-mcp__*"
+  - "mcp__nuclei-mcp__*"
+  - "mcp__bloodhound-mcp__*"
