@@ -23,6 +23,43 @@ If no engagement YAML exists, CREATE ONE before allowing any other skill to proc
 
 After creation, auto-invoke `pre-engagement-cache` skill to warm Providentia data per-host (not bulk) and load reference MCP tool schemas via ToolSearch.
 
+### Mandatory Pre-Engagement Gates (red-team / purple)
+
+Before ANY kill-chain skill (recon, initial-access, discovery, etc.) runs,
+verify these gates IN ORDER. Gate failures block engagement start — they are
+not warnings.
+
+**Gate 1: spoke-health** — invoke `spoke-health` skill.
+- All SSH hops must reach Kali spoke
+- tuoni-mcp must respond
+- If Kali spoke unreachable: BLOCK. Operator must deploy Kali or explicitly
+  acknowledge degraded (router-only) mode in engagement YAML:
+  `degraded_mode: router-only`
+
+**Gate 2: kali-bootstrap** (red-team only) — verify Kali agent exists.
+- Query `tuoni_agents_list` for a Kali-hosted agent
+- If no Kali agent AND `degraded_mode` not set: BLOCK. Report:
+  "No Kali spoke agent. Run kali-bootstrap or set degraded_mode: router-only"
+- If `degraded_mode: router-only`: warn and continue. Skills must use their
+  degraded-mode sections (router agents only, limited tooling).
+
+**Gate 3: agent routing verification** — for each router agent hostname:
+- Run `ip route` or equivalent via a single agent per host
+- Verify at least one agent can reach each target subnet
+- Report unreachable targets. If ALL targets unreachable from ALL agents: BLOCK.
+
+Record gate results in engagement YAML:
+```yaml
+preflight:
+  spoke_health: passed | failed
+  kali_agent: <agent_id> | missing
+  degraded_mode: false | router-only
+  agent_routing:
+    r1: [reachable_subnets]
+    r2: [reachable_subnets]
+  gate_timestamp: <ISO-8601>
+```
+
 ### Create Engagement
 
 Trigger: operator says "new engagement", "start engagement", or no engagement
@@ -265,6 +302,21 @@ with the outcome description. This command auto-writes to correct paths:
 - `Notes_Mitre_ATTack_Framework/` — MITRE cross-link
 - `llm-wiki/log.md` — changelog row
 
+### Tooling Gap Feedback Loop
+
+When a technique fails with `result: blocked` and reason is a missing tool:
+
+1. Log finding in engagement YAML with `notes: tooling_gap — <tool_name>`
+2. Append tool to `llm-wiki/wiki/tools/tools-needed.md` via Obsidian:
+   ```
+   - <tool_name> | needed for: <technique_slug> | target: <hostname> | date
+   ```
+3. Update technique wiki page `## Tool Requirements` with specific tool name
+4. Next kali-bootstrap run reads `tools-needed.md` and installs discovered tools
+
+This creates a closed feedback loop: engagement discovers gap, wiki records
+it, bootstrap installs it, next engagement has the tool.
+
 ### Phase Gate Checklist
 
 After EACH technique execution or phase completion, BEFORE moving on:
@@ -273,6 +325,7 @@ After EACH technique execution or phase completion, BEFORE moving on:
 2. **Invoke `/log-finding`** with technique outcome (writes to llm-wiki automatically)
 3. **Write raw dump** to `llm-wiki/raw/<host>-<phase>-<date>.md` (immutable intake)
 4. **Store credentials** in Tuoni cred store (if any harvested), add ref to YAML
+5. **If tooling gap**: append to `llm-wiki/wiki/tools/tools-needed.md` (see above)
 
 If ANY gate item is skipped, the session MUST catch up before proceeding to
 the next target or phase. "I'll document later" is NOT acceptable — context

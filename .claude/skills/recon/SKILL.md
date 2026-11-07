@@ -183,11 +183,47 @@ Manual fallback (if `/log-finding` unavailable):
 - `obsidian_create_note` or `obsidian_edit_note` to `llm-wiki/wiki/targets/`
   using field structure from `llm-wiki/templates/target.md`
 
+## Degraded Mode (Router-Only Active Recon)
+
+When `degraded_mode: router-only` is set in engagement YAML (no Kali spoke):
+
+**Phase 2 alternative — active recon from router agents:**
+- Port scanning: Python socket `connect_ex` via Tuoni agent commands.
+  Scan top 100 ports per target. Do NOT use bash `/dev/tcp` (false negatives).
+- Web fingerprint: `curl -sk` for HTTP headers, status codes, server banners
+- Banner grab: Python socket `recv` after TCP connect to open ports
+- Service detection: infer from port + banner (no nmap service detection)
+
+**Limitations in degraded mode:**
+- No nmap: service version detection unreliable, OS fingerprint unavailable
+- No UDP scanning: only TCP ports discoverable
+- No vulnerability scanning: cannot run Nuclei/nikto from router
+- Slower: sequential Python socket connections vs nmap parallel scanning
+
+**Phase 2 output format remains the same.** Mark recon as `degraded` in
+engagement YAML to indicate reduced confidence.
+
+## Prior Engagement Knowledge Retrieval
+
+Before starting Phase 2 active recon, check llm-wiki for prior engagement
+data on targets:
+
+1. Search `obsidian_search_vault` for `#target/<hostname>`
+2. If prior target page exists: read exhausted vectors, known ports, failed
+   techniques
+3. Skip techniques already marked `#result/failed` on same target (unless
+   operator overrides)
+4. Prioritize techniques marked `#result/partial` (may succeed with different
+   approach)
+
 ## Failure modes
 
 - **Providentia unreachable**: warn operator, proceed with cached data or
   README only. Never proceed with NO authoritative source.
 - **Kali spoke unreachable**: passive recon only (Tier 1+2). Cannot do
-  active recon without weapons platform.
+  active recon without weapons platform. If `degraded_mode: router-only`,
+  use degraded active recon above.
 - **Target not in Providentia**: warn operator — target may not exist on
   range. Require explicit confirmation before proceeding.
+- **Prior engagement shows all vectors exhausted**: report to operator.
+  Recommend: different source IP, different timing, or target deprioritization.

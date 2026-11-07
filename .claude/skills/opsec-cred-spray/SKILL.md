@@ -38,6 +38,17 @@ For non-AD targets:
 - Application: check documentation or test with known-bad password
 - Network device: vendor documentation, usually 3-5 attempts
 
+**fail2ban detection (Linux/BSD targets):**
+- Default: 5 failures in 10 min = 10 min ban (SSH jail)
+- pfSense: 3 failures = 30 min ban (more aggressive)
+- Range hosts may have custom thresholds
+- Probe: attempt one known-bad credential, check if port remains open
+  5 seconds later. If port status changes: fail2ban active.
+- Ban scope: typically per source IP, per service port. ICMP unaffected.
+- **Gateway risk**: banning on a firewall/router target blocks ALL hosts
+  behind it. Treat gateway targets with EXTRA caution — max 1 attempt
+  before verifying port status.
+
 ### Step 2: Calculate safe spray parameters
 
 ```
@@ -74,13 +85,34 @@ Order by likelihood:
 - Monitor for lockout indicators between rounds
 - If ANY lockout detected: STOP ALL spray immediately
 
-### Step 6: On lockout detection
+### Step 6: On lockout or ban detection
 
 1. **STOP** all authentication attempts immediately
-2. **Wait** full lockout duration plus buffer
-3. **Report** to operator — lockout is a detection event
-4. **Assess** whether SOC/blue team has been alerted
-5. **Decide** with operator: continue with adjusted parameters or abort
+2. **Log** OPSEC incident to engagement YAML findings (id: OPSEC-xxx)
+3. **Record** ban source IP, target, timestamp, estimated expiry
+4. **Wait** full lockout/ban duration plus 5-min buffer
+5. **Report** to operator — lockout is a detection event
+6. **Assess** whether SOC/blue team has been alerted
+7. **Decide** with operator: continue with adjusted parameters or abort
+
+**fail2ban-specific recovery:**
+- Record banned source IP and estimated unban time in engagement YAML
+- If alternate agent on different source IP exists: switch to that agent
+- If banned target is gateway (firewall/router): ALL downstream targets
+  inaccessible. Pivot to other reachable targets.
+- Verify ban lifted before retrying: single TCP SYN to target port, confirm
+  SYN-ACK response (not FILTERED/RST)
+- After unban: reduce attempt rate to 1 per target, wait full observation
+  window between attempts
+
+### Step 7: Source IP rotation (when available)
+
+When multiple agents exist on different hosts:
+1. Map agent hostname to source IP
+2. Track per-IP attempt count per target
+3. When IP reaches (threshold - 1) attempts: rotate to next agent
+4. If all IPs exhausted: full cooldown on all before next round
+5. Record IP rotation in engagement YAML techniques_tried
 
 ## What to flag
 
@@ -89,3 +121,5 @@ Order by likelihood:
 - Running crackmapexec/hydra without explicit `--lockout-threshold` or equivalent
 - More than one password per observation window per account
 - Spray against accounts marked as honeypots in engagement YAML
+- SSH attempts against gateway/firewall targets without explicit fail2ban check
+- More than 2 SSH attempts from same source IP to same target without pause
