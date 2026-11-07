@@ -12,14 +12,15 @@ architecture. Three things live here, and confusing them wastes time:
 1. **The hub** — the primary purpose. A devcontainer (`.devcontainer/`) that
    serves as the operating environment for Claude Code sessions. It wires up MCP
    servers, SSH proxy chains, safety gates, and mode-specific configuration so an
-   operator can run red team, green dev, purple team, red dev, and range-build
-   workflows from a single seat. The hub reaches spokes through `.env`-configured
+   operator can run base, platform-ops, green-dev, red-team, red-dev, purple,
+   and homelab workflows from a single seat (7 modes). The hub reaches spokes through `.env`-configured
    connections, not hardcoded endpoints.
 2. **Spoke integrations** — MCP servers and SSH tunnels that connect the hub to
-   range infrastructure: Kali (Tuoni C2), deploy box (catapult/ctp-bridge),
-   Providentia (CMDB), GitLab, Outline wiki, and Obsidian vault. Each spoke is
-   configured by hostname/token in `.env` and derived at startup by
-   `scripts/lib/load-env.sh`.
+   range infrastructure and security research tooling: Kali (Tuoni C2, Hashcat),
+   deploy box (catapult/ctp-bridge), Providentia (CMDB), GitLab, Outline wiki,
+   Obsidian vault, and standalone research MCPs (CVE, MITRE ATT&CK, HackTricks,
+   LOLBins, Nuclei, BloodHound, REA). Each spoke is configured by hostname/token
+   in `.env` and derived at startup by `scripts/lib/load-env.sh`.
 3. **Provisioning for remote developer boxes** — a secondary capability. A laptop
    bootstrap (`scripts/local/`) wires up SSH and Remote-SSH; an on-box
    provisioner (`scripts/host/provision-remote-box.sh`) brings a shared box to a
@@ -41,7 +42,7 @@ network.
 
 ### Hub-and-spoke topology
 
-- **Hub:** this repo's devcontainer, running Claude Code with 9+ MCP servers.
+- **Hub:** this repo's devcontainer, running Claude Code with 13 MCP servers.
 - **Kali spoke (primary):** Tuoni C2 agent is main channel. SSH is fallback.
 - **Deploy box spoke:** catapult container, ctp-bridge gate.
 - **Range services:** Providentia (CMDB), GitLab (code), Outline wiki (docs).
