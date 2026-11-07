@@ -113,13 +113,13 @@
   }
   .node .k { display: block; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--steel-soft); margin-bottom: 3px; }
   .node.in { border-color: var(--steel); border-left-width: 4px; }
-  .lanes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .lanes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
   .lane { text-align: center; padding: 15px 12px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--ground); }
   .lane .who { font-family: var(--sans); font-weight: 640; font-size: 15px; }
   .lane .what { font-family: var(--serif); font-size: 13.5px; color: var(--ink-soft); line-height: 1.45; margin-top: 4px; display: block; }
   .lane.human { border-top: 3px solid var(--steel); }
   .lane.claude { border-top: 3px solid var(--accent); }
-  .lane.local { border-top: 3px solid var(--gate); }
+
   .gate {
     text-align: center; font-family: var(--mono); font-size: 13.5px;
     border: 1px dashed var(--gate); color: var(--gate);
@@ -254,7 +254,7 @@
     <p class="eyebrow">my_claude_dev</p>
     <h1>A multi-environment operator hub with safety built in.</h1>
     <p class="lede">A framework for running AI-assisted security operations and software development from a single Claude session.
-      Work is <span class="hl">mode-isolated</span>, routed to the right model by risk,
+      Work is <span class="hl">mode-isolated</span>
       and every change passes the same security gates before it merges.</p>
   </header>
 
@@ -262,7 +262,7 @@
     <p class="board-cap">The routing switchboard</p>
     <div class="flow">
       <div class="node in"><span class="k">Work arrives</span>An issue on the board — a bug, a feature, a chore.</div>
-      <div class="rail" aria-hidden="true">▼ routed by risk &amp; type ▼</div>
+      <div class="rail" aria-hidden="true">▼ routed by risk ▼</div>
       <div class="lanes">
         <div class="lane human">
           <div class="who">Human</div>
@@ -271,10 +271,6 @@
         <div class="lane claude">
           <div class="who">Claude</div>
           <span class="what">Architecture, security, cross-cutting or unclear work.</span>
-        </div>
-        <div class="lane local">
-          <div class="who">Local model</div>
-          <span class="what">Formatting, docs, small low-risk edits — near-free.</span>
         </div>
       </div>
       <div class="rail" aria-hidden="true">▼ one branch, one PR ▼</div>
@@ -287,15 +283,11 @@
   <section>
     <p class="eyebrow">For anyone</p>
     <h2>Why it exists</h2>
-    <p class="section-note">Three ideas do most of the work. You don't need to read code to get them.</p>
+    <p class="section-note">Two ideas do most of the work. You don't need to read code to get them.</p>
     <div class="cards">
       <div class="card">
         <h3>Safe by default</h3>
         <p>The environment is locked down — the network can only reach an approved list, and secrets never touch the repo. Guardrails are on before the first line is written.</p>
-      </div>
-      <div class="card">
-        <h3>Cheap work goes local</h3>
-        <p>Low-risk tasks are handed to a free model running on your own machine. Claude is spent only where its judgment is worth the cost.</p>
       </div>
       <div class="card">
         <h3>Humans stay in control</h3>
@@ -463,18 +455,6 @@
       <p class="d-note">The hook runs <b>outside</b> the agent's command, so the agent cannot disable it; if its guard stack is missing it <b>fails closed</b> and denies every call. Its limits come from a gitignored on-box config, never the agent's environment. The checks above are <b>one composed policy</b> in <span class="path">scripts/lib/guard-stack.sh</span>, not logic living in the hook: the hook parses the tool call and renders a verdict, the stack decides. That matters because there are now <b>two</b> enforcement points: this hook, and the local-model executor below, which does not go through Claude and so does not inherit the hook. Sharing one library is what stops the two drifting apart. Every control is <b>demonstrable</b> — feed the hook a tool call and read its verdict, or ask Claude to do the risky thing and watch the prompt. Full walkthrough: <span class="path">docs/SAFETY_HARNESS.md</span>. <span class="path">check-day0.sh</span> reports each control's posture honestly (present · warn-only · bypassable · box-only).</p>
     </div>
 
-    <div class="dgram">
-      <div class="dgram-h"><h3>The disclosure boundary — what Claude is allowed to know</h3><span class="path">scripts/lib/contract.sh</span></div>
-      <div class="pipe">
-        <div class="check"><div class="cn">declare, don't scrub</div><div class="cw"><b>Only named fields are copied.</b> A filter fails <i>open</i> &mdash; whatever the rewrite misses, crosses. A contract fails <i>closed</i>: a note or rationale the local model added is not scrubbed, it is never copied. Undeclared content was never in the message, so there is nothing to miss.</div><div class="cs">positive</div></div>
-        <div class="check"><div class="cn">no paths, ever</div><div class="cw"><b>A path is disclosure on its own.</b> A customer directory gives away org structure, client identity and codenames even when file contents never move. Artifacts are referenced by a <b>random opaque handle</b>; a slash anywhere in a declared value rejects the contract outright.</div><div class="cs">deny</div></div>
-        <div class="check"><div class="cn">the word list, twice</div><div class="cw"><b>Before and after the sanitiser.</b> The owner's private terms are matched by code on the draft and again on the exact text about to cross &mdash; an LLM rewrite can introduce words as well as remove them. It is the only check here with no judgement in it.</div><div class="cs">deny</div></div>
-        <div class="check"><div class="cn">sanitiser blocks here</div><div class="cw"><b>Failure is not passthrough on this path.</b> The contract came straight out of sensitive material, so a timed-out sanitiser blocks. The owner may override at the terminal, once, after reading the raw text &mdash; logged, never a setting, and it never skips the word list.</div><div class="cs">block</div></div>
-        <div class="check"><div class="cn">owner approves each one</div><div class="cw"><b>Every contract, not just the first.</b> Written by an AI from sensitive material, where one variable name can carry a codename. The owner sees the final text exactly as it would cross. Deliberately strict and deliberately revisable &mdash; loosening later is easy, tightening later is not.</div><div class="cs">ask</div></div>
-        <div class="check"><div class="cn">stated limit</div><div class="cw"><b>No unattended co-operation.</b> Approval needs a terminal, so Claude and the local model cannot work together with nobody watching. That is a property of the design, not a gap &mdash; and the first thing that changes if the local model earns more trust.</div><div class="cs">honest</div></div>
-      </div>
-      <p class="d-note">This is the mechanism that lets a cloud model <b>coordinate work it is never allowed to see</b>: Claude writes the playbook, the pipeline, the caller &mdash; knowing the name, the arguments and the exit codes of a script whose contents, logic and originating prompt stay on the box. The handle-to-path map is itself a list of internal paths, so it lives in <span class="path">~/.config/orchestrator/</span> with everything else Claude's tools cannot read, and is never resolved for a cloud-bound caller. Full walkthrough: <span class="path">docs/ORCHESTRATOR.md</span>.</p>
-    </div>
   </section>
 
   <section>
@@ -490,9 +470,6 @@
       <div class="step"><h3>Merge</h3><p>Reviewed, green, shipped.</p></div>
     </div>
   </section>
-
-  <!-- SP1a section removed: archived on archive/sp1a-gate branch -->
-
 
   <section aria-labelledby="v3-h">
     <span class="badge planned">status&nbsp;<b>planned</b>&nbsp;·&nbsp;design&nbsp;2026-11-06&nbsp;·&nbsp;nothing&nbsp;built&nbsp;yet</span>
@@ -630,11 +607,8 @@
     <div class="docs">
       <span>README.md</span>
       <span>docs/TEMPLATE_GUIDE.md</span>
-      <span>docs/AI_ROUTING_POLICY.md</span>
       <span>docs/BMAD_WORKFLOW.md</span>
       <span>docs/KANBAN_WORKFLOW.md</span>
-      <span>docs/SP1A_ARCHITECTURE.md (planned)</span>
-      <span>docs/SP1A_FLEET.md</span>
       <span>docs/ARCHITECTURE_VISION.md (v3 planned)</span>
     </div>
     <p class="fine">The repository README is the source of truth; this overview is a briefing companion. Apache-2.0.</p>
