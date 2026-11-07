@@ -113,13 +113,13 @@
   }
   .node .k { display: block; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--steel-soft); margin-bottom: 3px; }
   .node.in { border-color: var(--steel); border-left-width: 4px; }
-  .lanes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .lanes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
   .lane { text-align: center; padding: 15px 12px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--ground); }
   .lane .who { font-family: var(--sans); font-weight: 640; font-size: 15px; }
   .lane .what { font-family: var(--serif); font-size: 13.5px; color: var(--ink-soft); line-height: 1.45; margin-top: 4px; display: block; }
   .lane.human { border-top: 3px solid var(--steel); }
   .lane.claude { border-top: 3px solid var(--accent); }
-  .lane.local { border-top: 3px solid var(--gate); }
+
   .gate {
     text-align: center; font-family: var(--mono); font-size: 13.5px;
     border: 1px dashed var(--gate); color: var(--gate);
@@ -196,41 +196,11 @@
   .egress .deny b { color: var(--accent); }
   .host-ext { margin-top: 12px; font-family: var(--mono); font-size: 12px; color: var(--ink-soft); border-top: 1px dotted var(--line); padding-top: 12px; }
 
-  /* two engines */
-  .engines { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  .engine { border: 1px solid var(--line); border-radius: 8px; padding: 15px; }
-  .engine.cloud { border-top: 3px solid var(--accent); }
-  .engine.edge { border-top: 3px solid var(--gate); }
-  .engine .en-h { font-family: var(--sans); font-weight: 640; font-size: 15px; }
-  .engine .en-s { font-family: var(--mono); font-size: 11px; color: var(--steel-soft); text-transform: uppercase; letter-spacing: 0.06em; margin: 3px 0 11px; }
-  .engine ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
-  .engine li { font-size: 14px; color: var(--ink-soft); padding-left: 16px; position: relative; line-height: 1.4; }
-  .engine li::before { content: "›"; position: absolute; left: 2px; color: var(--steel); }
-  .engine .en-f { margin-top: 11px; font-family: var(--mono); font-size: 11.5px; }
-  .engine.cloud .en-f { color: var(--accent-ink); }
-  .engine.edge .en-f { color: var(--gate); }
-
-  /* caveman */
-  .cv-bars { display: grid; gap: 8px; }
-  .cv-row { display: grid; grid-template-columns: 8ch 1fr; align-items: center; gap: 12px; }
-  .cv-row .cv-k { font-family: var(--mono); font-size: 11px; color: var(--steel-soft); }
-  .cv-bar { height: 22px; border-radius: 5px; }
-  .cv-bar.full { width: 100%; background: var(--steel-soft); }
-  .cv-bar.comp { width: 65%; background: var(--accent); }
-  .cv-save { font-family: var(--mono); font-size: 12.5px; color: var(--accent-ink); margin-top: 10px; }
-  .statusline { margin-top: 14px; display: inline-flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 12.5px; background: var(--ink); color: var(--ground); padding: 7px 13px; border-radius: 7px; }
-  .statusline .dot { color: var(--gate); }
-
-  /* CI pipe */
-  .pipe { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
-  .check { border: 1px solid var(--line); border-radius: 8px; padding: 13px; border-left: 3px solid var(--gate); }
-  .check .cn { font-family: var(--mono); font-size: 13px; font-weight: 600; }
-  .check .cw { font-size: 13px; color: var(--ink-soft); margin-top: 4px; line-height: 1.4; }
-  .check .cs { font-family: var(--mono); font-size: 10.5px; color: var(--steel-soft); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 7px; }
-
-  /* --- Planned SP1a section --- */
+  /* badge variant for planned/roadmap sections */
   .badge.planned { border-style: dashed; border-color: var(--accent); margin-bottom: 14px; }
   .badge.planned b { color: var(--accent-ink); }
+
+  /* SVG diagrams (v3 roadmap) */
   .sp1a-svg { display: block; width: 100%; height: auto; }
   .sp1a-svg text { font-family: var(--mono); fill: var(--ink); }
   .sp1a-svg .t-s { font-size: 11px; fill: var(--ink-soft); }
@@ -250,11 +220,28 @@
   .sp1a-svg .ah { fill: var(--steel); }
   .sp1a-svg .ah-acc { fill: var(--accent); }
 
+  /* caveman */
+  .cv-bars { display: grid; gap: 8px; }
+  .cv-row { display: grid; grid-template-columns: 8ch 1fr; align-items: center; gap: 12px; }
+  .cv-row .cv-k { font-family: var(--mono); font-size: 11px; color: var(--steel-soft); }
+  .cv-bar { height: 22px; border-radius: 5px; }
+  .cv-bar.full { width: 100%; background: var(--steel-soft); }
+  .cv-bar.comp { width: 65%; background: var(--accent); }
+  .cv-save { font-family: var(--mono); font-size: 12.5px; color: var(--accent-ink); margin-top: 10px; }
+  .statusline { margin-top: 14px; display: inline-flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 12.5px; background: var(--ink); color: var(--ground); padding: 7px 13px; border-radius: 7px; }
+  .statusline .dot { color: var(--gate); }
+
+  /* CI pipe */
+  .pipe { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .check { border: 1px solid var(--line); border-radius: 8px; padding: 13px; border-left: 3px solid var(--gate); }
+  .check .cn { font-family: var(--mono); font-size: 13px; font-weight: 600; }
+  .check .cw { font-size: 13px; color: var(--ink-soft); margin-top: 4px; line-height: 1.4; }
+  .check .cs { font-family: var(--mono); font-size: 10.5px; color: var(--steel-soft); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 7px; }
+
   @media (max-width: 560px) {
     body { font-size: 17px; }
     .lanes { grid-template-columns: 1fr; }
     .comp > div { grid-template-columns: 1fr; gap: 4px; }
-    .engines { grid-template-columns: 1fr; }
     .cv-row { grid-template-columns: 6ch 1fr; }
   }
 </style>
@@ -267,7 +254,7 @@
     <p class="eyebrow">my_claude_dev</p>
     <h1>A multi-environment operator hub with safety built in.</h1>
     <p class="lede">A framework for running AI-assisted security operations and software development from a single Claude session.
-      Work is <span class="hl">mode-isolated</span>, routed to the right model by risk,
+      Work is <span class="hl">mode-isolated</span>
       and every change passes the same security gates before it merges.</p>
   </header>
 
@@ -275,7 +262,7 @@
     <p class="board-cap">The routing switchboard</p>
     <div class="flow">
       <div class="node in"><span class="k">Work arrives</span>An issue on the board — a bug, a feature, a chore.</div>
-      <div class="rail" aria-hidden="true">▼ routed by risk &amp; type ▼</div>
+      <div class="rail" aria-hidden="true">▼ routed by risk ▼</div>
       <div class="lanes">
         <div class="lane human">
           <div class="who">Human</div>
@@ -284,10 +271,6 @@
         <div class="lane claude">
           <div class="who">Claude</div>
           <span class="what">Architecture, security, cross-cutting or unclear work.</span>
-        </div>
-        <div class="lane local">
-          <div class="who">Local model</div>
-          <span class="what">Formatting, docs, small low-risk edits — near-free.</span>
         </div>
       </div>
       <div class="rail" aria-hidden="true">▼ one branch, one PR ▼</div>
@@ -300,15 +283,11 @@
   <section>
     <p class="eyebrow">For anyone</p>
     <h2>Why it exists</h2>
-    <p class="section-note">Three ideas do most of the work. You don't need to read code to get them.</p>
+    <p class="section-note">Two ideas do most of the work. You don't need to read code to get them.</p>
     <div class="cards">
       <div class="card">
         <h3>Safe by default</h3>
         <p>The environment is locked down — the network can only reach an approved list, and secrets never touch the repo. Guardrails are on before the first line is written.</p>
-      </div>
-      <div class="card">
-        <h3>Cheap work goes local</h3>
-        <p>Low-risk tasks are handed to a free model running on your own machine. Claude is spent only where its judgment is worth the cost.</p>
       </div>
       <div class="card">
         <h3>Humans stay in control</h3>
@@ -319,7 +298,7 @@
 
   <section>
     <p class="eyebrow">For engineers</p>
-    <h2>The eight moving parts</h2>
+    <h2>The seven moving parts</h2>
     <p class="section-note">Each is a self-contained piece of the platform. Seven operational modes — from platform-ops to red-team to homelab — activate different subsets of these parts.</p>
     <dl class="comp">
       <div>
@@ -329,10 +308,6 @@
       <div>
         <dt>Remote dev boxes<span class="tag">scripts/local/ · scripts/host/</span></dt>
         <dd>A laptop bootstrap wires up SSH, identity and Remote-SSH; an on-box provisioner brings a shared box to a known-good state and <b>refuses to record success it did not verify</b>.</dd>
-      </div>
-      <div>
-        <dt>AI routing<span class="tag">scripts/route-model.sh</span></dt>
-        <dd>Classifies each task and sends it <b>local vs Claude</b> by risk. Hard triggers — auth, networking, broad refactors — always escalate to Claude.</dd>
       </div>
       <div>
         <dt>BMAD workflow<span class="tag">/bmad</span></dt>
@@ -360,7 +335,7 @@
   <section>
     <p class="eyebrow">Under the hood</p>
     <h2>How the pieces actually work</h2>
-    <p class="section-note">Seven close-ups: the sealed environment, the two engines behind the routing, the MCP server stack, the token compressor, getting onto a shared dev box, the gates every change runs, and the technique scoring engine.</p>
+    <p class="section-note">Six close-ups: the sealed environment, the MCP server stack, the token compressor, getting onto a shared dev box, the gates every change runs, and the technique scoring engine.</p>
 
     <div class="dgram">
       <div class="dgram-h"><h3>The devcontainer</h3><span class="path">.devcontainer/</span></div>
@@ -392,36 +367,6 @@
         <div class="host-ext">host machine · Ollama reachable only on :11434 →  local model, never leaves your box</div>
       </div>
       <p class="d-note">Auth lives in mounted volumes, never in the repo. The firewall opens the network to a short allowlist and blocks the rest — set once at container start.</p>
-    </div>
-
-    <div class="dgram">
-      <div class="dgram-h"><h3>Two engines behind the routing</h3><span class="path">scripts/route-model.sh</span></div>
-      <div class="engines">
-        <div class="engine cloud">
-          <div class="en-h">Claude</div>
-          <div class="en-s">cloud · paid · escalate here</div>
-          <ul>
-            <li>Architecture &amp; cross-cutting design</li>
-            <li>Security, auth, secrets</li>
-            <li>Firewall / networking changes</li>
-            <li>Broad refactors, unclear debugging</li>
-          </ul>
-          <div class="en-f">judgment worth the tokens</div>
-        </div>
-        <div class="engine edge">
-          <div class="en-h">Local model · Ollama</div>
-          <div class="en-s">on-host · free · default for low risk</div>
-          <ul>
-            <li>Formatting &amp; boilerplate</li>
-            <li>Docs updates</li>
-            <li>Tiny single-purpose refactors</li>
-            <li>Simple renames &amp; tests</li>
-          </ul>
-          <div class="en-f">private · fast · near-zero cost</div>
-        </div>
-      </div>
-      <p class="d-note">A task is classified by type and risk; any hard trigger — auth, networking, 8+ files — always escalates to Claude. The same decision shows up as the <b>Route</b> field on the board card.</p>
-      <p class="d-note">The local endpoint <b>differs by surface</b>. In the devcontainer the model runs on the host; on a remote box it runs on the developer's own machine and arrives over a reverse SSH tunnel only if the developer opts in (the tunnel is unauthenticated to other users of the shared box). When nothing answers, routing falls back to Claude and the work still completes — local is an optimisation, never a dependency.</p>
     </div>
 
     <div class="dgram">
@@ -510,32 +455,6 @@
       <p class="d-note">The hook runs <b>outside</b> the agent's command, so the agent cannot disable it; if its guard stack is missing it <b>fails closed</b> and denies every call. Its limits come from a gitignored on-box config, never the agent's environment. The checks above are <b>one composed policy</b> in <span class="path">scripts/lib/guard-stack.sh</span>, not logic living in the hook: the hook parses the tool call and renders a verdict, the stack decides. That matters because there are now <b>two</b> enforcement points: this hook, and the local-model executor below, which does not go through Claude and so does not inherit the hook. Sharing one library is what stops the two drifting apart. Every control is <b>demonstrable</b> — feed the hook a tool call and read its verdict, or ask Claude to do the risky thing and watch the prompt. Full walkthrough: <span class="path">docs/SAFETY_HARNESS.md</span>. <span class="path">check-day0.sh</span> reports each control's posture honestly (present · warn-only · bypassable · box-only).</p>
     </div>
 
-    <div class="dgram">
-      <div class="dgram-h"><h3>Enforcement point #2 — the local executor</h3><span class="path">scripts/orchestrator/execute-local.sh &rarr; scripts/lib/guard-stack.sh</span></div>
-      <div class="pipe">
-        <div class="check"><div class="cn">why it exists</div><div class="cw"><b>Sensitive work that needs tools.</b> A task too sensitive to send to a cloud model used to have two options: describe a fix it could not make, or go somewhere it should not. The executor runs the file and shell work <b>on the box</b> instead, driven by a local model.</div><div class="cs">local</div></div>
-        <div class="check"><div class="cn">same rulebook</div><div class="cw"><b>One policy, two doors.</b> The executor bypasses Claude, so it bypasses the hook — and therefore calls the same guard stack itself. One deliberate difference: it <b>may</b> read the owner's Org-data paths, because doing that without egress is its entire purpose. Credentials stay denied on both doors.</div><div class="cs">deny / ask</div></div>
-        <div class="check"><div class="cn">fixed vocabulary</div><div class="cw"><b>read_file · write_file · list_dir · run_command.</b> Declared before the run and not extensible: a model asking for a fifth tool gets told the list is fixed. Every one is classified the same way — a write_file at an SSH key is refused exactly as a shell command naming it would be.</div><div class="cs">closed set</div></div>
-        <div class="check"><div class="cn">human in the loop</div><div class="cw"><b>Confirm at the terminal.</b> An <i>ask</i> verdict stops and waits, the same prompt the hook raises. Both stdin and stdout must be a TTY, so piping the run counts as nobody being there &mdash; and with nobody there, the answer is <b>no</b>.</div><div class="cs">ask</div></div>
-        <div class="check"><div class="cn">injection containment</div><div class="cw"><b>Read text is data, never instruction.</b> Tool output arrives in a labelled channel and never joins the system prompt; every call is judged on what it does, never on why; a step budget caps any sequence injected text could start. Bounds injection &mdash; honestly, does not eliminate it.</div><div class="cs">structural</div></div>
-        <div class="check"><div class="cn">log hygiene</div><div class="cw"><b>Opaque handles, never paths.</b> The run log records which tool ran, what the guard said and the exit code &mdash; with targets as handles meaningful only inside one run. A log Claude can read stays an index of nothing.</div><div class="cs">handles</div></div>
-        <div class="check"><div class="cn">what crosses back</div><div class="cw"><b>A declared interface, never the artifact.</b> The human at the terminal gets the raw answer; a cloud-bound caller gets a contract &mdash; name, invocation, inputs, outputs, exit codes. See the disclosure boundary below.</div><div class="cs">contract</div></div>
-      </div>
-      <p class="d-note">Opt in per run with <span class="path">orchestrate.sh --tools</span>; without it the local path stays reasoning-only, so an existing run never silently gains a shell. The tier decision happens <b>before</b> dispatch and is not revisited here &mdash; the executor is a second way to do local work, never a second way onto the cloud. Its system prompt follows the same pattern as the classifier's: a generic default in the repo, the owner's real policy on the box in <span class="path">~/.config/orchestrator/</span>, which is hidden from Claude's tools by default. Full walkthrough: <span class="path">docs/ORCHESTRATOR.md</span>.</p>
-    </div>
-
-    <div class="dgram">
-      <div class="dgram-h"><h3>The disclosure boundary — what Claude is allowed to know</h3><span class="path">scripts/lib/contract.sh</span></div>
-      <div class="pipe">
-        <div class="check"><div class="cn">declare, don't scrub</div><div class="cw"><b>Only named fields are copied.</b> A filter fails <i>open</i> &mdash; whatever the rewrite misses, crosses. A contract fails <i>closed</i>: a note or rationale the local model added is not scrubbed, it is never copied. Undeclared content was never in the message, so there is nothing to miss.</div><div class="cs">positive</div></div>
-        <div class="check"><div class="cn">no paths, ever</div><div class="cw"><b>A path is disclosure on its own.</b> A customer directory gives away org structure, client identity and codenames even when file contents never move. Artifacts are referenced by a <b>random opaque handle</b>; a slash anywhere in a declared value rejects the contract outright.</div><div class="cs">deny</div></div>
-        <div class="check"><div class="cn">the word list, twice</div><div class="cw"><b>Before and after the sanitiser.</b> The owner's private terms are matched by code on the draft and again on the exact text about to cross &mdash; an LLM rewrite can introduce words as well as remove them. It is the only check here with no judgement in it.</div><div class="cs">deny</div></div>
-        <div class="check"><div class="cn">sanitiser blocks here</div><div class="cw"><b>Failure is not passthrough on this path.</b> The contract came straight out of sensitive material, so a timed-out sanitiser blocks. The owner may override at the terminal, once, after reading the raw text &mdash; logged, never a setting, and it never skips the word list.</div><div class="cs">block</div></div>
-        <div class="check"><div class="cn">owner approves each one</div><div class="cw"><b>Every contract, not just the first.</b> Written by an AI from sensitive material, where one variable name can carry a codename. The owner sees the final text exactly as it would cross. Deliberately strict and deliberately revisable &mdash; loosening later is easy, tightening later is not.</div><div class="cs">ask</div></div>
-        <div class="check"><div class="cn">stated limit</div><div class="cw"><b>No unattended co-operation.</b> Approval needs a terminal, so Claude and the local model cannot work together with nobody watching. That is a property of the design, not a gap &mdash; and the first thing that changes if the local model earns more trust.</div><div class="cs">honest</div></div>
-      </div>
-      <p class="d-note">This is the mechanism that lets a cloud model <b>coordinate work it is never allowed to see</b>: Claude writes the playbook, the pipeline, the caller &mdash; knowing the name, the arguments and the exit codes of a script whose contents, logic and originating prompt stay on the box. The handle-to-path map is itself a list of internal paths, so it lives in <span class="path">~/.config/orchestrator/</span> with everything else Claude's tools cannot read, and is never resolved for a cloud-bound caller. Full walkthrough: <span class="path">docs/ORCHESTRATOR.md</span>.</p>
-    </div>
   </section>
 
   <section>
@@ -549,127 +468,6 @@
       <div class="step"><h3>Pull request</h3><p>Branch + PR that closes the issue.</p></div>
       <div class="step"><h3>Gates</h3><p>Secrets, SAST, container scan and test suites must pass.</p></div>
       <div class="step"><h3>Merge</h3><p>Reviewed, green, shipped.</p></div>
-    </div>
-  </section>
-
-  <section aria-labelledby="sp1a-h">
-    <span class="badge planned">status&nbsp;<b>planned</b>&nbsp;·&nbsp;design&nbsp;accepted&nbsp;2026-10-16&nbsp;·&nbsp;first&nbsp;parts&nbsp;built</span>
-    <p class="eyebrow">Roadmap · design only</p>
-    <h2 id="sp1a-h">Next: the SP1a trust core (planned)</h2>
-    <p class="section-note">Most of this does not exist yet; the parts that have landed are listed at the end of this section. SP1a is the agreed design for doing sensitive work with a local model while Claude handles the heavy non-sensitive work &mdash; with sensitive material kept out of Claude's reach by <b>separation first</b> and a <b>fail-closed gate</b> as the safety net.</p>
-
-    <div class="dgram">
-      <div class="dgram-h"><h3>One trusted hub, one untrusted container per session</h3><span class="path">planned · docs/SP1A_ARCHITECTURE.md</span></div>
-      <svg class="sp1a-svg" viewBox="0 0 760 380" role="img" aria-labelledby="sp1a-svg-t sp1a-svg-d">
-        <title id="sp1a-svg-t">SP1a planned architecture</title>
-        <desc id="sp1a-svg-d">An untrusted Lane 2 container holding Claude Code reaches the trusted hub only through three read-only per-session sockets: a gate socket, a gh relay socket and a proxy bridge. On the hub the gate checks content with a term list and a local classifier from the model fleet; the push step and gh relay ask the gate before writing to allowlisted repositories; a Squid proxy reaches allowlisted domains only; a per-session supervisor starts, freezes and stops the container and acts on breach signals from the gate.</desc>
-        <defs>
-          <marker id="sp1a-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0 0 L10 5 L0 10 z"/></marker>
-          <marker id="sp1a-ah-acc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-acc" d="M0 0 L10 5 L0 10 z"/></marker>
-        </defs>
-
-        <!-- untrusted container -->
-        <rect class="zone-c" x="8" y="16" width="180" height="348" rx="10"/>
-        <text class="t-k k-acc" x="22" y="38">UNTRUSTED</text>
-        <text class="t-k k-acc" x="22" y="54">CONTAINER</text>
-        <text class="t-s" x="22" y="72">Claude Code · no</text>
-        <text class="t-s" x="22" y="86">sensitive files</text>
-        <rect class="bx" x="24" y="144" width="148" height="44" rx="6"/>
-        <text class="t-m" x="98" y="171" text-anchor="middle">hook shims</text>
-        <rect class="bx" x="24" y="224" width="148" height="44" rx="6"/>
-        <text class="t-m" x="98" y="251" text-anchor="middle">gh shim</text>
-        <rect class="bx" x="24" y="304" width="148" height="44" rx="6"/>
-        <text class="t-m" x="98" y="331" text-anchor="middle">web requests</text>
-
-        <!-- per-session sockets -->
-        <rect class="zone-s" x="204" y="124" width="126" height="240" rx="8"/>
-        <text class="t-s" x="267" y="116" text-anchor="middle">per-session · read-only</text>
-        <rect class="bx" x="212" y="144" width="110" height="44" rx="6"/>
-        <text class="t-m" x="267" y="171" text-anchor="middle">gate socket</text>
-        <rect class="bx" x="212" y="224" width="110" height="44" rx="6"/>
-        <text class="t-m" x="267" y="251" text-anchor="middle">relay socket</text>
-        <rect class="bx" x="212" y="304" width="110" height="44" rx="6"/>
-        <text class="t-m" x="267" y="331" text-anchor="middle">proxy bridge</text>
-
-        <!-- hub -->
-        <rect class="zone-h" x="352" y="16" width="284" height="348" rx="10"/>
-        <text class="t-k k-gate" x="366" y="38">HUB · TRUSTED</text>
-        <rect class="bx" x="368" y="64" width="130" height="44" rx="6"/>
-        <text class="t-m" x="433" y="91" text-anchor="middle">supervisor</text>
-        <rect class="bx" x="514" y="64" width="110" height="44" rx="6"/>
-        <text class="t-s" x="569" y="83" text-anchor="middle">health · hw check</text>
-        <text class="t-s" x="569" y="98" text-anchor="middle">notifier</text>
-        <rect class="bx-gate" x="368" y="144" width="130" height="44" rx="6"/>
-        <text class="t-m k-gate" x="433" y="163" text-anchor="middle">gate</text>
-        <text class="t-s" x="433" y="179" text-anchor="middle">floor + classifier</text>
-        <rect class="bx" x="514" y="144" width="110" height="44" rx="6"/>
-        <text class="t-m" x="569" y="163" text-anchor="middle">model fleet</text>
-        <text class="t-s" x="569" y="179" text-anchor="middle">local, pinned</text>
-        <rect class="bx" x="368" y="224" width="130" height="44" rx="6"/>
-        <text class="t-m" x="433" y="243" text-anchor="middle">push step</text>
-        <text class="t-s" x="433" y="259" text-anchor="middle">+ gh relay</text>
-        <rect class="bx" x="368" y="304" width="130" height="44" rx="6"/>
-        <text class="t-m" x="433" y="323" text-anchor="middle">Squid proxy</text>
-        <text class="t-s" x="433" y="339" text-anchor="middle">allowlist only</text>
-
-        <!-- outside -->
-        <rect class="bx-out" x="652" y="224" width="100" height="44" rx="6"/>
-        <text class="t-s" x="702" y="243" text-anchor="middle">allowlisted</text>
-        <text class="t-s" x="702" y="258" text-anchor="middle">repos</text>
-        <rect class="bx-out" x="652" y="304" width="100" height="44" rx="6"/>
-        <text class="t-s" x="702" y="323" text-anchor="middle">allowlisted</text>
-        <text class="t-s" x="702" y="338" text-anchor="middle">domains</text>
-
-        <!-- flows -->
-        <path class="ln" d="M172 166 H210" marker-end="url(#sp1a-ah)"/>
-        <path class="ln" d="M322 166 H366" marker-end="url(#sp1a-ah)"/>
-        <path class="ln" d="M172 246 H210" marker-end="url(#sp1a-ah)"/>
-        <path class="ln" d="M322 246 H366" marker-end="url(#sp1a-ah)"/>
-        <path class="ln" d="M172 326 H210" marker-end="url(#sp1a-ah)"/>
-        <path class="ln" d="M322 326 H366" marker-end="url(#sp1a-ah)"/>
-        <path class="ln" d="M498 166 H512" marker-end="url(#sp1a-ah)"/>
-        <path class="ln" d="M433 224 V190" marker-end="url(#sp1a-ah)"/>
-        <text class="t-s k-steel" x="440" y="210">hub socket</text>
-        <path class="ln" d="M498 246 H650" marker-end="url(#sp1a-ah)"/>
-        <path class="ln" d="M498 326 H650" marker-end="url(#sp1a-ah)"/>
-        <path class="ln-acc" d="M433 144 V110" marker-end="url(#sp1a-ah-acc)"/>
-        <text class="t-s k-acc" x="440" y="131">breach</text>
-        <path class="ln-acc" d="M368 86 H190" marker-end="url(#sp1a-ah-acc)"/>
-        <text class="t-s k-acc" x="279" y="78" text-anchor="middle">start · freeze · stop</text>
-      </svg>
-      <p class="d-note">The container's only ways out are three sockets the hub creates for that one session. Everything Claude is about to see goes through the gate; every git-host write leaves from the hub; web traffic reaches only allowlisted domains. The diagram shows the <b>planned</b> design.</p>
-    </div>
-
-    <div class="dgram">
-      <div class="dgram-h"><h3>What it will do</h3><span class="path">planned</span></div>
-      <div class="pipe">
-        <div class="check"><div class="cn">separation</div><div class="cw"><b>Sensitive work never enters the container.</b> Only workspaces the operator marks mountable go in, and only after a full scan, history included. Everything else stays on the hub with the local model.</div><div class="cs">lane 1 / lane 2</div></div>
-        <div class="check"><div class="cn">the gate</div><div class="cw"><b>Two layers, allow or block.</b> A term list and a local classifier check prompts, expansions, tool inputs and tool results. Never rewrites. Any fault is a block.</div><div class="cs">fail closed</div></div>
-        <div class="check"><div class="cn">opaque verdicts</div><div class="cw"><b>Claude sees only a ref.</b> The reason goes to the operator as a hub notification, so the model cannot learn which rule matched.</div><div class="cs">ref only</div></div>
-        <div class="check"><div class="cn">breach</div><div class="cw"><b>Sensitive content found inside means stop.</b> The session is latched, frozen and cut off, and the workspace quarantined until the operator reviews it &mdash; with a login token rotation offered.</div><div class="cs">latch · cut</div></div>
-        <div class="check"><div class="cn">push from the hub</div><div class="cw"><b>The container cannot push.</b> The hub checks every new object, path and message, then pushes to an allowlisted repo. Issue and PR text goes through a relay.</div><div class="cs">hub only</div></div>
-        <div class="check"><div class="cn">fallbacks</div><div class="cw"><b>Only by declaration.</b> A floor-only session when the classifier is down, or an <b>UNPROTECTED</b> container that says so at start. The gate never picks either itself.</div><div class="cs">visible</div></div>
-      </div>
-      <p class="d-note">Honest limit: until a later outbound gateway, anything in the container could still be sent to <b>any account</b> on an allowlisted service &mdash; accepted only because the container holds nothing sensitive. Full design, threat model and decision index: <span class="path">docs/SP1A_ARCHITECTURE.md</span> in the repository.</p>
-    </div>
-
-    <div class="dgram">
-      <div class="dgram-h"><h3>Landed so far</h3><span class="path">built</span></div>
-      <div class="pipe">
-        <div class="check"><div class="cn">eval set</div><div class="cw"><b>The classifier's miss rate is measured honestly.</b> The operator writes and freezes a held-out split before any tuning; the set stays on the hub and leaves it only encrypted.</div><div class="cs">scripts/hub/eval-set.sh</div></div>
-        <div class="check"><div class="cn">hardware check</div><div class="cw"><b>Know before setup whether a host can run the classifier.</b> Run on the host, it reports GPU, Vulkan/RADV, Mesa, usable GPU memory and system memory, says <b>pass</b> or <b>below floor</b>, and on a pass recommends which models to download. Below floor means gated sessions are floor-only, by declaration. An unreadable value never passes. The minimum is <b>provisional</b> until the bake-off measures it.</div><div class="cs">scripts/hub/hw-check.sh</div></div>
-        <div class="check"><div class="cn">fleet_call</div><div class="cw"><b>Every local-model call goes through one client.</b> It checks health and context fit first, applies the pinned classifier settings, and treats any fault as a block &mdash; so eval and production call the model the same way.</div><div class="cs">scripts/lib/fleet.sh</div></div>
-        <div class="check"><div class="cn">eval harness</div><div class="cw"><b>The eval reports only what its numbers support.</b> Floor, classifier, and combined are scored separately, per category, each miss rate with its case count and a 95% upper bound; false blocks on hard negatives sit beside the operator's ceiling. A case that could not be scored is an <b>error</b>, never a catch or a miss. Every run leaves a complete record on the hub; only a scrubbed copy is shared. It now scores <b>through the gate&rsquo;s eval op</b>, never the floor or the model directly, so it measures the gate production uses; each record names the gate&rsquo;s policy version.</div><div class="cs">scripts/hub/eval-harness.sh</div></div>
-        <div class="check"><div class="cn">lane2 install</div><div class="cw"><b>The hub runs only merged code.</b> Root installs a full commit id fetched from the origin &mdash; never the local checkout &mdash; into a root-owned prefix, creates each store with its one writer as owner, renders and lints the units, and swaps <span class="path">current</span> only after every check passed. Only gate sockets, fleet units, and the notifier start at boot.</div><div class="cs">scripts/hub/lane2</div></div>
-        <div class="check"><div class="cn">gate policy</div><div class="cw"><b>The gate never runs without its policy.</b> The term list and classifier prompt come from the operator&rsquo;s private repository into a hub-only checkout, validated and swapped in atomically; a failed update keeps the old policy. A missing, empty, or unreadable policy is a fault that blocks everything. Nothing reports a term &mdash; only counts.</div><div class="cs">lane2 policy update</div></div>
-        <div class="check"><div class="cn">gate service</div><div class="cw"><b>One fail-closed decision core.</b> A socket-activated handler per connection on the hub socket reads one bounded request, runs the floor &mdash; and the classifier only if the floor is clear &mdash; and answers one line: allow or block. Every fault, timeout, bad frame, or unknown caller is a block, and callers treat anything but a well-formed allow as a block. <span class="path">lane2 check</span> asks it from the terminal.</div><div class="cs">scripts/hub/gate-handler</div></div>
-        <div class="check"><div class="cn">cache and limits</div><div class="cw"><b>Fast, but never stale and never a free oracle.</b> An allow is reused only for the same content under the same policy and full layer set; a policy change re-classifies everything, and a broken cache blocks. Each hub caller has a request rate and a block budget; going over blocks it as a probe and alerts you. Every request leaves one metadata-only query-log line.</div><div class="cs">scripts/lib/gate-cache.sh</div></div>
-        <div class="check"><div class="cn">disguise and length</div><div class="cw"><b>Hiding a term or burying it does not get past.</b> The floor matches listed terms through case changes, inserted spaces or separators, and base64, URL, or hex encoding, two levels deep, always also checking the original text. Content too long for the classifier is split by the gate into overlapping chunks; any sensitive or failed chunk blocks the whole request.</div><div class="cs">scripts/lib/gate.sh</div></div>
-        <div class="check"><div class="cn">Lane 2 image</div><div class="cw"><b>No workspace can change what the container is.</b> The image is built on the hub from the installed commit only, Claude Code pinned to an exact version with auto-update off, and started only by its digest. The container definition is read-only, drops every capability, has no network, mounts only the AD-21 list, and runs under userns-remap so container root is never hub root.</div><div class="cs">scripts/hub/container/</div></div>
-        <div class="check"><div class="cn">health check</div><div class="cw"><b>Proves the gate really classifies before Lane 2 starts.</b> One line per part: the gate runs the operator&rsquo;s two private probes &mdash; a sensitive one must be blocked by the classifier, a harmless one allowed, and a probe that only the floor catches fails &mdash; plus both model services and their loopback binds, the policy version, the notifier, the installed code, the selection record, and swap. Any failure names the part and is logged; removed terms show as a count until acknowledged.</div><div class="cs">lane2 health</div></div>
-        <div class="check"><div class="cn">what a block leaves</div><div class="cw"><b>The caller gets a ref; you get the reason.</b> Every block carries a random <span class="path">gr-</span> ref and nothing else for the caller. The gate keeps the blocked payload (0600, expired after a set number of days, with per-origin quotas), writes one metadata-only log line, and a desktop notification tells you &mdash; at once and marked critical when container content hit. <span class="path">lane2 review show</span> shows it.</div><div class="cs">scripts/lib/gate-store.sh</div></div>
-      </div>
-      <p class="d-note">Operator docs: <span class="path">docs/SP1A_EVAL_SET.md</span>, <span class="path">docs/SP1A_EVAL_HARNESS.md</span>, <span class="path">docs/SP1A_HARDWARE_CHECK.md</span>, <span class="path">docs/SP1A_FLEET.md</span>, <span class="path">docs/SP1A_HUB_SETUP.md</span> and <span class="path">docs/SP1A_GATE.md</span>.</p>
     </div>
   </section>
 
@@ -809,11 +607,8 @@
     <div class="docs">
       <span>README.md</span>
       <span>docs/TEMPLATE_GUIDE.md</span>
-      <span>docs/AI_ROUTING_POLICY.md</span>
       <span>docs/BMAD_WORKFLOW.md</span>
       <span>docs/KANBAN_WORKFLOW.md</span>
-      <span>docs/SP1A_ARCHITECTURE.md (planned)</span>
-      <span>docs/SP1A_FLEET.md</span>
       <span>docs/ARCHITECTURE_VISION.md (v3 planned)</span>
     </div>
     <p class="fine">The repository README is the source of truth; this overview is a briefing companion. Apache-2.0.</p>
