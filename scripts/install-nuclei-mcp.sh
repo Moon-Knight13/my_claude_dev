@@ -23,6 +23,7 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 NUCLEI_MCP_REPO="addcontent/nuclei-mcp"
 NUCLEI_MCP_VERSION="${NUCLEI_MCP_VERSION:-v0.1.0}"
+NUCLEI_MCP_PATCH="mcp-go-v1.5.0"
 MARKER_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 MARKER_FILE="$MARKER_DIR/.template-nuclei-mcp-ref"
 mkdir -p "$MARKER_DIR"
@@ -60,7 +61,7 @@ fi
 GOBIN="${GOBIN:-$(go env GOPATH)/bin}"
 if [[ -x "$GOBIN/nuclei-mcp" ]]; then
     if [[ "${NUCLEI_MCP_FORCE:-0}" != "1" ]] \
-      && [[ -f "$MARKER_FILE" ]] && grep -q "^${NUCLEI_MCP_VERSION}$" "$MARKER_FILE"; then
+      && [[ -f "$MARKER_FILE" ]] && grep -q "^${NUCLEI_MCP_VERSION}+${NUCLEI_MCP_PATCH}$" "$MARKER_FILE"; then
         pass "nuclei-mcp already installed at ${NUCLEI_MCP_VERSION}"
         if $check_only; then
             echo ""
@@ -95,7 +96,12 @@ if ! git clone --depth 1 --branch "$NUCLEI_MCP_VERSION" "$NUCLEI_MCP_GIT_URL" "$
 fi
 
 echo "Resolving dependencies..."
-(cd "$BUILD_DIR" && go get github.com/bytedance/sonic@latest 2>&1 && go mod tidy 2>&1) || true
+# Upgrade mcp-go to v1.5.0 — upstream v0.32.0 negotiates MCP protocol 2025-03-26
+# which Claude Code rejects (needs >=2025-11-25), causing SIGTERM after ~5s.
+(cd "$BUILD_DIR" \
+  && go get github.com/mark3labs/mcp-go@v1.5.0 2>&1 \
+  && go get github.com/bytedance/sonic@latest 2>&1 \
+  && go mod tidy 2>&1) || true
 
 echo "Building nuclei-mcp..."
 if ! (cd "$BUILD_DIR" && go build -o "$GOBIN/nuclei-mcp" ./cmd/nuclei-mcp/) 2>&1; then
@@ -145,7 +151,7 @@ with open(mcp_file, 'w') as f:
 fi
 
 # ── Marker ────────────────────────────────────────────────────────────────
-echo "$NUCLEI_MCP_VERSION" > "$MARKER_FILE"
+echo "${NUCLEI_MCP_VERSION}+${NUCLEI_MCP_PATCH}" > "$MARKER_FILE"
 
 echo ""
 echo "=== nuclei-mcp install complete (${NUCLEI_MCP_REPO}@${NUCLEI_MCP_VERSION}) ==="
