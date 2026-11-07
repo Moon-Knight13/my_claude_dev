@@ -54,10 +54,43 @@ Static overrides in `.mcp.json`: `TUONI_VERIFY_TLS=false`,
 | `LOCAL_MODEL_ENDPOINT`   | `OLLAMA_HOST`       | local-ollama     |
 | `LOCAL_MODEL_MODEL`      | `OLLAMA_MODEL`      | local-ollama     |
 
+### BloodHound → bloodhound-mcp
+
+| You set in `.env`      | load-env.sh derives | MCP server reads |
+|------------------------|---------------------|------------------|
+| *(none)*               | *(none)*            | *(none)*         |
+
+Standalone — no env vars required. Provides Active Directory graph analysis.
+
+### Hashcat → hashcat-mcp
+
+| You set in `.env`      | load-env.sh derives                    | MCP server reads |
+|------------------------|----------------------------------------|------------------|
+| *(static in .mcp.json)* | `HASHCAT_PATH` (ssh wrapper script)   | hashcat-mcp      |
+| *(static in .mcp.json)* | `HASHCAT_MODES_CSV` (mode reference)  | hashcat-mcp      |
+
+Paths set statically in `.mcp.json`. Hashcat runs on Kali via SSH wrapper.
+
+### Nuclei → nuclei-mcp
+
+| You set in `.env`      | load-env.sh derives       | MCP server reads |
+|------------------------|---------------------------|------------------|
+| *(static in .mcp.json)* | `NUCLEI_MCP_SERVER_PORT=0` | nuclei-mcp      |
+
+Port 0 = random ephemeral port. Nuclei binary runs locally.
+
+### CVE Intelligence → cve-mcp
+
+| You set in `.env`      | load-env.sh derives | MCP server reads |
+|------------------------|---------------------|------------------|
+| *(none)*               | *(none)*            | *(none)*         |
+
+Standalone — no env vars required. Provides CVE/EPSS/KEV/NVD/exploit lookup.
+
 ### No env vars needed
 
 These servers work standalone: **obsidian-mcp**, **hacktricks-mcp**,
-**mitre-mcp**, **lolbins-mcp**.
+**mitre-mcp**, **lolbins-mcp**, **cve-mcp**, **bloodhound-mcp**.
 
 ## Debugging
 
