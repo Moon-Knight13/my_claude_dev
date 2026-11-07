@@ -75,7 +75,21 @@ _load_env_file() {
 }
 
 # Repo root is two levels up from scripts/lib/.
-_load_env_file "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/.env"
+_repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+_load_env_file "$_repo_root/.env"
+
+# Profile overlay: ~/.claude-profiles/$ACTIVE_PROFILE.env supplements .env.
+# Profile values override .env values but the caller's environment still wins.
+if [[ -n "${ACTIVE_PROFILE:-}" ]]; then
+    _profile_file="$HOME/.claude-profiles/${ACTIVE_PROFILE}.env"
+    if [[ -f "$_profile_file" ]]; then
+        _load_env_file "$_profile_file"
+    else
+        echo "load-env: WARNING: ACTIVE_PROFILE=$ACTIVE_PROFILE but $_profile_file not found" >&2
+    fi
+    unset _profile_file
+fi
+unset _repo_root
 unset -f _load_env_file
 
 # Derive *_URL from *_HOST when URL not explicitly set.
