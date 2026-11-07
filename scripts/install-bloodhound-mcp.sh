@@ -50,8 +50,10 @@ else
   PYTHON_CMD="$VENV_DIR/bin/python3"
 fi
 
-# Clone or update repo
-if [[ -d "$BH_MCP_DIR/.git" ]]; then
+# Clone or update repo (skip if tracked locally with modifications)
+if [[ -f "$BH_MCP_DIR/BloodHound-MCP.py" && ! -d "$BH_MCP_DIR/.git" ]]; then
+  echo "BloodHound MCP tracked locally (forked); skipping clone."
+elif [[ -d "$BH_MCP_DIR/.git" ]]; then
   echo "Updating BloodHound MCP repo..."
   git -C "$BH_MCP_DIR" fetch origin
   git -C "$BH_MCP_DIR" checkout "$BH_MCP_REF"
