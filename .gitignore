@@ -51,7 +51,8 @@ npm-debug.log*
 tuoni-plugins/
 
 # Cloned MCP server repos (installed by scripts/install-*.sh, not template assets)
-mcp-servers/bloodhound-mcp/
+# bloodhound-mcp tracked locally — forked with lazy-start fix
+mcp-servers/bloodhound-mcp/.git.bak/
 
 # MCP SSE proxy runtime state (PID files, logs)
 .run/
