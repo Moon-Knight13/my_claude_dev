@@ -52,7 +52,7 @@ When spawning T3 threads or subagents that write code:
 Automated reviewer runs every 4h via T3 scheduled task. Separate session = objective.
 - **LOW RISK** (dependabot, docs-only, gitignore): auto-merge if CI green + no breaking changes.
 - **FEATURE**: posts review findings as PR comment, tags for manual merge. Never auto-merges.
-- Scoped to: my_claude_dev, tuoni-plugins, homelab_infra, medicat-usb, foundryvtt-docker.
+- Scoped to: ALL MoonKnight13 repos (discovers dynamically via `gh search prs`). Skips archived/fork/template.
 - Manage: `list_scheduled_tasks` to see, `schedule_task` with `scheduledTaskId` to update/disable.
 
 ## Style
