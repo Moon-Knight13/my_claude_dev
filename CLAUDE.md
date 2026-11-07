@@ -37,6 +37,24 @@ Work is tracked on a per-repo GitHub Project board (see `docs/KANBAN_WORKFLOW.md
   architecture, routing, security gates, or component set change, update the explainer in
   the same PR. It is self-contained — no external requests, works offline and via Pages.
 
+## Thread Delegation
+When spawning T3 threads or subagents that write code:
+- **Always use `workspaceStrategy: worktree`** for threads that edit files.
+  Parallel threads sharing root checkout cause branch conflicts and stalls.
+- Root checkout only for read-only tasks (reviews, `gh` commands, diagnosis).
+- Use `full-access` runtime mode for threads working in repos with offensive
+  security content — `auto` mode classifier blocks writes due to context bleed.
+- Use `t3_thread_wait` to chain work waves, not polling or sleep.
+- PR consolidation: batch related changes into single PRs where possible to
+  reduce operator review burden. One PR per logical feature, not per file.
+
+## PR Review Bot
+Automated reviewer runs every 4h via T3 scheduled task. Separate session = objective.
+- **LOW RISK** (dependabot, docs-only, gitignore): auto-merge if CI green + no breaking changes.
+- **FEATURE**: posts review findings as PR comment, tags for manual merge. Never auto-merges.
+- Scoped to: my_claude_dev, tuoni-plugins, homelab_infra, medicat-usb, foundryvtt-docker.
+- Manage: `list_scheduled_tasks` to see, `schedule_task` with `scheduledTaskId` to update/disable.
+
 ## Style
 Default response style should be concise and precise.
 
