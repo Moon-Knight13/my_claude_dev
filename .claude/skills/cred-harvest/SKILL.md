@@ -115,9 +115,12 @@ If current access insufficient for credential harvesting:
    - Custom technique (no public exploit scripts)
    - Verify new access level
    - Update engagement YAML with new privilege level
-4. **Re-establish persistence at new level**:
-   - Persist-on-landing rule applies after priv esc too
-   - New beacons at elevated privilege
+4. **Persist-swarm ROUND 2 (high-priv)** — MANDATORY before Phase 3:
+   - Invoke persist-swarm skill for elevated dual-beacon deployment
+   - See persist-swarm Two-Round Persistence section
+   - Verify BOTH elevated beacons before proceeding to credential harvest
+   - Archive round 1 low-priv beacons once round 2 confirmed stable
+   - Cred-dump requires root/SYSTEM — do NOT proceed without verified round 2
 
 ### Phase 3: Credential Harvesting
 

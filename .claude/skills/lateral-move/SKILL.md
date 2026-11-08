@@ -65,19 +65,28 @@ credential store — requires creds stored via `tuoni_credential_add` first.
 
 ### Phase 1: Target Selection
 
-1. **Review Providentia** (range-intel MCP) for candidate targets:
-   - `range_networks`: full network topology — what segments exist, what can foothold reach
-   - `range_targets_summary`: lightweight inventory of hosts per segment (no vuln overhead)
+0. **Read source host Obsidian page** (`llm-wiki/wiki/targets/<source>.md`):
+   - Harvested cred refs, discovered lateral paths, routes, proxy chain
+   - This is the input — don't re-derive what discovery already found
+1. **BloodHound AD paths** (bloodhound-mcp — AD environments):
+   - Query shortest paths from current access to high-value targets (DA, EA)
+   - Match BloodHound paths against available credentials
+   - Identify kerberoastable SPNs, delegation abuse, NTLM relay opportunities
+   - BloodHound is PRIMARY tool for "where to move next" in AD
+2. **Review Providentia** (range-intel MCP) for candidate targets:
+   - `range_networks`: full network topology
+   - `range_targets_summary`: lightweight inventory per segment
    - `range_host`: detail for specific candidates
    - Host roles: prioritize per RT-DEP-001 deployment order
    - Team assignments: stay within engagement scope
-2. **Match credentials to targets** (programmatic, not manual):
+3. **Match credentials to targets** (programmatic, not manual):
    - `tuoni_credentials_list` filter by realm/type against `range_targets` by network
    - Domain creds: which hosts are domain-joined?
    - Local admin: reuse across similar builds?
    - Service accounts: what systems do they access?
    - SSH keys: authorized on which hosts?
-3. **LOLBins lateral analysis** (lolbins-mcp):
+   - **If technique-scoring data available**: rank vectors by empirical success rate
+4. **LOLBins lateral analysis** (lolbins-mcp):
    - `find_lateral_movement`: discover LOLBin-based lateral movement methods
    - `compare_platforms`: when moving Linux→Windows or vice versa, find technique equivalents
    - `analyze_opsec_risk`: assess detection risk for chosen lateral method
@@ -132,6 +141,8 @@ Per target, strictly sequential:
 1. **Authenticate**: use credential from tuoni store via Kali tool
    - RDP, WinRM, SSH, SMB, WMI — match to credential type and target OS
    - Run from Kali (through SOCKS if needed)
+   - **If credential fails: max 2 attempts per cred per target.** Do NOT retry
+     or brute force during lateral movement. Mark cred invalid for this host.
 2. **Deliver payload**: stage on target using authenticated session
 3. **Execute payload**: trigger execution via authenticated access
 4. **Wait for callback**: monitor listener for agent check-in
@@ -164,11 +175,16 @@ After all planned lateral moves complete:
    - Phase, agent IDs, persistence status
    - Network position (what new nets are reachable?)
    - Discovery findings summary
-2. **Assess new attack surface**:
+2. **Re-run recon Phase 0 from new position** (MANDATORY if new zone):
+   - Dispatch net-recon sweep from new foothold via tuoni plugin
+   - Map what this host can reach that Kali couldn't
+   - Update reachability matrix in engagement YAML + Obsidian
+   - Newly-reachable targets become candidates for next lateral wave
+3. **Assess new attack surface**:
    - New network segments reachable?
    - New credential harvesting opportunities?
    - Closer to high-value targets (DCs, critical servers)?
-3. **Update proxy chain** if new routes discovered
+4. **Update proxy chain** if new routes discovered
 4. **Document in Obsidian (llm-wiki paths — ENFORCED)**:
    Invoke `/log-finding` for each lateral move outcome. Then write:
    - `llm-wiki/wiki/targets/<hostname>.md`: update target page with access method

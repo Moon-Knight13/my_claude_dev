@@ -136,9 +136,11 @@ Discrepancies between Providentia (expected) and enumeration (actual) are
 high-value findings — document them. They reveal hardening, misconfiguration,
 or undocumented services.
 
-### Phase 3: Vulnerability Analysis
+### Phase 3: Vulnerability Analysis (writes to Obsidian — initial-access reads this)
 
-Cross-reference active recon results with Tier 3 sources:
+Cross-reference active recon results with Tier 3 sources. **This phase does
+the CVE/technique research.** Initial-access thread reads results from Obsidian
+target page — it does NOT re-run this research unless the page is missing it.
 
 **Nuclei template scanning** (nuclei-mcp — structured vuln scan from Kali):
 - `basic_scan`: quick scan against target with default templates

@@ -6,6 +6,14 @@ modes: [red-team, purple]
 
 # Persist-Swarm — Dual-Beacon Persistence
 
+## Thread Orchestration
+
+Persist-swarm runs INLINE within the initial-access or lateral-move thread
+(same thread, not separate). Before deploying, read the Obsidian target page
+(`llm-wiki/wiki/targets/<hostname>.md`) for: current privilege level, AV/EDR
+findings from discovery, available persistence mechanisms. Write results back
+to the same Obsidian page. Engagement YAML gets status refs only.
+
 ## When to use
 
 Immediately after gaining access to any new host. Called automatically by
@@ -140,25 +148,18 @@ Invoke `/log-finding` with persistence deployment outcome.
 Update `llm-wiki/wiki/targets/<hostname>.md` with persistence section.
 Write `llm-wiki/raw/<hostname>-persist-<date>.md` with deployment log.
 
-Update engagement YAML:
+Write persistence detail to Obsidian target page (`llm-wiki/wiki/targets/<hostname>.md`
+under `## Persistence` section): beacon IDs, mechanisms, cover names, intervals, payload IDs,
+verification status.
+
+Engagement YAML stays lean:
 ```yaml
 targets:
   - hostname: <target>
     persistence:
-      operational:
-        beacon_id: <tuoni agent ID>
-        mechanism: <service|cron|task|etc>
-        cover_name: <filename used>
-        interval: <callback seconds>
-        payload_id: <unique ID>
-      sleeper:
-        beacon_id: <tuoni agent ID>
-        mechanism: <different mechanism>
-        cover_name: <filename used>
-        interval: <callback seconds>
-        payload_id: <unique ID>
-      verified: <true|false>
-      verified_at: <ISO 8601>
+      round1: verified|pending|failed
+      round2: verified|pending|failed
+      wiki_page: llm-wiki/wiki/targets/<hostname>.md
 ```
 
 ## Beacon recovery
