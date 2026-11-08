@@ -13,24 +13,25 @@ intelligence, and dev boxes connected as spokes via SSH tunnels.
 
 ```
  Operator Laptop (hub)
- +-----------------------------------------+
- |  Claude Opus 4.6 primary session        |
- |                                         |
- |  MCP servers:                           |
- |    outline-readonly  (wiki intel)       |
- |    range-intel       (targeting)        |
- |    GitLab MCP        (coming soon)      |
- |                                         |
- |  ctp-bridge          (deploy tooling)   |
- +-----------+-----------------------------+
-             |  SSH tunnels
-     +-------+-------+
-     |               |
-  dev-box-1       dev-box-N   (spokes)
+ +---------------------------------------------+
+ |  Claude Opus 4.6 primary session             |
+ |                                              |
+ |  13 MCP servers (security research, C2,      |
+ |  CMDB, wiki, code, binary analysis, vault)   |
+ |                                              |
+ |  11 operational modes with context isolation  |
+ |                                              |
+ |  ctp-bridge (deploy tooling)                 |
+ +------------+--------------------------------+
+              |  SSH proxy chain
+      +-------+-------+
+      |               |
+   Kali box      Deploy box    (spokes)
+   (C2/tools)    (catapult)
 ```
 
 **Backup plan:** If Opus 4.6 is unavailable, fall back to OpenCode + OpenRouter
-with a local abliterated model.
+with a local model.
 
 **Archived:** The local model orchestrator, sensitivity routing, and SP1a gate
 are archived on the `archive/sp1a-gate` branch.
@@ -42,17 +43,14 @@ demonstrating how a single Claude session with MCP integrations, safety controls
 and mode-based isolation can serve as a multi-environment platform for security
 operations and software development.
 
-**Current state:** Built and operational for one environment (a dedicated cyber
-range) with 6 modes, 15+ MCP servers, a tested safety harness, and CI security
-gates.
+**Current state:** Built and operational with 11 modes, 13 MCP servers, environment
+profiles, a tested safety harness, and CI security gates. Supports multiple
+environment types: dedicated cyber range, CTF platforms, penetration testing
+engagements, bug bounty programs, general software development, and homelab
+infrastructure.
 
-**Where it's going (v3):** Generalize to multiple independent environments — CTF
-platforms, penetration testing engagements, bug bounty programs, general software
-development, and homelab infrastructure — each with its own mode set, knowledge
-base, and model failover chain. Planned additions:
+**Where it's going (v3):** Full multi-environment generalization with:
 
-- **New modes:** `dev` (general coding), `ctf` (challenge solving), `pentest`
-  (client engagements), `bounty` (bug bounty programs)
 - **T3-native routing:** T3 Code projects as environment profiles, threads as
   mode sessions with full context isolation — replaces hook-injected mode
   switching for better multi-session safety
@@ -60,8 +58,6 @@ base, and model failover chain. Planned additions:
   cloud GPU, down to local Ollama — no single-provider dependency
 - **Vault-per-mode knowledge bases:** Obsidian vaults with semantic search MCP,
   giving agents accumulated operator experience per domain
-- **Environment profiles:** Replace flat `.env` with per-environment config
-  selecting available modes, MCP servers, spoke connections, and vaults
 
 This is a **framework, not a weapon**. No operational data, credentials, or
 target-specific configuration lives in this repository. Offensive skills are
@@ -72,15 +68,48 @@ comparable to a CI/CD platform than to an exploit toolkit.
 See [`docs/ARCHITECTURE_VISION.md`](docs/ARCHITECTURE_VISION.md) for the full v3
 planning document.
 
+## Modes
+
+11 operational modes with context isolation via hook-injected configuration:
+
+| Mode | Purpose |
+|------|---------|
+| `base` | Default — no offensive tools or range connectivity |
+| `platform-ops` | Hub infrastructure maintenance |
+| `green-dev` | Range infrastructure build and deploy |
+| `red-team` | Live offensive operations |
+| `red-dev` | Offensive tooling development |
+| `purple` | Combined attack/defend analysis |
+| `dev` | General software development |
+| `ctf` | CTF challenge solving |
+| `pentest` | Client penetration testing engagements |
+| `bounty` | Bug bounty programs |
+| `homelab` | Home infrastructure management |
+
+Mode configs live in `.claude/modes/`. Routing rules in `.claude/modes/project-routes.yaml`.
+
 ## MCP Servers
 
-All servers live under `mcp-servers/`:
+13 MCP servers connecting the hub to range infrastructure and security research
+tooling. In-repo servers live under `mcp-servers/`; others are external packages.
 
-| Server | Purpose | Stack |
-|--------|---------|-------|
-| `outline-readonly` | Read-only access to the Outline wiki for doctrine, rules, and planning docs | Node.js, zero dependencies |
-| `range-intel` | Providentia range data + GitLab VM README vulnerability profiles for targeting intel | Python (FastMCP) |
-| GitLab MCP | Source code and issue access | Coming soon |
+| Server | Purpose |
+|--------|---------|
+| `outline-readonly` | Read-only Outline wiki access (doctrine, rules, planning) |
+| `range-intel` | Providentia CMDB + GitLab VM vulnerability profiles |
+| `tuoni-mcp` | Tuoni C2 agent management |
+| `bloodhound-mcp` | BloodHound AD attack path analysis |
+| `obsidian-mcp` | Engagement documentation vault |
+| `rea-mcp` | Binary reverse engineering analysis |
+| `ghidra-mcp` | Ghidra decompilation and disassembly |
+| `hacktricks-mcp` | HackTricks technique reference |
+| `mitre-mcp` | MITRE ATT&CK framework lookup |
+| `lolbins-mcp` | Living-off-the-land binary lookup |
+| `cve-mcp` | CVE vulnerability database |
+| `local-ollama` | Local model inference |
+
+Secret scoping in `config/mcp-secrets.yaml` — each MCP receives only its declared
+secrets (fail-closed: unlisted MCPs get zero).
 
 ## Connect to a Box
 
@@ -224,12 +253,14 @@ with its issue number; it is still run and reported but does not fail the build.
 ## Repository Structure
 
 ```
-mcp-servers/         MCP servers (outline-readonly, range-intel)
+mcp-servers/         In-repo MCP servers (outline-readonly, range-intel, bloodhound-mcp)
 scripts/local/       Developer-laptop bootstrap (SSH + VSCode Remote-SSH to a box)
 scripts/host/        Remote box provisioning (killswitch, extensions, ansible-lint)
 scripts/             Bootstrap, CI helpers, and template validator
 .devcontainer/       Dev environment (for developing this repo)
 .claude/commands/    Claude Code skills
+.claude/modes/       Operational mode configurations (11 modes)
+config/              MCP secret scoping, environment profiles
 .github/             Workflows (CI, secret scan, semgrep, container scan); issue & PR templates
 docs/                SAFETY_HARNESS.md, ARCHITECTURE_VISION.md, TEMPLATE_GUIDE.md, BMAD_WORKFLOW.md, KANBAN_WORKFLOW.md
 ```
