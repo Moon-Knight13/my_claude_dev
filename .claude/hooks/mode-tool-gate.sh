@@ -21,7 +21,14 @@ MODE_FILE="$PROJECT_DIR/.claude/.active-mode"
 # No active mode = no policy to enforce
 [[ -f "$MODE_FILE" ]] || exit 0
 
-MODE="$(cat "$MODE_FILE" 2>/dev/null)"
+# Per-thread mode override (keyed by session ID) takes priority
+OVERRIDE_DIR="$PROJECT_DIR/.claude/.mode-overrides"
+SESSION_ID="${CLAUDE_CODE_SESSION_ID:-}"
+if [[ -n "$SESSION_ID" && -f "$OVERRIDE_DIR/$SESSION_ID" ]]; then
+    MODE="$(cat "$OVERRIDE_DIR/$SESSION_ID" 2>/dev/null)"
+else
+    MODE="$(cat "$MODE_FILE" 2>/dev/null)"
+fi
 [[ -n "$MODE" ]] || exit 0
 
 POLICY_FILE="$PROJECT_DIR/.claude/modes/$MODE/tool-policy.yaml"
