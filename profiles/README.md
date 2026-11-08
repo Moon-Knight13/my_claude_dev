@@ -8,10 +8,10 @@ environment for a specific use case.
 ```bash
 # Copy a profile to ~/.claude-profiles/
 mkdir -p ~/.claude-profiles
-cp profiles/dcm-range.env ~/.claude-profiles/
+cp profiles/range.env ~/.claude-profiles/
 
 # Activate by setting ACTIVE_PROFILE before launching Claude Code
-export ACTIVE_PROFILE=dcm-range
+export ACTIVE_PROFILE=range
 
 # Or switch at runtime
 scripts/switch-profile.sh ctf
@@ -21,7 +21,7 @@ scripts/switch-profile.sh ctf
 
 | File | Purpose |
 |------|---------|
-| `dcm-range.env` | DCM cyber range — full spoke connectivity, all MCPs |
+| `range.env` | Cyber range — full spoke connectivity, all MCPs |
 | `ctf.env` | CTF platforms (HTB, THM, PG) — no range spokes |
 | `pentest.env` | Client engagements — custom spokes per engagement |
 | `homelab.env` | Homelab infra — local Ollama, no range |
