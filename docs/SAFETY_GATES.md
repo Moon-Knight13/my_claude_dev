@@ -14,7 +14,7 @@ That wrapper is the **only** supported path to run `ctp`. A `PreToolUse` hook
 into the container, and a bare `ctp` — so the gates cannot be skipped.
 
 **Installed at user scope, not per-repo.** The work does not happen in this repo —
-it happens in the range checkout (e.g. `~/catapult/inventories/dcm`), and a hook
+it happens in the range checkout (e.g. `~/catapult/inventories/range`), and a hook
 registered only in this repo's `.claude/` would not load for a session started
 there. So `scripts/install-ctp-bridge.sh` (run by provisioning, step 8, or
 standalone) installs the wrapper to `~/.local/bin/ctp-bridge`, the guard to

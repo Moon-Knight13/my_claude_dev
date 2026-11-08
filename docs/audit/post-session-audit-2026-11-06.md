@@ -29,7 +29,7 @@ No credentials, tokens, or private keys found in tracked files or git history.
 
 | File | Hostnames |
 |------|-----------|
-| `config/claude/CLAUDE.md` | `crp.cr14.net`, `dcm.ex` |
+| `config/claude/CLAUDE.md` | `crp.cr14.net`, range TLD |
 | `.claude/skills/spoke-health/SKILL.md` | `crp.cr14.net` |
 | `docs/planning/prd-v2.md` | `wiki.crp.cr14.net`, `git.crp.cr14.net`, `providentia.crp.cr14.net` |
 | `docs/superpowers/plans/2026-11-05-t3-code-phase0-validation.md` | `crp.cr14.net` |

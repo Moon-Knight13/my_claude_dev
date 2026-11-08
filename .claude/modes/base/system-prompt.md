@@ -14,7 +14,7 @@ scope which skills, tools, and rules are active for a given domain.
 | Mode | Domain | Switch |
 |------|--------|--------|
 | `platform-ops` | Framework maintenance, MCP dev, CI, board work | `/mode platform-ops` |
-| `green-dev` | DCM range infrastructure build via catapult | `/mode green-dev` |
+| `green-dev` | Range infrastructure build via catapult | `/mode green-dev` |
 | `red-team` | Offensive ops against authorized targets | `/mode red-team` |
 | `red-dev` | Exploit dev, RE, CVE research on test range | `/mode red-dev` |
 | `purple` | Attack + detection validation with scoring | `/mode purple` |

@@ -48,7 +48,7 @@ Replaces the current flat `.env` with per-environment configuration:
 
 ```
 ~/.claude-profiles/
-  dcm-range.env      # current environment
+  range.env           # current environment
   ctf-htb.env        # HTB/THM challenges
   pentest.env        # client engagement
   homelab.env        # infrastructure work
@@ -99,7 +99,7 @@ T3 Projects = Environment Profiles
   └── T3 Threads = Mode Sessions
 
 Hub thread (base) = coordinator/router
-  ├── "DCM Range" project → red-team, green-dev, purple, red-dev threads
+  ├── "Cyber Range" project → red-team, green-dev, purple, red-dev threads
   ├── "CTF" project → per-challenge threads
   ├── "Pentest" project → per-engagement threads
   ├── "Homelab" project → per-service threads

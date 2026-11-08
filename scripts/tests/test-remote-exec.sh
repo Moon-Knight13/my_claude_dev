@@ -25,7 +25,7 @@ cat > "$TMP/conf-remote" <<'EOF'
 CTP_ALLOWED_TARGET=test-box_t02
 CTP_ALLOWED_TEAM=t02
 CTP_REMOTE_HOST=deploybox
-CTP_PROJECT_DIR=/srv/inventories/dcm
+CTP_PROJECT_DIR=/srv/inventories/range
 EOF
 
 source "$REPO_ROOT/scripts/lib/ctp-guard.sh"
@@ -38,10 +38,10 @@ else
     bad config-parses-remote-host "expected 'deploybox', got '$CTP_REMOTE_HOST'"
 fi
 
-if [[ "$CTP_PROJECT_DIR" == "/srv/inventories/dcm" ]]; then
+if [[ "$CTP_PROJECT_DIR" == "/srv/inventories/range" ]]; then
     ok config-parses-project-dir
 else
-    bad config-parses-project-dir "expected '/srv/inventories/dcm', got '$CTP_PROJECT_DIR'"
+    bad config-parses-project-dir "expected '/srv/inventories/range', got '$CTP_PROJECT_DIR'"
 fi
 
 # --- 2. Config without CTP_REMOTE_HOST leaves it empty -----------------------
@@ -141,15 +141,15 @@ fi
 # --- 10. _resolve_workdir accepts CTP_PROJECT_DIR when remote -----------------
 result="$(
     CTP_REMOTE_HOST="deploybox"
-    CTP_PROJECT_DIR="/srv/inventories/dcm"
+    CTP_PROJECT_DIR="/srv/inventories/range"
     if [[ -n "$CTP_PROJECT_DIR" ]]; then
         printf '%s' "$CTP_PROJECT_DIR"
     fi
 )"
-if [[ "$result" == "/srv/inventories/dcm" ]]; then
+if [[ "$result" == "/srv/inventories/range" ]]; then
     ok resolve-workdir-uses-project-dir-remote
 else
-    bad resolve-workdir-uses-project-dir-remote "expected /srv/inventories/dcm, got '$result'"
+    bad resolve-workdir-uses-project-dir-remote "expected /srv/inventories/range, got '$result'"
 fi
 
 # --- 11. Remote container-not-running includes host hint ----------------------

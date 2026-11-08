@@ -626,7 +626,7 @@ boundary outside caller control — is preserved.
 
 **C is delivered at user scope on the box, not as repo-local config.** The design
 placed the hook in this repo's `.claude/`. But the work runs from the range
-checkout (`~/catapult/inventories/dcm`), and a repo-local hook does not load for a
+checkout (`~/catapult/inventories/range`), and a repo-local hook does not load for a
 session started there — so the gate would be absent exactly where it is needed.
 `scripts/install-ctp-bridge.sh` therefore installs the wrapper, guard, hook and
 config at user scope (`~/.local`, `~/.claude`, `~/.ctp-bridge.conf`), and

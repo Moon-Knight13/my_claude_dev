@@ -44,7 +44,7 @@ USAGE
 fi
 
 CONTAINER="${CTP_CONTAINER:-catapult-$(id -un)}"
-WORKDIR="/srv/inventories/dcm"
+WORKDIR="${CTP_INVENTORY:-/srv/inventories/range}"
 
 ALLOWED_TEAMS="t10"
 if [[ " $ALLOWED_TEAMS " != *" $TEAM "* ]]; then

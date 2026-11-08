@@ -75,7 +75,7 @@ One T3 project per environment profile. Mapping from issue #256:
 
 | T3 Project | Profile | Modes | Spokes |
 |------------|---------|-------|--------|
-| DCM Range | `dcm-range` | platform-ops, green-dev, red-team, red-dev, purple | deploybox, kali |
+| Cyber Range | `range` | platform-ops, green-dev, red-team, red-dev, purple | deploybox, kali |
 | CTF | `ctf` | platform-ops, red-dev, red-team | none (VPN) |
 | Pentest | `pentest` | platform-ops, red-team, red-dev | client VPN spoke |
 | Homelab | `homelab` | platform-ops, homelab | homelab spoke |
@@ -140,18 +140,18 @@ Incremental. No big-bang cutover.
 - Build `scripts/scaffold-project.sh`
 - Reads profile env, creates T3 project via `t3_project_create`
 - Populates `.claude/` per §2
-- Test with one non-DCM profile (CTF or Dev)
+- Test with one non-range profile (CTF or Dev)
 - **my_claude_dev continues working as-is** — no disruption
 
-### Phase 2: First Non-DCM Project
+### Phase 2: First Non-Range Project
 - Scaffold CTF or Dev project
 - Verify: hooks fire, mode-tool-gate enforces, MCP config correct
 - Verify: hub thread can route to new project's threads
 - Acceptance: operator runs a session in new project, mode isolation holds
 
-### Phase 3: DCM Migration
-- Scaffold DCM Range project
-- Existing DCM hooks/modes stay in my_claude_dev (backward compat)
+### Phase 3: Range Migration
+- Scaffold Cyber Range project
+- Existing range hooks/modes stay in my_claude_dev (backward compat)
 - New project gets copies pointing at same guard stack
 - Parallel run: old single-project and new multi-project coexist
 - Cutover when operator confirms equivalent behavior
@@ -204,7 +204,7 @@ intent to T3 projects:
 ```yaml
 # Future: project-routes.yaml v2
 projects:
-  dcm-range:
+  range:
     t3_project_id: "..."
     default_mode: red-team
     modes: [platform-ops, green-dev, red-team, red-dev, purple]
@@ -216,7 +216,7 @@ projects:
 
 # Repo routing still works for delegate_task
 repos:
-  "github.com/moon-knight13/tuoni-plugins": dcm-range
+  "github.com/moon-knight13/tuoni-plugins": range
   "github.com/moon-knight13/homelab_planning": homelab
 ```
 

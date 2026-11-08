@@ -135,7 +135,7 @@ async def range_targets(
     Results are paginated — use offset/limit to page through large inventories.
 
     Args:
-        env: Environment ID (e.g. 'dcm')
+        env: Environment ID (e.g. 'range')
         team: Team number to resolve instance IPs
         tag: Filter by tag name (optional)
         role: Filter by host role (optional)
@@ -202,7 +202,7 @@ async def range_targets_summary(
     without hitting MCP token limits on large environments.
 
     Args:
-        env: Environment ID (e.g. 'dcm')
+        env: Environment ID (e.g. 'range')
         team: Team number to resolve instance IPs
         tag: Filter by tag name (optional)
         role: Filter by host role (optional)

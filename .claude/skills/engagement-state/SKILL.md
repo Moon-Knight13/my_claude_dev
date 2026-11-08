@@ -65,7 +65,7 @@ preflight:
 Trigger: operator says "new engagement", "start engagement", or no engagement
 file exists when entering red-team/purple/red-dev mode.
 
-1. Ask operator for engagement ID (short slug, e.g. `dcm27-t10-nov`).
+1. Ask operator for engagement ID (short slug, e.g. `range-t10-nov`).
 2. Read `.env` for `OPERATOR_CALLSIGN` and `OPERATOR_TEAM`.
 3. Query `tuoni_agents_list` for current agent inventory.
 4. Write `engagements/<id>.yaml`:
@@ -359,7 +359,7 @@ All paths are under `llm-wiki/` in the `my_notes` Obsidian vault.
 On engagement creation, also create `llm-wiki/wiki/engagements/<engagement-id>.md`
 using `llm-wiki/templates/engagement.md`. Update `llm-wiki/index.md` to add
 engagement to the Exercises list. This is the missing link that caused zero
-DCM27 redteam-test2 documentation.
+prior engagement documentation.
 
 ### Engagement Close / Session End
 
