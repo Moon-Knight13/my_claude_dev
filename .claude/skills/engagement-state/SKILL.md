@@ -1,14 +1,21 @@
 ---
 name: engagement-state
-description: "Create, update, query, resume, and archive engagement state (YAML). Triggers: 'engagement', 'state', 'resume engagement', 'what targets', 'new engagement', 'add target', 'record technique', 'what creds', 'archive engagement', 'clean slate'."
+description: "Create, update, query, resume, and archive engagement state. Primary state in Obsidian llm-wiki. Thin YAML gate file for existence check only. Triggers: 'engagement', 'state', 'resume engagement', 'what targets', 'new engagement', 'add target', 'record technique', 'what creds', 'archive engagement', 'clean slate'."
 modes: [red-team, purple]
 ---
 
 # Engagement State Management
 
-Manage engagement state across sessions. State lives in `engagements/<id>.yaml`
-(gitignored). Every red-team, purple, and red-dev session operates against an
-engagement file.
+Manage engagement state across sessions. **Primary state lives in Obsidian**
+(`llm-wiki/wiki/engagements/<id>.md`). A thin YAML gate file
+(`engagements/<id>.yaml`) exists for filesystem existence check only — it
+contains engagement ID, mode, team, scope exclusions, and a pointer to the
+Obsidian page. ALL detail (targets, findings, creds, techniques, next steps)
+lives in Obsidian.
+
+**Why Obsidian, not YAML:** Single source of truth. Threads already read/write
+Obsidian for target pages. No split brain between YAML and Obsidian. Obsidian
+pages are structured markdown — queryable, taggable, cross-linkable.
 
 ## Operations
 
@@ -48,67 +55,48 @@ not warnings.
 - Verify at least one agent can reach each target subnet
 - Report unreachable targets. If ALL targets unreachable from ALL agents: BLOCK.
 
-Record gate results in engagement YAML:
-```yaml
-preflight:
-  spoke_health: passed | failed
-  kali_agent: <agent_id> | missing
-  degraded_mode: false | router-only
-  agent_routing:
-    r1: [reachable_subnets]
-    r2: [reachable_subnets]
-  gate_timestamp: <ISO-8601>
-```
+Record gate results in Obsidian engagement page under `## Preflight` section.
+Include: spoke_health status, kali_agent ID, degraded_mode flag, agent routing
+table, gate timestamp.
 
 ### Create Engagement
 
 Trigger: operator says "new engagement", "start engagement", or no engagement
-file exists when entering red-team/purple/red-dev mode.
+exists when entering red-team/purple/red-dev mode.
 
-1. Ask operator for engagement ID (short slug, e.g. `range-t10-nov`).
+1. Ask operator for engagement ID (short slug, e.g. `dcm27-t10-nov2026`).
 2. Read `.env` for `OPERATOR_CALLSIGN` and `OPERATOR_TEAM`.
 3. Query `tuoni_agents_list` for current agent inventory.
-4. Write `engagements/<id>.yaml`:
+4. Write thin YAML gate file `engagements/<id>.yaml`:
 
 ```yaml
+# GATE FILE ONLY — all detail lives in Obsidian
 engagement_id: <id>
-start_date: <YYYY-MM-DD>
-operator: <callsign>
-team: <team>
 mode: <active-mode>
+team: <team>
+environment: <env>
 status: active
-
-targets: []
-# Targets added ONLY after explicit operator approval (RT-TGT-001).
-# Each entry: {host, ip, role, approved_by, approved_at, status}
-
-agents:
-  # Populated from tuoni_agents_list. Refreshed each session.
-  # Each entry: {agent_id, hostname, ip, os, integrity, listener, first_seen, last_seen}
-
-credentials: []
-# REFS ONLY — never plaintext passwords, hashes, or keys.
-# Each entry: {ref_id, tuoni_cred_id, type, username, domain, source_host, source_technique, notes}
-# ref_id is a local slug for cross-referencing in findings.
-
-findings: []
-# Each entry: {id, target, technique_id, technique_name, result, timestamp, notes}
-# result: success | partial | failed | blocked
-
-techniques_tried: []
-# Per-target technique log. Each: {target, technique_id, technique_name, phase, result, agent_id, timestamp}
-
-next_steps: []
-# Operator-curated task list. Each: {priority, target, action, notes}
-
-# Purple mode extension (present only in purple engagements)
-# detection_scores: []
-# Each: {technique_id, technique_name, target, time_to_detect, alert_fidelity,
-#         action_completeness, payload_uniqueness, total, notes}
+wiki_page: llm-wiki/wiki/engagements/<id>.md
+exclusions:
+  - "GT accounts per RT-SCOPE-001"
 ```
 
-5. Ensure `engagements/` directory exists and is in `.gitignore`.
-6. Report: engagement created, agent count, ready for target approval.
+5. Create Obsidian engagement page via obsidian-mcp (`obsidian_create_note`):
+   Path: `llm-wiki/wiki/engagements/<id>.md`
+   Content sections:
+   - **## Overview** — engagement ID, start date, operator, team, mode, scope
+   - **## Targets** — added after RT-TGT-001 approval (host, IP, phase, status, wiki page link)
+   - **## Reachability** — populated by Phase 0 sweep
+   - **## Agents** — self-agent ID, target agents as they're deployed
+   - **## Credentials** — REFS ONLY (tuoni_cred_id, type, username, domain, source)
+   - **## Findings** — technique outcomes (ID, target, result, timestamp)
+   - **## Techniques Tried** — per-target log
+   - **## Next Steps** — operator-curated task list
+   - **## Preflight** — gate results (spoke-health, kali-bootstrap, agent routing)
+   Tags: `#engagement/<id>`, `#mode/<mode>`, `#team/<team>`
+
+6. Ensure `engagements/` directory exists and is in `.gitignore`.
+7. Report: engagement created, agent count, ready for target approval.
 
 ### Add Targets
 
@@ -121,20 +109,21 @@ in the current message. Discovered hosts are NOT automatically in scope.
 1. Confirm operator explicitly named the targets in this message.
 2. For each target, query `range_targets` or `range_host` via range-intel for
    ground truth (IP, role, OS, services).
-3. Append to `targets` list with `approved_by: operator`, `approved_at: <now>`,
-   `status: active`.
-4. Report: targets added, total scope count.
+3. Update Obsidian engagement page `## Targets` section with new target entries.
+4. Create Obsidian target page (`llm-wiki/wiki/targets/<hostname>.md`) if not exists.
+5. Report: targets added, total scope count.
 
 ### Record Technique Outcome
 
 Trigger: after executing an offensive technique, "record technique",
 "log finding", or automatically at end of each kill chain step.
 
-1. Append to `techniques_tried` with target, technique ID (MITRE ATT&CK where
-   applicable), phase, result, agent used, timestamp.
-2. If result is `success` or `partial`, also append to `findings`.
-3. If credentials were obtained, add credential REF (see below).
-4. Write updated YAML.
+1. Update Obsidian engagement page `## Techniques Tried` with: target,
+   technique ID (MITRE ATT&CK), phase, result, agent used, timestamp.
+2. If result is `success` or `partial`, also update `## Findings`.
+3. If credentials obtained, add credential REF to `## Credentials` (see below).
+4. Update target page (`llm-wiki/wiki/targets/<hostname>.md`) with technique outcome.
+5. Invoke `/log-finding` for Obsidian raw dump + log entry.
 
 ### Query Technique Scores (Orchestrator Grounding)
 
@@ -162,14 +151,14 @@ Trigger: credentials harvested during engagement.
 the engagement YAML or Obsidian notes.**
 
 1. Store actual credential in Tuoni credential store via `tuoni_credential_add`.
-2. Record in engagement YAML `credentials` list:
+2. Record REF in Obsidian engagement page `## Credentials` section:
    - `tuoni_cred_id`: ID from Tuoni store
    - `type`: password | hash | ticket | key | token
    - `username`, `domain`: identity info (these are not secrets)
    - `source_host`, `source_technique`: provenance
    - `notes`: brief context
-3. Credential refs can be cross-referenced by `ref_id` in findings and
-   technique logs.
+3. Update target page with cred ref under `## Credentials` section.
+4. **NEVER store plaintext passwords, hashes, tickets, or keys in Obsidian.**
 
 ### Record Detection Score (Purple Mode)
 
@@ -190,12 +179,12 @@ Trigger: after detection validation step in purple mode.
 Trigger: "what targets", "what creds", "what techniques worked on <host>",
 "engagement status", "scope check".
 
-Read engagement YAML and answer the query:
-- **Targets**: list with status, IP, role
-- **Credentials**: list refs with username, type, source (never actual creds)
-- **Techniques on host**: filter `techniques_tried` by target
-- **Findings**: filter by result=success/partial
-- **Next steps**: current task list
+Read Obsidian engagement page (`obsidian_read_note`) and answer the query:
+- **Targets**: read `## Targets` section
+- **Credentials**: read `## Credentials` section (refs only, never actual creds)
+- **Techniques on host**: read `## Techniques Tried`, filter by target
+- **Findings**: read `## Findings`, filter by result=success/partial
+- **Next steps**: read `## Next Steps`
 - **Detection scores** (purple): per-technique and average
 - **Status summary**: target count, agent count, finding count, cred ref count
 
@@ -204,14 +193,14 @@ Read engagement YAML and answer the query:
 Trigger: session start in red-team/purple/red-dev mode, operator says "resume",
 or skill detects existing engagement file.
 
-1. Find most recent engagement YAML in `engagements/` (by `start_date` or
-   file modification time). If multiple, ask operator which to resume.
-2. Read engagement YAML.
-3. Refresh agent list from `tuoni_agents_list` — update `agents` section,
+1. Find most recent gate YAML in `engagements/` (by file modification time).
+   If multiple, ask operator which to resume.
+2. Read gate YAML for engagement ID and wiki_page path.
+3. Read Obsidian engagement page (`obsidian_read_note` with wiki_page path).
+4. Refresh agent list from `tuoni_agents_list` — update `## Agents` section,
    flag agents that disappeared since last session.
-4. Load prior Obsidian context via `obsidian_search_vault` for `#engagement/<id>`
-   — read existing wiki pages to understand prior session state.
-5. Summarize state to operator:
+5. Load related Obsidian pages via `obsidian_search_vault` for `#engagement/<id>`.
+6. Summarize state to operator:
    - Engagement ID, start date, mode
    - Active targets (count + list)
    - Live agents (count, any lost since last session)
@@ -228,10 +217,11 @@ Trigger: operator says "archive engagement", "clean slate", "new engagement"
 Purpose: preserve historical data while resetting active state so next
 engagement starts from Providentia ground truth, not stale cached data.
 
-1. Read current engagement YAML from `engagements/<id>.yaml`.
-2. Set `status: archived` and `archived_at: <ISO-8601>` in the YAML.
+1. Read gate YAML from `engagements/<id>.yaml`.
+2. Set `status: archived` and `archived_at: <ISO-8601>` in gate YAML.
 3. Create `engagements/archive/` directory if it does not exist.
 4. Move `engagements/<id>.yaml` to `engagements/archive/<id>.yaml`.
+5. Update Obsidian engagement page: add `archived: true` to frontmatter.
 5. Obsidian tag update — for all notes tagged `#engagement/<id>`:
    - Add `#archived` tag via `obsidian_add_tags`.
    - Do NOT delete or modify note content. Technique knowledge persists.
