@@ -184,6 +184,93 @@ Install missing:
 pip3 install pexpect paramiko
 ```
 
+#### Pivoting tools
+
+Check tunnel/proxy binaries:
+
+```bash
+for tool in chisel ligolo-agent ligolo-proxy; do
+  which "$tool" 2>/dev/null && echo "PRESENT: $tool" || echo "MISSING: $tool"
+done
+```
+
+Install missing:
+
+| Binary | Install method |
+|--------|---------------|
+| chisel | Download from github.com/jpillora/chisel/releases, place in /usr/local/bin |
+| ligolo-agent, ligolo-proxy | Download from github.com/nicocha30/ligolo-ng/releases, place in /usr/local/bin |
+
+These are static Go binaries — download the linux-amd64 release asset, chmod +x,
+move to /usr/local/bin.
+
+#### Active Directory tools
+
+Check AD engagement binaries and Python packages:
+
+```bash
+for tool in kerbrute evil-winrm; do
+  which "$tool" 2>/dev/null && echo "PRESENT: $tool" || echo "MISSING: $tool"
+done
+python3 -c "import certipy; print('PRESENT: certipy-ad')" 2>/dev/null || echo "MISSING: certipy-ad"
+python3 -c "import bloodhound; print('PRESENT: bloodhound-python')" 2>/dev/null || echo "MISSING: bloodhound-python"
+python3 -c "import mitm6; print('PRESENT: mitm6')" 2>/dev/null || echo "MISSING: mitm6"
+python3 -c "import coercer; print('PRESENT: coercer')" 2>/dev/null || echo "MISSING: coercer"
+```
+
+Install missing:
+
+| Tool | Install method |
+|------|---------------|
+| kerbrute | Download from github.com/ropnop/kerbrute/releases, place in /usr/local/bin |
+| evil-winrm | `gem install evil-winrm` |
+| certipy-ad | `pip3 install certipy-ad` |
+| bloodhound-python | `pip3 install bloodhound` |
+| mitm6 | `pip3 install mitm6` |
+| coercer | `pip3 install coercer` |
+
+#### OT / ICS tools
+
+Check OT protocol libraries:
+
+```bash
+python3 -c "import pymodbus; print('PRESENT: pymodbus')" 2>/dev/null || echo "MISSING: pymodbus"
+```
+
+Install missing:
+```bash
+pip3 install pymodbus
+```
+
+#### Full impacket suite
+
+Verify full impacket is installed (not just impacket-scripts package):
+
+```bash
+python3 -c "import impacket; print(f'PRESENT: impacket {impacket.version.VER_MINOR}')" 2>/dev/null || echo "MISSING: impacket (full)"
+for tool in impacket-getTGT impacket-getST impacket-GetNPUsers impacket-GetUserSPNs impacket-ntlmrelayx impacket-smbserver; do
+  which "$tool" 2>/dev/null && echo "PRESENT: $tool" || echo "MISSING: $tool"
+done
+```
+
+If missing or incomplete:
+```bash
+pip3 install impacket
+```
+
+#### Tuoni docker-compose health
+
+Verify Tuoni stack is running via docker-compose:
+
+```bash
+ssh kali 'cd /srv/tuoni && docker compose ps --format json 2>/dev/null || docker-compose ps 2>/dev/null'
+```
+
+Expected: tuoni-server and tuoni-db containers running. If not:
+```bash
+ssh kali 'cd /srv/tuoni && docker compose up -d'
+```
+
 #### Custom tools (environment-dependent)
 
 Check for `icmp_c2.py`:
@@ -202,10 +289,17 @@ Print summary table:
 ```
 Tool Verification Summary
 ─────────────────────────
-PRESENT: nmap, hydra, smbclient, ...
-MISSING: <none> | <list>
+System:    PRESENT: nmap, hydra, smbclient, ...
+Pivoting:  PRESENT: chisel, ligolo-agent, ligolo-proxy
+AD:        PRESENT: kerbrute, evil-winrm, certipy-ad, bloodhound-python, mitm6, coercer
+Impacket:  PRESENT: full suite (getTGT, getST, GetNPUsers, ...)
+OT:        PRESENT: pymodbus
+Tuoni:     HEALTHY: server + db containers running
+Python:    PRESENT: pexpect, paramiko
+─────────────────────────
+MISSING:   <none> | <list>
 INSTALLED: <list of tools installed this run>
-FAILED: <list of tools that could not be installed>
+FAILED:    <list of tools that could not be installed>
 ```
 
 If any tool in FAILED: warn operator and do NOT proceed to Step 8 until
@@ -229,5 +323,10 @@ All must be true:
 - [ ] Self-agent connected and executing commands
 - [ ] tuoni-plugins loaded (14 modules)
 - [ ] System tools verified (nmap, hydra, smbclient, impacket-suite, xfreerdp3, crackmapexec/netexec, rpcclient, enum4linux, medusa, sshpass)
+- [ ] Pivoting tools verified (chisel, ligolo-agent, ligolo-proxy)
+- [ ] AD tools verified (kerbrute, evil-winrm, certipy-ad, bloodhound-python, mitm6, coercer)
+- [ ] Full impacket verified (getTGT, getST, GetNPUsers, GetUserSPNs, ntlmrelayx, smbserver)
+- [ ] OT tools verified (pymodbus)
+- [ ] Tuoni docker-compose stack healthy
 - [ ] Python packages verified (pexpect, paramiko)
 - [ ] Agent ID recorded in engagement YAML
