@@ -1,10 +1,10 @@
 # homelab mode -- infrastructure development only.
 # No offensive tools, no range MCPs.
+# cve-mcp and nuclei-mcp allowed for defensive vulnerability scanning.
 deny:
   - "mcp__tuoni-mcp__*"
   - "mcp__range-intel__*"
   - "mcp__hacktricks-mcp__*"
   - "mcp__mitre-mcp__*"
   - "mcp__lolbins-mcp__*"
-  - "mcp__cve-mcp__*"
   - "mcp__rea-mcp__*"
