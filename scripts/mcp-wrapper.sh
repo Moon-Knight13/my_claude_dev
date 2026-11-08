@@ -137,7 +137,7 @@ else
     done
 fi
 
-unset _scoping _all_secrets _allowed _secret_arr _allowed_arr _var _a _found _mcp_name
+unset _scoping _all_secrets _allowed _secret_arr _allowed_arr _var _a _found
 unset -f _detect_mcp_name
 
 # Honor MCP_CWD for servers that need a specific working directory
@@ -145,6 +145,13 @@ unset -f _detect_mcp_name
 if [[ -n "${MCP_CWD:-}" && -d "$MCP_CWD" ]]; then
     cd "$MCP_CWD"
     unset MCP_CWD
+fi
+
+# nuclei-mcp writes OpenSSL info to stdout on init, breaking MCP stdio.
+# Filter: pass only JSON-RPC lines (start with '{'), redirect rest to stderr.
+if [[ "$_mcp_name" == "nuclei-mcp" ]]; then
+    "$@" | awk '/^\{/{print; fflush(); next}{print > "/dev/stderr"}'
+    exit "${PIPESTATUS[0]}"
 fi
 
 exec "$@"
