@@ -13,9 +13,22 @@ vectors from recon skill output or engagement YAML.
 
 Active in: **red-team** mode only.
 
+## Thread Orchestration
+
+**Initial-access runs as a SEPARATE thread from recon.** It reads the
+Obsidian target page produced by the recon thread. Do not combine recon and
+initial-access in one thread — this prevents shortcutting research to jump
+to credential testing.
+
+**Input:** Read `llm-wiki/wiki/targets/<hostname>.md` via obsidian-mcp.
+This page has: services, versions, CVEs, ranked vectors, PoC details.
+If the page lacks CVE research or PoC details, the recon thread was
+incomplete — report back to master, do not proceed.
+
 ## Entry criteria
 
-- Recon complete for target (Phase 4 assessment exists)
+- **Target marked REACHABLE** in recon Phase 0 reachability matrix (MANDATORY)
+- **Obsidian target page exists** with completed research (services, CVEs, PoCs)
 - Attack vectors ranked and operator-approved
 - Target explicitly in scope (RT-TGT-001 confirmed)
 - Engagement YAML has target entry with `phase: recon` or later
@@ -35,6 +48,15 @@ Active in: **red-team** mode only.
 
 - All outbound connections use `root` agent (RT-SIG-001).
 - No `rt`-prefixed usernames in any target-facing traffic.
+
+### Credential Testing (STRICT LIMITS)
+
+- **Max 3-5 default passwords per service** (blank, product default, admin:admin).
+  After defaults fail, STOP credential testing and pivot to CVE research.
+- **Never run hydra/medusa/spray as primary vector.** Brute force is LAST resort
+  after all CVE/exploit paths exhausted AND operator approves.
+- **>10 password attempts per service = OPSEC violation.** Log it as such.
+- Version-specific CVE exploit > credential guessing. Always.
 
 ## Phases
 
@@ -57,12 +79,19 @@ When a technique IS attempted and fails due to missing tools, log finding
 with `result: blocked, notes: tooling_gap — <tool_name> not available`.
 This auto-feeds `llm-wiki/wiki/tools/tools-needed.md` for next bootstrap.
 
-### Phase 1: Technique Research
+### Phase 1: Technique Research (ENUMERATION-DRIVEN, NOT PROVIDENTIA-DRIVEN)
 
-For each operator-approved attack vector from recon:
+**MANDATORY:** Attack vectors come from live enumeration results (recon Phase 2
+service versions + open ports), NOT from Providentia vuln tag names. Providentia
+tags are hints to investigate, never vectors to execute directly.
 
-0. **Range vuln profiles** (range-intel `range_vuln_lookup`): check if range-intel
-   already has vulnerability data for this target before external research
+Input to this phase: service versions and open ports from net-recon/nmap.
+For each identified service+version, research attack techniques:
+
+0. **Range vuln profiles** (range-intel `range_vuln_lookup`): cross-reference
+   Providentia vuln tags against what enumeration actually found. Discrepancies
+   (vuln listed but service not running, or service found but no vuln listed)
+   are high-value findings.
 0b. **BloodHound attack paths** (bloodhound-mcp — AD environments):
    - Query attack paths from current access to target (DA, EA, specific accounts)
    - Identify kerberoastable SPNs on shortest paths — prioritize for credential attacks
@@ -99,6 +128,30 @@ Present research summary to operator with:
 - Steps to reproduce (manual)
 - Detection risk assessment
 - Recommended custom implementation approach
+
+### RESEARCH GATE (MANDATORY before any exploitation attempt)
+
+Before proceeding to payload prep or execution, verify the Obsidian target
+page (`llm-wiki/wiki/targets/<hostname>.md`) contains per-service research:
+
+```
+For EACH open service:
+  [ ] Service name + exact version
+  [ ] cve-mcp: cve_by_product run, top CVEs enriched
+  [ ] hacktricks-mcp: relevant sections read (not just quick_lookup)
+  [ ] nuclei-mcp: scan run against target
+  [ ] wiki vulns-docs: checked for this service/vuln type
+  [ ] GitLab README: reviewed for deploy config (range_host with readme)
+  [ ] Obsidian prior findings: checked
+  [ ] Pre-auth exploits identified with trigger mechanism
+  [ ] PoC source or custom adaptation documented
+```
+
+If ANY service lacks this research, complete it BEFORE attempting exploitation.
+This gate prevents the "enumerate → try passwords → report blocked" pattern.
+
+**Credential testing:** Max 3-5 product defaults per service ONLY. Never brute
+force. After defaults fail, exploit research is the path forward, not more passwords.
 
 ### Phase 2: Payload Preparation
 
@@ -138,24 +191,41 @@ Execute from Kali (NEVER from target):
    - Basic enumeration (whoami, hostname, network)
    - Compare actual vs expected (Providentia data)
 
-### Phase 4: Post-Access Immediate Actions
+### Phase 4: Post-Access Kill Chain
 
 **PERSIST-ON-LANDING RULE**: Before ANY other operation:
 
-1. **Deploy persistence** — invoke `persist-swarm` skill (MANDATORY):
-   - Operational beacon: short callback interval
-   - Sleeper beacon: long callback interval (survival)
+1. **Persist-swarm ROUND 1 (low-priv)** — invoke `persist-swarm` skill:
+   - User-level dual-beacon (user cron + profile, or startup folder)
+   - Insurance if privesc kills session
    - If persist-swarm skill fails: deploy manually, but DO NOT skip
 2. **Discovery sweep** (tuoni-mcp agent commands):
    - Local users, groups, privileges
    - Network connections, routing table
    - Running services, scheduled tasks
    - Credential stores (location only — do not harvest yet)
-3. **Update engagement YAML**:
+3. **Privilege escalation** — invoke `get-system` plugin:
+   - Run `recon_only=true` first to enumerate paths
+   - Execute best privesc path (writable passwd, setuid, sudoers, service exploit, etc.)
+   - Verify elevated access (root/SYSTEM)
+4. **Persist-swarm ROUND 2 (high-priv)** — invoke `persist-swarm` skill again:
+   - Elevated dual-beacon (systemd + cron.d, or service + scheduled task)
+   - These are the durable operational beacons
+   - Archive round 1 low-priv beacons once high-priv confirmed stable
+5. **Credential harvest** — invoke `cred-dump` plugin (requires root/SYSTEM):
+   - Linux: shadow, SSH keys, tokens, bash history
+   - Windows: SAM, LSASS, cached domain creds, DPAPI
+   - Store in tuoni cred store, refs only in YAML/Obsidian
+6. **Collect intel** — invoke `collect-intel` plugin:
+   - Sweep config dirs for keys, tokens, .env files, cloud creds
+7. **Update engagement YAML**:
    - Target phase: `initial_access`
-   - Agent ID, access level
-   - Persistence status
-   - Discovery findings summary
+   - Agent IDs (low-priv and high-priv)
+   - Persistence status (both rounds)
+   - Discovery + privesc + cred harvest findings summary
+8. **Lateral decision** — with harvested creds, select next target:
+   - Sequential approval required (RT-TGT-001)
+   - Update engagement YAML before moving
 
 ## Documentation Outputs — ENFORCED (llm-wiki paths)
 

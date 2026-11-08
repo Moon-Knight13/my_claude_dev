@@ -135,19 +135,26 @@ Per target, strictly sequential:
 2. **Deliver payload**: stage on target using authenticated session
 3. **Execute payload**: trigger execution via authenticated access
 4. **Wait for callback**: monitor listener for agent check-in
-5. **PERSIST IMMEDIATELY** (non-negotiable) — invoke `persist-swarm` skill:
-   - Hand off to persist-swarm skill for full dual-beacon deployment
-   - Persist-swarm handles: mechanism selection, LOLBins OPSEC check, dual beacon
-   - If persist-swarm skill unavailable, manual fallback:
-     - Deploy operational beacon (30s-2min callback)
-     - Deploy sleeper beacon (4h-24h callback)
-   - Verify both beacons survive reboot test if possible
+5. **Persist-swarm ROUND 1 (low-priv)** — invoke `persist-swarm` skill:
+   - User-level dual-beacon (insurance during privesc)
    - **DO NOT PROCEED** to step 6 until persist-swarm confirms success
 6. **Discovery sweep** (only after persistence):
    - whoami, hostname, network config
    - Local users, groups, privileges
    - Network connections, routing table
    - Credential store locations (DO NOT harvest yet)
+7. **Privilege escalation** — invoke `get-system` plugin:
+   - Run `recon_only=true` first to enumerate paths
+   - Execute best privesc path for this platform
+   - Verify elevated access (root/SYSTEM)
+8. **Persist-swarm ROUND 2 (high-priv)** — invoke `persist-swarm` skill again:
+   - Elevated dual-beacon (systemd + cron.d, or service + scheduled task)
+   - Archive round 1 low-priv beacons once confirmed stable
+   - **DO NOT PROCEED** to step 9 until high-priv persist confirmed
+9. **Credential harvest** — invoke `cred-dump` plugin (requires root/SYSTEM):
+   - Store in tuoni cred store, refs only in YAML/Obsidian
+10. **Collect intel** — invoke `collect-intel` plugin:
+    - Sweep config dirs for keys, tokens, .env files
 
 ### Phase 5: Post-Lateral Assessment
 

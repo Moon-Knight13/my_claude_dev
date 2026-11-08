@@ -59,6 +59,32 @@ is insufficient for the question.
 
 ## Phases
 
+### Phase 0: Network Reachability (MANDATORY before any target work)
+
+**Run ONCE per engagement start, from Kali self-agent.** Determines what Kali
+can actually see. Providentia lists what SHOULD exist — this phase finds what
+IS reachable. Do not skip this phase. Do not assume Providentia IPs are routable.
+
+1. **Identify Kali's network position**: `ip route`, `ip addr` on self-agent
+2. **Enumerate routable subnets**: which ranges have routes from Kali?
+3. **Sweep reachable subnets**: ICMP ping sweep + TCP SYN on common ports
+   (22, 80, 443, 445, 3389) per routable subnet. Use net-recon plugin or
+   nmap from Kali.
+4. **Cross-reference with Providentia**: match responding hosts against
+   `range_targets_summary`. Categorize each target as:
+   - **REACHABLE** — responds to ping or has open ports
+   - **FILTERED** — route exists but all ports filtered (firewall blocks)
+   - **UNREACHABLE** — no route or no response at all
+   - **NOT_DEPLOYED** — Providentia lists it but tagged not_ready/no IP
+5. **Document reachability matrix** in engagement YAML and Obsidian
+6. **Only REACHABLE targets proceed** to Phase 1+. FILTERED targets need
+   a pivot host or firewall bypass first. UNREACHABLE/NOT_DEPLOYED targets
+   are deferred until conditions change.
+
+This prevents wasting threads on targets behind firewalls or not yet deployed.
+When lateral movement opens new network segments, re-run Phase 0 from the
+new foothold to discover newly reachable targets.
+
 ### Phase 1: Passive Recon
 
 Query ALL Tier 1 + Tier 2 sources. Build target profile:
@@ -86,18 +112,29 @@ Prior engagement notes: <from Obsidian>
 
 Present profile to operator. Ask: "Proceed to active recon?"
 
-### Phase 2: Active Recon (requires operator approval)
+### Phase 2: Active Recon — Service Enumeration (requires operator approval)
 
 **OPSEC GATE: RT-TGT-001** — confirm exact target before ANY scan.
 
-Execute net-recon from Kali agent (tuoni-mcp):
-- Port scan + service fingerprint
-- Web fingerprint (if HTTP/HTTPS exposed)
-- Banner grab
-- Compare results against Providentia data (what IS vs what SHOULD BE)
+**This phase produces the GROUND TRUTH for attack vector selection.**
+Providentia says what should exist. This phase finds what actually runs.
 
-Discrepancies between Providentia (expected) and net-recon (actual) are
-high-value findings — document them.
+Execute from Kali agent (tuoni plugins + Kali tools):
+
+1. **Full port scan**: `net-recon routing_recon` + `nmap -sV -sC` for versions
+2. **Service fingerprint**: exact version strings for every open port
+3. **Web fingerprint**: `net-recon web_fingerprint` for HTTP/HTTPS services
+4. **Banner grab**: SSH, SMTP, FTP, database banners
+5. **Compare against Providentia**: what IS running vs what SHOULD BE
+   - Services in Providentia but not found = non-functional or hardened
+   - Services found but not in Providentia = undocumented attack surface (HIGH VALUE)
+
+**Output:** service:version table per target. This table — not Providentia vuln
+names — feeds into initial-access Phase 1 technique research.
+
+Discrepancies between Providentia (expected) and enumeration (actual) are
+high-value findings — document them. They reveal hardening, misconfiguration,
+or undocumented services.
 
 ### Phase 3: Vulnerability Analysis
 
@@ -146,25 +183,36 @@ Produce ranked attack vector list:
 
 Present to operator for initial-access skill handoff.
 
+## Thread Orchestration
+
+**Recon runs as a SEPARATE thread from exploitation.** Do not combine recon
+and initial-access in one thread. Recon thread produces Obsidian target page.
+Master reviews. Separate initial-access thread consumes it.
+
+This prevents threads from shortcutting research to jump to credential testing.
+
 ## Exit criteria
 
 - Target profile complete (all Tier 1 sources queried)
-- Active recon results documented (if Phase 2 approved)
-- Attack vectors ranked and presented
-- Engagement YAML updated: phase=recon, target data cached
+- Active recon results documented (Phase 2 service:version table)
+- Per-service CVE research complete (Phase 3 — ALL services, not just first one)
+- Attack vectors ranked with PoC details (not just CVE numbers)
+- Obsidian target page fully populated (services, CVEs, vectors, PoCs)
+- Engagement YAML updated: phase=recon, status only (detail in Obsidian)
 - `/log-finding` invoked for each significant recon result
-- Obsidian llm-wiki notes written (raw dump + wiki target page)
 
 ## State writes
 
+**Obsidian is primary output** (shared state between threads).
+**Engagement YAML is lean** — phase status + refs only.
+
 ```yaml
-# engagement.yaml updates
-phase: recon
+# engagement.yaml — LEAN, status only
 targets:
   - hostname: <target>
-    providentia_data: <cached>
-    net_recon: <results>
-    attack_vectors: <ranked list>
+    phase: recon
+    status: complete
+    wiki_page: llm-wiki/wiki/targets/<hostname>.md
 ```
 
 ### Obsidian writes (llm-wiki paths — ENFORCED)

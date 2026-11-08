@@ -24,6 +24,22 @@ Active in: **red-team** mode only.
 No discovery, no enumeration, no credential harvesting, no lateral movement
 until BOTH beacons are confirmed active.
 
+## Two-Round Persistence (MANDATORY)
+
+Persist-swarm runs TWICE per target:
+
+1. **Round 1 (low-priv)** — immediately on landing. User-level mechanisms
+   (user cron, .bashrc, startup folder). Insurance if privesc kills session.
+2. **Round 2 (high-priv)** — immediately after privilege escalation to
+   root/SYSTEM. Elevated mechanisms (systemd, cron.d, service, scheduled task).
+   These are the durable operational beacons.
+
+Round 2 is MANDATORY. Cred harvest requires root/SYSTEM. Lateral movement
+requires harvested creds. Skipping round 2 breaks the entire downstream chain.
+
+After round 2 beacons confirmed stable, archive round 1 low-priv beacons
+(they served their purpose as insurance during escalation).
+
 ## OPSEC Rules — ENFORCED
 
 - RT-SIG-002: unique payload ID per beacon per host

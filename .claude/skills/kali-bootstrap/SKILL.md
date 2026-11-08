@@ -62,10 +62,20 @@ Test Tuoni server is running:
 curl -sk --connect-timeout 5 "https://${SPOKE_KALI_HOST}:${SPOKE_KALI_C2_WEB_PORT:-8443}/api/v1/status"
 ```
 
-If unreachable: SSH to Kali and check service status:
+If unreachable: SSH to Kali and check service status. Tuoni runs via
+docker-compose at `/srv/tuoni/`:
+
 ```bash
-ssh kali systemctl status tuoni
+ssh kali 'sudo docker ps | grep tuoni'
 ```
+
+If containers down:
+```bash
+ssh kali 'cd /srv/tuoni && sudo docker compose up -d'
+```
+
+If no docker containers at all, fall back to checking for systemd service
+or binary at `/srv/tuoni/tuoni`.
 
 ### Step 4: Check for Self-Agent
 
@@ -132,16 +142,15 @@ ioc-cleanup, log-clear, exfil-stage, payload-gen, route-hijack).
 
 ### Step 7.5: Tool Verification and Install
 
-Verify required engagement tools on Kali via self-agent. Run each check
-through the tuoni-mcp command execution flow (search → describe → prepare →
-execute → get result).
+Verify and install all required engagement tools on Kali. Run checks via
+SSH (`ssh kali '...'`) or via tuoni self-agent if available.
 
-#### System binaries
+#### System binaries (apt-installable)
 
 Check each binary with `which`:
 
 ```bash
-for tool in nmap hydra smbclient impacket-secretsdump impacket-wmiexec impacket-psexec impacket-smbexec xfreerdp3 crackmapexec netexec rpcclient enum4linux medusa sshpass; do
+for tool in nmap hydra smbclient impacket-secretsdump impacket-wmiexec impacket-psexec impacket-smbexec impacket-ntlmrelayx impacket-getTGT impacket-getST impacket-GetNPUsers impacket-GetUserSPNs xfreerdp3 crackmapexec netexec rpcclient enum4linux medusa sshpass chisel ligolo-proxy ligolo-agent evil-winrm bloodhound-python; do
   which "$tool" 2>/dev/null && echo "PRESENT: $tool" || echo "MISSING: $tool"
 done
 ```
@@ -152,36 +161,91 @@ Install missing system tools via apt (group by package):
 |--------|---------|
 | nmap | nmap |
 | hydra | hydra |
-| smbclient | smbclient |
-| impacket-secretsdump, impacket-wmiexec, impacket-psexec, impacket-smbexec | impacket-scripts |
+| smbclient, rpcclient | smbclient |
+| impacket-secretsdump, impacket-wmiexec, impacket-psexec, impacket-smbexec, impacket-ntlmrelayx, impacket-getTGT, impacket-getST, impacket-GetNPUsers, impacket-GetUserSPNs | impacket-scripts |
 | xfreerdp3 | freerdp3-x11 |
 | crackmapexec | crackmapexec |
 | netexec | netexec |
-| rpcclient | smbclient |
 | enum4linux | enum4linux |
 | medusa | medusa |
 | sshpass | sshpass |
+| chisel | chisel |
+| ligolo-proxy, ligolo-agent | ligolo-ng |
+| evil-winrm | evil-winrm |
+| bloodhound-python | bloodhound |
 
 If any missing:
 ```bash
-apt-get update && apt-get install -y <missing-packages>
+sudo apt-get update && sudo apt-get install -y <missing-packages>
 ```
 
 Re-verify after install. If a tool still missing, report to operator — may
-need manual install or Kali repo refresh (`apt update`).
+need manual install or Kali repo refresh.
+
+#### pipx tools
+
+These install to `~/.local/bin/`. Check with full path if not in root PATH:
+
+```bash
+for tool in mitm6 coercer certipy-ad; do
+  which "$tool" 2>/dev/null || test -x "$HOME/.local/bin/$tool" && echo "PRESENT: $tool" || echo "MISSING: $tool"
+done
+```
+
+Install missing:
+
+| Command | pipx package |
+|---------|-------------|
+| mitm6 | mitm6 |
+| coercer | coercer |
+| certipy-ad | certipy-ad |
+
+```bash
+pipx install <package>
+```
+
+If pipx not installed: `sudo apt-get install -y pipx`
+
+#### Manual binaries (/opt or /usr/local/bin)
+
+Check kerbrute:
+```bash
+which kerbrute 2>/dev/null || test -x /usr/local/bin/kerbrute && echo "PRESENT: kerbrute" || echo "MISSING: kerbrute"
+```
+
+Install kerbrute if missing:
+```bash
+cd /opt && sudo curl -sLO "$(curl -sL https://api.github.com/repos/ropnop/kerbrute/releases/latest | python3 -c 'import sys,json; [print(a["browser_download_url"]) for a in json.load(sys.stdin)["assets"] if "linux_amd64" in a["name"]]')"
+sudo chmod +x /opt/kerbrute_linux_amd64
+sudo ln -sf /opt/kerbrute_linux_amd64 /usr/local/bin/kerbrute
+```
 
 #### Python packages
 
-Check via pip:
+Check via import:
 
 ```bash
 python3 -c "import pexpect; print('PRESENT: pexpect')" 2>/dev/null || echo "MISSING: pexpect"
 python3 -c "import paramiko; print('PRESENT: paramiko')" 2>/dev/null || echo "MISSING: paramiko"
+python3 -c "import pymodbus; print('PRESENT: pymodbus')" 2>/dev/null || echo "MISSING: pymodbus"
+python3 -c "import scapy; print('PRESENT: scapy')" 2>/dev/null || echo "MISSING: scapy"
 ```
 
-Install missing:
+Install missing (use `--break-system-packages` on Kali with PEP 668):
 ```bash
-pip3 install pexpect paramiko
+sudo pip3 install --break-system-packages <missing-packages>
+```
+
+#### Nmap NSE scripts (OT/SCADA)
+
+Verify modbus/s7/enip scripts present:
+```bash
+ls /usr/share/nmap/scripts/modbus* /usr/share/nmap/scripts/s7-info* /usr/share/nmap/scripts/enip* 2>/dev/null && echo "PRESENT: OT NSE scripts" || echo "MISSING: OT NSE scripts"
+```
+
+If missing, update NSE database:
+```bash
+sudo nmap --script-updatedb
 ```
 
 #### Pivoting tools
@@ -319,14 +383,14 @@ If no engagement YAML exists: print agent ID for operator to record.
 All must be true:
 - [ ] Kali IP in container firewall
 - [ ] SSH auth working (key accepted)
-- [ ] Tuoni API responding on :8443
+- [ ] Tuoni running (docker-compose or systemd) and API responding
 - [ ] Self-agent connected and executing commands
-- [ ] tuoni-plugins loaded (14 modules)
-- [ ] System tools verified (nmap, hydra, smbclient, impacket-suite, xfreerdp3, crackmapexec/netexec, rpcclient, enum4linux, medusa, sshpass)
+- [ ] tuoni-plugins loaded (14+ modules)
+- [ ] System tools verified (nmap, hydra, smbclient, impacket full suite, xfreerdp3, crackmapexec/netexec, rpcclient, enum4linux, medusa, sshpass)
 - [ ] Pivoting tools verified (chisel, ligolo-agent, ligolo-proxy)
 - [ ] AD tools verified (kerbrute, evil-winrm, certipy-ad, bloodhound-python, mitm6, coercer)
-- [ ] Full impacket verified (getTGT, getST, GetNPUsers, GetUserSPNs, ntlmrelayx, smbserver)
-- [ ] OT tools verified (pymodbus)
+- [ ] Full impacket verified (secretsdump, wmiexec, psexec, smbexec, ntlmrelayx, getTGT, getST, GetNPUsers, GetUserSPNs)
+- [ ] Python packages verified (pexpect, paramiko, pymodbus, scapy)
+- [ ] OT/SCADA: nmap NSE scripts for modbus/s7/enip present
 - [ ] Tuoni docker-compose stack healthy
-- [ ] Python packages verified (pexpect, paramiko)
 - [ ] Agent ID recorded in engagement YAML
