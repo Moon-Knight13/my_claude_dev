@@ -1,0 +1,11 @@
+# bounty mode — bug bounty hunting.
+# Web-focused. No C2, no lateral movement, no range tools.
+deny:
+  - "mcp__tuoni-mcp__*"
+  - "mcp__range-intel__*"
+  - "mcp__outline-readonly__*"
+  - "mcp__obsidian-mcp__*"
+  - "mcp__bloodhound-mcp__*"
+  - "mcp__rea-mcp__*"
+  - "mcp__ghidra-mcp__*"
+  - "mcp__local-ollama__*"
