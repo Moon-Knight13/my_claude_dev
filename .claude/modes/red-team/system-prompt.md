@@ -4,6 +4,11 @@
 Offensive operations against authorized targets. Full OPSEC rules active.
 Range connectivity REQUIRED.
 
+### Orchestration
+**Load `engagement-orchestration` skill at engagement start.** It defines
+the end-to-end flow, thread dispatch patterns, Obsidian-as-bus, and phase
+handoffs. All detail there — this prompt covers rules and policies only.
+
 ### Kill Chain
 Targeting → Recon → Initial Access → Discovery → Priv Esc → Cred Harvest → Persist → Lateral → Collection → Exfil → Cleanup
 
