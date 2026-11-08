@@ -111,6 +111,7 @@ For each identified service+version, research attack techniques:
    - `get_hacktricks_cheatsheet` to extract all code blocks for adaptation
    - NEVER use `get_hacktricks_page` (3000-15000 tokens) when `get_hacktricks_section` suffices
 2. **CVE intelligence** (cve-mcp) — full enrichment pipeline:
+   - `cve_by_product`: FIRST — find CVEs for exact product+version from enumeration
    - `cve_enrich`: NVD + EPSS + KEV + GHSA + Shodan + VulnCheck + Nuclei + MSF in parallel
    - `kev_check`: if in KEV catalog, actively exploited = high success probability
    - `exploit_search`: check for public exploits across multiple sources
@@ -205,11 +206,10 @@ Execute from Kali (NEVER from target):
    - User-level dual-beacon (user cron + profile, or startup folder)
    - Insurance if privesc kills session
    - If persist-swarm skill fails: deploy manually, but DO NOT skip
-2. **Discovery sweep** (tuoni-mcp agent commands):
-   - Local users, groups, privileges
-   - Network connections, routing table
-   - Running services, scheduled tasks
-   - Credential stores (location only — do not harvest yet)
+2. **Discovery** — invoke `discovery` skill:
+   - Runs host-id, ad-enum, net-recon, collect-intel plugins
+   - If domain-joined: trigger bloodhound-python collection
+   - Credential store locations identified (harvest in step 5, not here)
 3. **Privilege escalation** — invoke `get-system` plugin:
    - Run `recon_only=true` first to enumerate paths
    - Execute best privesc path (writable passwd, setuid, sudoers, service exploit, etc.)
@@ -218,20 +218,18 @@ Execute from Kali (NEVER from target):
    - Elevated dual-beacon (systemd + cron.d, or service + scheduled task)
    - These are the durable operational beacons
    - Archive round 1 low-priv beacons once high-priv confirmed stable
-5. **Credential harvest** — invoke `cred-dump` plugin (requires root/SYSTEM):
+5. **Credential harvest** — invoke `cred-harvest` skill (requires root/SYSTEM):
    - Linux: shadow, SSH keys, tokens, bash history
    - Windows: SAM, LSASS, cached domain creds, DPAPI
-   - Store in tuoni cred store, refs only in YAML/Obsidian
+   - Store in tuoni cred store, refs only in Obsidian
 6. **Collect intel** — invoke `collect-intel` plugin:
    - Sweep config dirs for keys, tokens, .env files, cloud creds
-7. **Update engagement YAML**:
-   - Target phase: `initial_access`
-   - Agent IDs (low-priv and high-priv)
-   - Persistence status (both rounds)
-   - Discovery + privesc + cred harvest findings summary
+7. **Update Obsidian target page**:
+   - All sections: § Access, § Persistence, § Discovery, § Creds, § Intel
+   - Engagement page: update target phase status
 8. **Lateral decision** — with harvested creds, select next target:
    - Sequential approval required (RT-TGT-001)
-   - Update engagement YAML before moving
+   - Update Obsidian engagement page before moving
 
 ## Documentation Outputs — ENFORCED (llm-wiki paths)
 

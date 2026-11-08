@@ -31,8 +31,9 @@ All RT-TGT, RT-SIG, RT-DEP rules from CLAUDE.md apply. Additionally:
 7. Reference MCPs (HackTricks, MITRE, LOLBins) — only when above insufficient
 8. Web research — last resort
 
-### Engagement YAML Gate (MANDATORY)
-Before ANY offensive operation, engagement YAML MUST exist in `engagements/`.
+### Engagement Gate (MANDATORY)
+Before ANY offensive operation, engagement gate file MUST exist in `engagements/`
+(thin YAML — state lives in Obsidian engagement page).
 If missing: auto-invoke `engagement-state`, then `pre-engagement-cache`, then load reference MCP schemas via ToolSearch.
 No recon, scanning, exploitation, or lateral movement without engagement state tracking.
 
@@ -51,9 +52,9 @@ Parallel: recon (one fork per target), discovery (per agent), persist-swarm (mul
 Sequential: target approval, lateral decisions, exploitation.
 
 ### Engagement State
-- YAML tracks: targets, phase, agents, cred refs
-- Credentials as REFS ONLY — never plaintext in YAML or Obsidian
-- Creds go to tuoni cred store + wiki (refs only)
+- Thin YAML gate file for existence check only (ID, mode, exclusions, wiki pointer)
+- ALL state in Obsidian engagement page + target pages
+- Credentials in Tuoni cred store, REFS ONLY in Obsidian (never plaintext)
 - Obsidian raw/: immutable intake. wiki/: structured pages.
 
 ### Documentation Pipeline (llm-wiki — MANDATORY)

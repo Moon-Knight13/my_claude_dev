@@ -97,11 +97,11 @@ credential store — requires creds stored via `tuoni_credential_add` first.
    - `find_lateral_movement`: discover LOLBin-based lateral movement methods
    - `compare_platforms`: when moving Linux→Windows or vice versa, find technique equivalents
    - `analyze_opsec_risk`: assess detection risk for chosen lateral method
-4. **Assess network path**:
+7. **Assess network path**:
    - Direct: foothold can reach target
    - Proxied: need SOCKS through intermediate foothold
    - Multi-hop: chain of proxies needed
-5. **Present plan to operator**: target, credential, method, path, OPSEC risk score
+8. **Present plan to operator**: target, credential, method, path, OPSEC risk score
 
 ### Phase 2: SOCKS Proxy Setup (if needed)
 
@@ -114,14 +114,9 @@ When foothold has routes to internal nets not reachable from Kali:
 3. **Configure Kali proxychains**:
    - Add SOCKS5 proxy entry pointing through C2 tunnel
    - Test connectivity to target through proxy
-4. **Document proxy chain** in engagement YAML:
-   ```yaml
-   proxies:
-     - host: <foothold>
-       type: socks5
-       port: <port>
-       reaches: [<target networks>]
-   ```
+4. **Document proxy chain** in Obsidian engagement page under `## Reachability`:
+   - Proxy host, type (socks5), port, reachable networks
+   - Update target pages for newly-reachable hosts
 
 ### Phase 3: Payload Staging
 

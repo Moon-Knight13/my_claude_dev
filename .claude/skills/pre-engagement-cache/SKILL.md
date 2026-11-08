@@ -1,21 +1,22 @@
 ---
 name: pre-engagement-cache
-description: "Cache Providentia, GitLab, and wiki intel into Obsidian before red-team engagement. Supports selective loading (--lite, --sources) to control token cost. Run in green-dev mode when range-intel and outline MCPs are connected. Use when operator says 'cache intel', 'prep for engagement', 'cache --lite', or before mode switch to red-team."
+description: "Cache Providentia, GitLab, and wiki intel into Obsidian before engagement. Full inventory sweep — targets selected after cache from reachability scan. Use when operator says 'cache intel', 'prep for engagement', 'cache --lite'."
 modes: [red-team, purple]
 ---
 
 # Pre-Engagement Cache
 
-Cache critical range intel into Obsidian vault so red-team mode is
-self-sufficient. Run in green-dev mode where range-intel and outline-readonly
-MCPs are connected.
+Cache critical range intel into Obsidian vault so engagement threads are
+self-sufficient. Run when range-intel and outline-readonly MCPs are connected
+(any mode — red-team, green-dev, or purple).
 
 ## Prerequisites
 
-- green-dev mode active (range-intel + outline MCPs connected)
+- range-intel + outline-readonly MCPs connected (any mode)
 - obsidian-mcp connected to vault
-- Engagement YAML exists with `targets` list populated
-- Operator has confirmed target list (RT-TGT-001)
+- Engagement Obsidian page exists (created by engagement-state skill)
+- Targets NOT required — cache does full Providentia inventory sweep.
+  Operator selects targets FROM cached data after Phase 1 reachability scan.
 
 ## Token Cost Budget
 

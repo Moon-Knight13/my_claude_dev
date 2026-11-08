@@ -37,6 +37,8 @@ Run these sequentially. No threads needed — master calls skills/MCPs inline.
 
 ## Phase 1: Reachability + Enumeration (one thread)
 
+**Note:** Recon skill calls this "Phase 0" internally. Same thing — one scan, once.
+
 **Purpose:** Scan once, write to Obsidian. No phase after this re-scans.
 
 ```
@@ -65,7 +67,7 @@ between phases. Threads are short and focused — context comes from Obsidian.
 ### Thread A: RESEARCH (parallel OK across targets)
 
 ```
-  Skill: recon (Phase 3) + initial-access (Phase 1)
+  Skill: recon (Phase 3 — vulnerability analysis)
   Input: reads Obsidian target page § Services
   Runs per service:version:
     - cve-mcp: cve_by_product → cve_enrich → exploit_search → kev_check
@@ -107,7 +109,7 @@ root cause, adjust approach or move to next target.
   Input: reads Obsidian target page § Access
   Steps (in order, do not skip):
     1. persist-swarm ROUND 1 (low-priv dual-beacon)
-    2. discovery (host-id → ad-enum → net-recon → collect-intel plugins)
+    2. discovery (invoke discovery skill: host-id → ad-enum → net-recon)
        If domain-joined: trigger bloodhound-python collection
     3. get-system recon_only → privesc exploit → verify root/SYSTEM
     4. persist-swarm ROUND 2 (elevated dual-beacon)
@@ -116,7 +118,7 @@ root cause, adjust approach or move to next target.
        Store in Tuoni cred store. Refs only in Obsidian.
        If crackable hashes: hashcat-mcp MANDATORY before lateral planning
        Query bloodhound-mcp for paths new creds unlock
-    6. collect-intel sweep
+    6. collect-intel sweep (config dirs, keys, tokens, .env files)
   Output → Obsidian target page (§ Persistence, § Discovery, § Creds, § Intel)
 ```
 
@@ -125,11 +127,16 @@ root cause, adjust approach or move to next target.
 ## Phase 3: Lateral Movement (repeat Phase 1-2 from new position)
 
 ```
-  1. Master reads harvest results + BloodHound paths
-  2. Selects next target (RT-TGT-001 approval)
+  Skill: lateral-move
+  Thread pattern: one thread per lateral target (master approves each)
+  
+  1. Master reads harvest results + BloodHound paths from Obsidian
+  2. Selects next target (RT-TGT-001 approval — sequential, not parallel)
   3. If new zone: set up SOCKS proxy through foothold FIRST
-  4. Re-run Phase 1 scan from new foothold (new vantage point)
-  5. Dispatch Phase 2 threads against newly-reachable targets
+  4. Dispatch lateral-move thread (handles SOCKS + payload + persist internally)
+  5. Re-run Phase 1 scan from new foothold (new vantage point, new zone only)
+  6. Newly-discovered hosts get full Phase 2 treatment:
+     Thread A (RESEARCH) → Thread B (EXPLOIT) → Thread C (POST-ACCESS)
 ```
 
 Each foothold is a new Phase 1 sweep point. Expand the map, don't re-scan
@@ -159,6 +166,7 @@ what's already in Obsidian.
 | Cred-dump empty | Move to next target. Return when creds available from elsewhere. |
 | Thread shortcuts research | Master catches in review. Reject, re-dispatch with correction. |
 | Brute force attempted | OPSEC violation. Log incident. Stop thread. |
+| fail2ban triggered | STOP all attempts to target. Log OPSEC incident. 60-min cooldown. Try alternate source IP or target. |
 
 ## OPSEC Quick Reference
 
