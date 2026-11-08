@@ -140,4 +140,11 @@ fi
 unset _scoping _all_secrets _allowed _secret_arr _allowed_arr _var _a _found _mcp_name
 unset -f _detect_mcp_name
 
+# Honor MCP_CWD for servers that need a specific working directory
+# (T3 Code / Claude Code don't reliably apply .mcp.json "cwd" field)
+if [[ -n "${MCP_CWD:-}" && -d "$MCP_CWD" ]]; then
+    cd "$MCP_CWD"
+    unset MCP_CWD
+fi
+
 exec "$@"
