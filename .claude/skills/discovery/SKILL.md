@@ -28,6 +28,12 @@ Active in: **red-team** mode only.
   sessions appear in `who`, `query user`, or process lists, ignore them. Never
   include gt accounts in lateral movement target lists or credential source maps.
 
+## Thread Orchestration
+
+Discovery runs INLINE within the post-access thread (same thread as
+initial-access Phase 4 or lateral-move post-landing). Reads and writes
+the Obsidian target page. Engagement YAML gets phase status only.
+
 ## Plugin-First Policy (ENFORCED)
 
 Use tuoni-plugins before raw sh commands. Plugin benefits: structured output,
@@ -35,13 +41,22 @@ Tuoni Discovery tab auto-population, consistent OPSEC, audit trail.
 
 | Action | Plugin | Module/Config | Instead of |
 |--------|--------|---------------|------------|
+| Full host enumeration | host-id | (default) | Manual whoami/uname/ip |
 | OSPF/routing dump | net-recon | routing_recon | `vtysh -c "show ip ospf"` |
 | Web service fingerprint | net-recon | web_fingerprint | `curl`/`nmap` on HTTP |
 | Host/service discovery | net-recon | (default) + discovery=true | manual port scan + `arp -a` |
 | Network interface enum | net-recon | (default) | `ip addr; ip route` |
+| Domain/workgroup detect | ad-enum | (default) | Manual `net user /domain` |
+| User/group enumeration | ad-enum | users/groups | Manual `net user`, `getent` |
+| Config sweep for keys | collect-intel | (default) | Manual find/grep |
 
-Raw `sh` commands only when: no plugin covers the action, or plugin fails and
-operator approves fallback.
+**Run `host-id` first** — gets OS, hostname, users, network in one call.
+Then `ad-enum` for domain membership. Then `net-recon routing_recon` for
+network position. Raw `sh` commands only when plugin fails.
+
+**BloodHound collection:** If domain-joined host and bloodhound-python
+available on Kali, run SharpHound/bloodhound-python collection via SSH
+and ingest data. This feeds lateral-move BloodHound path queries.
 
 ## Fork Agent Parallelism
 
@@ -153,27 +168,18 @@ high-value targets now reachable.
 
 ### Step 5: Document and Update State
 
-**Engagement YAML:**
+**Engagement YAML — LEAN (detail goes to Obsidian):**
 ```yaml
 targets:
   - hostname: <target>
     phase: discovery
-    discovery:
-      users: [<local users>]
-      admins: [<admin users>]
-      services: [<running services>]
-      network:
-        interfaces: [<IPs>]
-        routes: [<reachable networks>]
-        connections: [<active connections>]
-      security:
-        av_product: <name>
-        edr_product: <name>
-        firewall: <enabled|disabled>
-      cred_sources: [<identified locations>]
-      lateral_paths: [<reachable targets>]
-      discrepancies: [<vs Providentia expected>]
+    status: complete
+    wiki_page: llm-wiki/wiki/targets/<hostname>.md
 ```
+
+All discovery detail (users, services, network, security, cred sources,
+lateral paths, discrepancies) goes to the Obsidian target page under
+`## Discovery` section. YAML stays lean — status refs only.
 
 **Obsidian (llm-wiki paths — ENFORCED):**
 

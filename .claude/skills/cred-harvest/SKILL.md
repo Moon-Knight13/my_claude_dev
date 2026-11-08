@@ -177,6 +177,11 @@ On Kali (NOT target):
    - Domain admin? Service accounts with broad access?
    - Match `tuoni_credentials_list` filter by realm against `range_targets` by network
    - Programmatic lateral opportunity mapping, not manual
+   - **BloodHound path analysis** (bloodhound-mcp — AD environments):
+     For each new domain credential, query bloodhound-mcp for attack paths
+     this credential unlocks. "shortest path from <user> to Domain Admins",
+     "what can <user> reach via delegation". New creds may open paths that
+     were previously blocked.
 5. **Document in Obsidian** (refs only):
    - `llm-wiki/wiki/targets/<hostname>.md`: update cred refs section
    - Use template `llm-wiki/templates/credential.md` for credential ref page

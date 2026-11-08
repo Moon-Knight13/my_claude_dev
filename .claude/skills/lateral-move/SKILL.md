@@ -86,7 +86,14 @@ credential store — requires creds stored via `tuoni_credential_add` first.
    - Service accounts: what systems do they access?
    - SSH keys: authorized on which hosts?
    - **If technique-scoring data available**: rank vectors by empirical success rate
-4. **LOLBins lateral analysis** (lolbins-mcp):
+4. **CVE check on target** (cve-mcp):
+   - `cve_by_product` for target's known services (from Obsidian page)
+   - If target has a known RCE CVE, that may be better than credential-based lateral
+   - `exploit_search` for public PoCs to adapt
+5. **HackTricks lateral technique research** (hacktricks-mcp):
+   - `search_hacktricks` for protocol-specific lateral guides (SMB relay, WinRM, SSH key reuse)
+   - `get_hacktricks_section` for exploitation details of chosen lateral method
+6. **LOLBins lateral analysis** (lolbins-mcp):
    - `find_lateral_movement`: discover LOLBin-based lateral movement methods
    - `compare_platforms`: when moving Linux→Windows or vice versa, find technique equivalents
    - `analyze_opsec_risk`: assess detection risk for chosen lateral method

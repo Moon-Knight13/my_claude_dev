@@ -44,6 +44,12 @@ incomplete — report back to master, do not proceed.
 - Payload sizing follows RT-SIG-004 (Linux 1-5MB, Windows 120-180MB).
 - Unique payload ID per target (RT-SIG-002).
 
+### Execution Platform (CRITICAL)
+
+- **ALL offensive traffic originates from Kali.** Run tools via `ssh kali '<command>'`
+  or via tuoni self-agent. NEVER run nmap/hydra/curl-to-target from the hub machine.
+- Hub is for orchestration (MCP calls, Obsidian writes, YAML updates) only.
+
 ### Identity
 
 - All outbound connections use `root` agent (RT-SIG-001).
