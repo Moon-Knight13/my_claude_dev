@@ -23,7 +23,7 @@ multi-environment expansion where the range-specific parts are "configuration,
 not code." Portable provisioning is a prerequisite for CTF, pentest, and bounty
 modes — all of which need offensive tooling on non-range boxes. The PRD names
 Kali as the primary weapons spoke and acknowledges it must work beyond the
-current DCM range.
+current cyber range.
 
 The `kali-bootstrap` skill wrapper aligns with the existing pattern: skills
 abstract environment differences, mode rules select capabilities.

@@ -23,7 +23,7 @@ CTP_ALLOWED_TARGET=trainbox_t02
 CTP_ALLOWED_TEAM=t02
 CTP_ALLOWED_VERBS=deploy deploy-role
 CTP_CONTAINER=catapult-tester
-CTP_PROJECT_DIR=/srv/inventories/dcm
+CTP_PROJECT_DIR=/srv/inventories/range
 CTP_SECRET_PATHS=/var/tmp/vlt_pf ~/.ssh/id_* ~/.zsh_history ~/.bash_history **/.env
 CTP_PII_PATHS=~/org-data/** ~/cases/*.csv /srv/customer/** **/customer-list.csv
 EOF
@@ -172,12 +172,12 @@ check "expired token: refused (5)" "$?" 5
 
 # --- working directory: CTP_PROJECT_DIR unset -> translate CWD via bind mount -
 CONF2="$TMP/noproj.conf"; grep -v '^CTP_PROJECT_DIR=' "$CONF" > "$CONF2"
-HOSTPROJ="$TMP/host/proj"; mkdir -p "$HOSTPROJ/inventories/dcm"
+HOSTPROJ="$TMP/host/proj"; mkdir -p "$HOSTPROJ/inventories/range"
 printf '%s\t%s\n' "$FUTURE" "host list trainbox_t02" > "$STATE/approval"
-out="$(cd "$HOSTPROJ/inventories/dcm" && PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF2" \
+out="$(cd "$HOSTPROJ/inventories/range" && PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF2" \
     CTP_BRIDGE_STATE="$STATE" MOCK_MOUNTS="$HOSTPROJ"$'\t'"/srv" \
     bash "$ROOT/scripts/ctp-bridge.sh" host list trainbox_t02 </dev/null 2>&1)"
-if printf '%s' "$out" | grep -Fq 'WDIR: /srv/inventories/dcm'; then
+if printf '%s' "$out" | grep -Fq 'WDIR: /srv/inventories/range'; then
     ok "CWD translated through bind mount to container path"
 else bad "CWD translated through bind mount ($(printf '%s' "$out" | grep WDIR: | head -1))"; fi
 # CWD outside any mount, no override -> refuse (4), never guess
@@ -219,7 +219,7 @@ if command -v script >/dev/null 2>&1; then
     # which confirms the setup path was reached).
     ok "exec sources venv + env + vault-password-file prelude (verified via zsh -s stdin path)"
     # runs in the project dir (config CTP_PROJECT_DIR), not the container WORKDIR
-    if grep -Fq 'WDIR: /srv/inventories/dcm' "$TMP/run.out"; then
+    if grep -Fq 'WDIR: /srv/inventories/range' "$TMP/run.out"; then
         ok "exec sets -w to the project dir (CTP_PROJECT_DIR)"
     else bad "exec sets -w to the project dir ($(grep WDIR: "$TMP/run.out" | head -1))"; fi
     if [[ -f "$TMP/count.log" ]] && grep -q "deploy-role" "$TMP/count.log" && ! grep -q "trainbox" "$TMP/count.log"; then

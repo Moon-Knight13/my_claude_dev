@@ -3,7 +3,7 @@
 #
 # Why user scope: the thing the gate protects (ctp reaching a live range) is
 # box-wide, and the work does not happen in this repo — it happens in the range
-# checkout (e.g. ~/catapult/inventories/dcm). A PreToolUse hook registered only
+# checkout (e.g. ~/catapult/inventories/range). A PreToolUse hook registered only
 # in this repo's .claude/ would not load for a Claude session started there. So
 # the hook, wrapper, guard and config are installed into ~/.claude and ~/.local,
 # where every session on the account sees them regardless of CWD — and nothing is

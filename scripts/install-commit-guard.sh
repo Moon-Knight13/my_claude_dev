@@ -2,7 +2,7 @@
 # install-commit-guard.sh — install the warn-only commit guard at USER scope.
 #
 # Why user scope + a GLOBAL hook: the work does not happen only in this repo — it
-# happens in the range checkout too (e.g. ~/catapult/inventories/dcm). A hook
+# happens in the range checkout too (e.g. ~/catapult/inventories/range). A hook
 # installed into one repo's .git/hooks would miss the others. Setting the user's
 # global core.hooksPath makes the scan run on EVERY commit the user (or an agent
 # acting as them) makes, in any repo, without writing anything into a pushed tree.

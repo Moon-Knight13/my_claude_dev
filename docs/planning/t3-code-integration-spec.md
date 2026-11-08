@@ -309,7 +309,7 @@ that overhaul lands.
 | Hook chain breaks under T3 wrapper | Medium | Phase 0 validates; fall back to non-T3 if broken |
 | OpenCode model quality insufficient | Low | OpenRouter has Claude API access as fallback |
 | T3 thread state conflicts with engagement YAML | Low | Different concerns, different storage |
-| Triple-VPN coexistence (Proton + DCM + Tailscale) | High | Tailscale userspace networking avoids route/kill-switch conflicts. Fallback: LAN-only T3 (no mobile) |
+| Triple-VPN coexistence (Proton + Range VPN + Tailscale) | High | Tailscale userspace networking avoids route/kill-switch conflicts. Fallback: LAN-only T3 (no mobile) |
 | systemd-resolved restart wipes DNS split | Medium | Document recovery sequence; avoid resolved restarts while VPN chain active |
 
 ## 9. Success Criteria

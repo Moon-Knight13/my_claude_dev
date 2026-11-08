@@ -133,7 +133,7 @@ EOF
         # Host: use IdentityFile if a known range key exists
         local git_identity=""
         if [[ "$SURFACE" == "host" ]]; then
-            for _k in ~/.ssh/mcd_hub_frame ~/.ssh/DCM; do
+            for _k in ~/.ssh/mcd_hub_frame ~/.ssh/range-vpn; do
                 [[ -f "$_k" ]] && { git_identity="    IdentityFile $_k"; break; }
             done
         fi

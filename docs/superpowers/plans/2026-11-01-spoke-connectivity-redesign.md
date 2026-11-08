@@ -19,7 +19,7 @@
 - Tests are bash, live in `scripts/tests/`, use `ok()/bad()` pattern
 - Skills use YAML frontmatter `---` format in `.claude/skills/<name>/SKILL.md`
 - `.env.example` documents vars; `.env` is gitignored and parsed (never sourced)
-- Commit messages end with `DCM27-Chris.M #UseTheRobotsToDestroyTheRobots` for catapult remotes, standard Claude attribution for GitHub
+- Commit messages use standard Claude attribution for GitHub; range remotes use range-specific attribution
 
 ## Review Focus
 
@@ -93,7 +93,7 @@ Reads SPOKE_DEPLOYBOX_HOST, SPOKE_KALI_HOST, RANGE_GIT_HOST from .env
 and adds each to allowed-domains ipset. Handles DNS resolution for
 hostname values. Idempotent via ipset add -exist.
 
-DCM27-Chris.M #UseTheRobotsToDestroyTheRobots"
+<range-commit-signature>"
 ```
 
 ---
@@ -207,7 +207,7 @@ init-firewall.sh calls spoke-firewall.sh after ipset creation.
 Health check probes spoke IPs for direct reachability.
 Documents IP requirement in .env.example.
 
-DCM27-Chris.M #UseTheRobotsToDestroyTheRobots"
+<range-commit-signature>"
 ```
 
 ---
@@ -288,7 +288,7 @@ git commit -m "feat: kali-bootstrap + pre-engagement-cache skills
 kali-bootstrap: verify Tuoni self-agent, deploy plugins, record agent ID.
 pre-engagement-cache: cache Providentia/GitLab/wiki intel into Obsidian.
 
-DCM27-Chris.M #UseTheRobotsToDestroyTheRobots"
+<range-commit-signature>"
 ```
 
 ---
@@ -405,7 +405,7 @@ Adds kali_agent_id and cache_timestamp to engagement YAML.
 Amends FR-K1, FR-K2, adds FR-K5 (engagement resilience), amends NFR-O5.
 Updates addendum: SSH tunnels superseded by specific-IP allow.
 
-DCM27-Chris.M #UseTheRobotsToDestroyTheRobots"
+<range-commit-signature>"
 ```
 
 ---

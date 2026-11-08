@@ -56,8 +56,8 @@ def load_config():
         "gitlab_token": env.get("GITLAB_TOKEN", ""),
         "gitlab_project": env.get("GITLAB_PROJECT", ""),
         "gitlab_ref": env.get("GITLAB_REF", "main"),
-        "gitlab_vm_path": env.get("GITLAB_VM_PATH", "inventories/dcm/vm"),
-        "gitlab_vuln_path": env.get("GITLAB_VULN_PATH", "inventories/dcm/roles/vulns"),
+        "gitlab_vm_path": env.get("GITLAB_VM_PATH", "inventories/range/vm"),
+        "gitlab_vuln_path": env.get("GITLAB_VULN_PATH", "inventories/range/roles/vulns"),
     }
 
 

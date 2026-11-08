@@ -51,7 +51,7 @@ Host (Ubuntu 26.06)
 1. **SSE proxy stability:** Range MCPs behind supergateway must handle reconnects, VPN drops, and concurrent requests without losing state.
 2. **Hook parity:** Host claude's UserPromptSubmit hooks must fire identically to container claude. Same mode-inject, secret-scan, ctp-bridge behavior.
 3. **MCP config divergence:** Host claude uses SSE URLs, container claude uses stdio. Two `.mcp.json` strategies needed — or one config that works for both.
-4. **T3 + Tailscale + VPN coexistence:** Triple-VPN stack (Proton + DCM + Tailscale). Primary risk: ProtonVPN kill switch blocks Tailscale. Recommended: Tailscale userspace networking mode. See Task B3 Step 2 for full analysis.
+4. **T3 + Tailscale + VPN coexistence:** Triple-VPN stack (Proton + Range VPN + Tailscale). Primary risk: ProtonVPN kill switch blocks Tailscale. Recommended: Tailscale userspace networking mode. See Task B3 Step 2 for full analysis.
 5. **Thread state durability:** T3 SQLite survives host reboot, T3 update, and doesn't conflict with engagement YAML.
 
 ---
@@ -289,7 +289,7 @@ Verify laptop appears as environment on tailnet.
 
 - [ ] **Step 2: Validate VPN coexistence (triple-VPN stack)**
 
-Three VPN layers must coexist: ProtonVPN (privacy), DCM work VPN (range
+Three VPN layers must coexist: ProtonVPN (privacy), Range VPN (range
 access), Tailscale (T3 mobile remote access). Analysis of `vpn-chain`
 script identified three conflict points:
 
@@ -350,10 +350,10 @@ dig +short controlplane.tailscale.com
 
 - ProtonVPN: default route through `proton*` tun device
 - vpn-chain: metric-0 pinned routes for work VPN server + Proton DNS
-- Work VPN (DCM): range routes (172.21.x.x/16-ish)
+- Work VPN (Range): range routes (172.21.x.x/16-ish)
 - Tailscale: 100.64.0.0/10 routes for CGNAT mesh
 
-No IP overlap (Proton=internet, DCM=172.21.x.x, Tailscale=100.64.0.0/10).
+No IP overlap (Proton=internet, Range VPN=172.21.x.x, Tailscale=100.64.0.0/10).
 But route *priority* matters:
 
 ```bash
@@ -372,7 +372,7 @@ disappears entirely. This is why option (a) is preferred.
 
 Three DNS layers competing via systemd-resolved:
 - ProtonVPN DNS: default resolver (all queries not matched by others)
-- Work VPN DNS: range domains (crp.cr14.net, dcm.ex) via resolvectl
+- Work VPN DNS: range domains (crp.cr14.net, range TLD) via resolvectl
 - Tailscale MagicDNS: tailnet names (*.ts.net) via resolvectl
 
 systemd-resolved handles split DNS natively — each link gets its own
@@ -403,7 +403,7 @@ network only (still useful, just no mobile remote access outside LAN).
 
 **VPN startup order (target):**
 1. ProtonVPN (via vpn-chain or Proton app)
-2. DCM work VPN (via vpn-chain — connects through Proton)
+2. Range VPN (via vpn-chain — connects through Proton)
 3. Tailscale (userspace mode — goes through Proton like any app)
 4. Docker containers (bridge network, DNS via 172.17.0.1 stub)
 

@@ -26,11 +26,11 @@ Before any build work, understand current state:
 
 ```
 range_environments                          # list available environments
-range_networks env=dcm                      # all network segments
-range_targets env=dcm team=<N>              # all hosts for team
-range_targets env=dcm team=<N> role=<role>  # filter by role (dc, proxy, mail, etc.)
-range_host env=dcm host_id=<id> team=<N>    # full detail on one host
-range_tags env=dcm                          # available tags for filtering
+range_networks env=$RANGE_ENV                # all network segments
+range_targets env=$RANGE_ENV team=<N>        # all hosts for team
+range_targets env=$RANGE_ENV team=<N> role=<role>  # filter by role (dc, proxy, mail, etc.)
+range_host env=$RANGE_ENV host_id=<id> team=<N>    # full detail on one host
+range_tags env=$RANGE_ENV                    # available tags for filtering
 ```
 
 ### Investigate a Host

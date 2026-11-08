@@ -45,7 +45,7 @@ with winrm", "privilege escalation linux suid").
    **Engagement Experience:**
    | Note | Engagement | Type | Context |
    |------|-----------|------|---------|
-   | [[writeup_note]] | DCM27 | exercise | one-line context |
+   | [[writeup_note]] | range-exercise | exercise | one-line context |
 
    Notes from Write_Ups/ and Vuln_Labs/ have `engagement` and
    `engagement_type` in frontmatter — use these to identify prior
