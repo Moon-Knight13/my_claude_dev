@@ -67,7 +67,7 @@ validate_profile() {
         [[ "$key" =~ ^SPOKE_.*_HOST$ && -n "$val" ]] || continue
         spokes=1
         local host_label="${key%%_HOST}"
-        if ssh -o ConnectTimeout=3 -o BatchMode=yes "$val" echo ok &>/dev/null; then
+        if ssh -n -o ConnectTimeout=3 -o BatchMode=yes "$val" echo ok &>/dev/null; then
             echo "  OK: $host_label ($val)"
         else
             echo "  WARN: $host_label ($val) — unreachable"
