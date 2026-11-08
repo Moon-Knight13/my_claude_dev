@@ -13,6 +13,13 @@ No engagement active. No offensive tools loaded. No OPSEC rules apply.
 - Smart TV management and debloating research
 - Hardware provisioning and Medicat USB workflows
 
+### Defensive scanning
+Homelab mode includes defensive security MCPs for vulnerability assessment:
+- **cve-mcp** — CVE lookup and vulnerability research for patching decisions
+- **nuclei-mcp** — template-based vulnerability scanning of homelab services
+
+Use these for hardening and patch prioritization, not offensive operations.
+
 ### What this mode is NOT for
 - Any offensive operation (use red-team)
 - Exploit development or RE (use red-dev)
