@@ -59,31 +59,49 @@ is insufficient for the question.
 
 ## Phases
 
-### Phase 0: Network Reachability (MANDATORY before any target work)
+### Phase 0: Reachability + Service Enumeration (ONE SCAN, ONCE)
 
-**Run ONCE per engagement start, from Kali self-agent.** Determines what Kali
-can actually see. Providentia lists what SHOULD exist — this phase finds what
-IS reachable. Do not skip this phase. Do not assume Providentia IPs are routable.
+**Run ONCE per engagement start, from Kali self-agent.** Combines reachability
+check AND full service enumeration in a single pass. Results go to Obsidian.
+No subsequent phase re-scans — all later threads READ Obsidian instead.
 
-1. **Identify Kali's network position**: `ip route`, `ip addr` on self-agent
-2. **Enumerate routable subnets**: which ranges have routes from Kali?
-3. **Sweep reachable subnets**: ICMP ping sweep + TCP SYN on common ports
-   (22, 80, 443, 445, 3389) per routable subnet. Use net-recon plugin or
-   nmap from Kali.
-4. **Cross-reference with Providentia**: match responding hosts against
-   `range_targets_summary`. Categorize each target as:
-   - **REACHABLE** — responds to ping or has open ports
-   - **FILTERED** — route exists but all ports filtered (firewall blocks)
-   - **UNREACHABLE** — no route or no response at all
-   - **NOT_DEPLOYED** — Providentia lists it but tagged not_ready/no IP
-5. **Document reachability matrix** in engagement YAML and Obsidian
-6. **Only REACHABLE targets proceed** to Phase 1+. FILTERED targets need
-   a pivot host or firewall bypass first. UNREACHABLE/NOT_DEPLOYED targets
-   are deferred until conditions change.
+Do not skip this phase. Do not assume Providentia IPs are routable.
+ALL scanning from Kali — NEVER from hub.
 
-This prevents wasting threads on targets behind firewalls or not yet deployed.
-When lateral movement opens new network segments, re-run Phase 0 from the
-new foothold to discover newly reachable targets.
+**Step 1: Network position**
+- `ip route`, `ip addr` on self-agent → routable subnets
+
+**Step 2: Host discovery** (fast sweep)
+- `nmap -sn <subnet> --min-rate 1000` per routable subnet
+- Identifies live hosts without full port scan (OPSEC: minimal footprint)
+
+**Step 3: Full service enumeration** (per live host)
+- `nmap -sV -sC -p- <host>` → all ports + service versions + default scripts
+- Also: `net-recon routing_recon` + `net-recon web_fingerprint` via tuoni plugins
+- Capture: every open port, every service version string, every banner
+
+**Step 4: Cross-reference with Providentia**
+- Match responding hosts against `range_targets_summary`
+- Categorize each Providentia host:
+  - **REACHABLE** — responds, has service:version table
+  - **FILTERED** — route exists but all ports filtered (firewall)
+  - **UNREACHABLE** — no route or no response
+  - **NOT_DEPLOYED** — Providentia lists it but tagged not_ready/no IP
+- Flag discrepancies: services found but not in Providentia = HIGH VALUE
+
+**Step 5: Write to Obsidian** (the ONLY place scan results live)
+- Per reachable host → create/update `llm-wiki/wiki/targets/<hostname>.md`
+  with `## Services` section containing full service:version table
+- Engagement page → update `## Reachability` matrix
+- Raw dump → `llm-wiki/raw/network-sweep-<date>.md`
+
+**Step 6: Target selection**
+- Only REACHABLE hosts with open ports proceed to research
+- FILTERED hosts need pivot/firewall bypass first
+- Master reviews, gets RT-TGT-001 approval for selected targets
+
+**Re-run after lateral movement** opens new network segments — from new
+foothold, not Kali. New hosts get same treatment: scan once, write to Obsidian.
 
 ### Phase 1: Passive Recon
 
@@ -112,29 +130,20 @@ Prior engagement notes: <from Obsidian>
 
 Present profile to operator. Ask: "Proceed to active recon?"
 
-### Phase 2: Active Recon — Service Enumeration (requires operator approval)
+### Phase 2: Verify Obsidian Data (NO RE-SCAN)
 
-**OPSEC GATE: RT-TGT-001** — confirm exact target before ANY scan.
+**Service enumeration already done in Phase 0.** This phase does NOT scan.
+It reads the Obsidian target page `## Services` section and verifies data
+is complete before proceeding to vulnerability analysis.
 
-**This phase produces the GROUND TRUTH for attack vector selection.**
-Providentia says what should exist. This phase finds what actually runs.
+If target page `## Services` is missing or incomplete:
+- Check if Phase 0 sweep covered this host
+- If not covered (e.g., new target added after sweep): run ONE targeted
+  `nmap -sV -sC -p- <host>` from Kali, write results to Obsidian
+- If covered but data missing: re-read Obsidian page, may be write failure
 
-Execute from Kali agent (tuoni plugins + Kali tools):
-
-1. **Full port scan**: `net-recon routing_recon` + `nmap -sV -sC` for versions
-2. **Service fingerprint**: exact version strings for every open port
-3. **Web fingerprint**: `net-recon web_fingerprint` for HTTP/HTTPS services
-4. **Banner grab**: SSH, SMTP, FTP, database banners
-5. **Compare against Providentia**: what IS running vs what SHOULD BE
-   - Services in Providentia but not found = non-functional or hardened
-   - Services found but not in Providentia = undocumented attack surface (HIGH VALUE)
-
-**Output:** service:version table per target. This table — not Providentia vuln
-names — feeds into initial-access Phase 1 technique research.
-
-Discrepancies between Providentia (expected) and enumeration (actual) are
-high-value findings — document them. They reveal hardening, misconfiguration,
-or undocumented services.
+**Output:** Confirmation that service:version table exists in Obsidian.
+This table feeds Phase 3 vulnerability analysis.
 
 ### Phase 3: Vulnerability Analysis (writes to Obsidian — initial-access reads this)
 
