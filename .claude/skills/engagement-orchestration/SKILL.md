@@ -28,7 +28,7 @@ Engagement YAML: thin gate file only (ID, mode, exclusions, wiki pointer)
 
 Run these sequentially. No threads needed — master calls skills/MCPs inline.
 
-1. `/spoke-health` — verify all MCPs + SSH spokes green
+1. `/spoke-health` — verify all MCPs + SSH spokes green (includes Obsidian app check — WARN if not running, operator won't see llm-wiki artifacts)
 2. `engagement-state` skill — create thin YAML gate + Obsidian engagement page
 3. `pre-engagement-cache` skill — cache Providentia + wiki + READMEs to Obsidian
 4. `kali-bootstrap` skill — verify Tuoni + self-agent + plugins + tools on Kali

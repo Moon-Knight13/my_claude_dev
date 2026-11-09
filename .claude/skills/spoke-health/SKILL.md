@@ -55,7 +55,20 @@ Test MCP servers that depend on spoke connectivity:
 - **nuclei-mcp:** any tool call (e.g. list templates) — confirms nuclei scanner available
 - **ghidra-mcp:** any tool call (e.g. list functions) — confirms Ghidra headless backend reachable
 
-### Step 4: Mode Readiness
+### Step 4: Local Services
+
+Check local applications that affect operator experience:
+
+```bash
+pgrep -a obsidian || pgrep -a electron
+```
+
+- **Obsidian App:** WARN if not running — not a hard failure.
+  MCP writes to filesystem directly, so obsidian-mcp works without the app.
+  But operator cannot browse llm-wiki artifacts in Obsidian UI.
+  Message: `"WARN: Obsidian app not running. llm-wiki artifacts won't be visible in Obsidian UI. Launch with: obsidian &"`
+
+### Step 5: Mode Readiness
 
 Based on results, report which modes are available:
 
@@ -67,7 +80,7 @@ Based on results, report which modes are available:
 | red-dev | tuoni-mcp + kali SSH + hashcat-mcp + ghidra-mcp (optional) |
 | purple | All of red-team + hashcat-mcp |
 
-### Step 5: Report
+### Step 6: Report
 
 Output a table:
 
@@ -91,6 +104,10 @@ bloodhound-mcp   OK
 hashcat-mcp      OK
 nuclei-mcp       OK
 ghidra-mcp       OK
+
+Local Service    Status
+────────────────────────
+Obsidian App     WARN (not running)
 
 Mode Readiness
 ──────────────
