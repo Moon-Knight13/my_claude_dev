@@ -155,6 +155,10 @@ Map credential storage locations (DO NOT harvest yet):
 
 Report locations to operator. Handoff to cred-harvest skill.
 
+**CTF/exercise engagements:** after discovery completes, invoke `flag-hunt`
+skill to search for planted flags. Flag-hunt runs standalone — does not
+block lateral movement planning.
+
 ### Step 4: Lateral Movement Opportunity Mapping
 
 Identify paths to other hosts:

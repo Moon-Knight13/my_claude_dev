@@ -152,6 +152,7 @@ round 1 confirmed. Persist-swarm round 1 already ran in Thread B (exploit thread
        If crackable hashes: hashcat-mcp MANDATORY before lateral planning
        Query bloodhound-mcp for paths new creds unlock
     5. collect-intel sweep (config dirs, keys, tokens, .env files)
+    6. flag-hunt (CTF/exercise only — search for planted flags, write to § Flags)
 
   IF LANDED AS USER (not root):
     1. discovery (limited scope — what user can see)
@@ -165,13 +166,15 @@ round 1 confirmed. Persist-swarm round 1 already ran in Thread B (exploit thread
           If crackable hashes: hashcat-mcp MANDATORY before lateral planning
           Query bloodhound-mcp for paths new creds unlock
         - collect-intel sweep (config dirs, keys, tokens, .env files)
+        - flag-hunt (CTF/exercise only — search for planted flags, write to § Flags)
     3b. IF PRIVESC FAILS:
         - Document limitation + attempted vectors in Obsidian § Privesc
         - cred-dump (user-level only — /etc/shadow inaccessible, harvest what's available)
         - collect-intel (user-accessible dirs only)
+        - flag-hunt (CTF/exercise only — user-accessible paths only)
         - Do NOT block. Continue to next target. Mark host for revisit if new creds arrive.
 
-  Output → Obsidian target page (§ Persistence, § Discovery, § Creds, § Intel, § Privesc)
+  Output → Obsidian target page (§ Persistence, § Discovery, § Creds, § Intel, § Privesc, § Flags)
 ```
 
 **Master reviews** cred harvest + discovery results → lateral decision.
