@@ -198,14 +198,33 @@ Execute from Kali (NEVER from target):
    - Basic enumeration (whoami, hostname, network)
    - Compare actual vs expected (Providentia data)
 
+4. **AUTO-CHAIN: Persist-swarm round 1 (MANDATORY, IMMEDIATE)**:
+   - **Do NOT wait for operator.** Invoke `persist-swarm` skill the moment
+     agent callback is confirmed. Same thread, no handoff.
+   - Pass current privilege level (`user` or `root`) — persist-swarm adapts.
+   - **NEVER skip round 1 because "we might get root later."**
+   - If landing as non-root: user-level mechanisms only (see Phase 4 detail).
+   - If persist-swarm skill fails: deploy manually, but DO NOT skip.
+   - Confirm both beacons (operational + sleeper) call back before proceeding.
+   - Failure to persist = STOP. No discovery, no privesc, no lateral until
+     at least one beacon is confirmed durable.
+
 ### Phase 4: Post-Access Kill Chain
 
-**PERSIST-ON-LANDING RULE**: Before ANY other operation:
+**PERSIST-ON-LANDING is handled by Phase 3 step 4 auto-chain.** Phase 4
+begins AFTER round 1 persistence is confirmed. If you arrived here without
+round 1 complete, STOP and go back.
 
-1. **Persist-swarm ROUND 1 (low-priv)** — invoke `persist-swarm` skill:
-   - User-level dual-beacon (user cron + profile, or startup folder)
-   - Insurance if privesc kills session
-   - If persist-swarm skill fails: deploy manually, but DO NOT skip
+1. **Persist-swarm ROUND 1 (low-priv)** — already invoked in Phase 3 step 4.
+   Verify beacons are live. If not, re-invoke `persist-swarm` skill.
+
+   **Privilege-aware mechanisms (non-root footholds):**
+   - **User crontab**: `crontab -e` (no root needed)
+   - **User systemd unit**: `~/.config/systemd/user/` (no root needed)
+   - **Shell profile**: `.bashrc` / `.profile` / `.bash_logout` hooks
+   - **XDG autostart**: `~/.config/autostart/` (if desktop session)
+   - Windows user-level: startup folder, HKCU Run key, scheduled task (user context)
+   - Cover names per RT-SIG-003, unique ID per RT-SIG-002
 2. **Discovery** — invoke `discovery` skill:
    - Runs host-id, ad-enum, net-recon, collect-intel plugins
    - If domain-joined: trigger bloodhound-python collection
@@ -218,6 +237,15 @@ Execute from Kali (NEVER from target):
    - Elevated dual-beacon (systemd + cron.d, or service + scheduled task)
    - These are the durable operational beacons
    - Archive round 1 low-priv beacons once high-priv confirmed stable
+
+   **If privesc FAILS:**
+   - Keep round 1 user-level persistence — do NOT remove it
+   - Document limitation in Obsidian target page: `privilege: user (privesc failed)`
+   - Log privesc failure as finding via `/log-finding`
+   - Continue to credential harvest (user-level: .bash_history, SSH keys,
+     readable config files, tokens) — skip root-only sources
+   - Continue to lateral decision with user-level creds
+   - Round 2 is skipped, not failed — engagement proceeds with user-level access
 5. **Credential harvest** — invoke `cred-harvest` skill (requires root/SYSTEM):
    - Linux: shadow, SSH keys, tokens, bash history
    - Windows: SAM, LSASS, cached domain creds, DPAPI
@@ -376,8 +404,9 @@ marks broken vulns, but unlisted vulns may also be non-functional.
   retry same exploit more than twice — detection risk increases.
 - **No callback**: check listener, check network path. If SOCKS proxy needed,
   set up via foothold first.
-- **Access but no persist**: STOP further operations. Persistence is
-  non-negotiable before proceeding.
+- **Access but no persist**: STOP further operations. Phase 3 step 4
+  auto-chains persist-swarm immediately — if it failed, diagnose and retry
+  before ANY discovery or privesc. Persistence is non-negotiable.
 - **Wrong target responds**: ABORT IMMEDIATELY. Verify Providentia data.
   Report incident to operator.
 - **fail2ban triggered**: STOP all attempts to target. Log OPSEC incident.
