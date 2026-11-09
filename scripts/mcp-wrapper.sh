@@ -149,8 +149,15 @@ fi
 
 # nuclei-mcp writes OpenSSL info to stdout on init, breaking MCP stdio.
 # Filter: pass only JSON-RPC lines (start with '{'), redirect rest to stderr.
+# Uses shell loop instead of awk — mawk buffers indefinitely, causing 30s timeout.
 if [[ "$_mcp_name" == "nuclei-mcp" ]]; then
-    "$@" | awk '/^\{/{print; fflush(); next}{print > "/dev/stderr"}'
+    "$@" | while IFS= read -r line; do
+        if [[ "$line" == "{"* ]]; then
+            printf '%s\n' "$line"
+        else
+            printf '%s\n' "$line" >&2
+        fi
+    done
     exit "${PIPESTATUS[0]}"
 fi
 
