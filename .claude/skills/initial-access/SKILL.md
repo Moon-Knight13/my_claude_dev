@@ -154,6 +154,18 @@ For EACH open service:
   [ ] PoC source or custom adaptation documented
 ```
 
+**Blind-scan evidence accepted.** When `intel_source: blind_scan` is set on
+target page (recon ran without Providentia/README), the gate validates that
+evidence EXISTS — not where it came from. Specifically:
+- nmap service:version satisfies "Service name + exact version"
+- CVE research from cve-mcp satisfies enrichment requirement
+- hacktricks + nuclei research still required (source-independent)
+- GitLab README check: SKIP if unavailable (blind mode has no READMEs)
+- wiki vulns-docs check: SKIP if outline-readonly unavailable
+- All other checks remain mandatory
+
+The gate validates DEPTH of research per service, not intel SOURCE.
+
 If ANY service lacks this research, complete it BEFORE attempting exploitation.
 This gate prevents the "enumerate → try passwords → report blocked" pattern.
 

@@ -57,6 +57,75 @@ is insufficient for the question.
 12. **CVE intelligence** via cve-mcp — CVE details, EPSS scores, KEV, exploits
 13. **Web research** — last resort when all above insufficient
 
+## Blind Mode (Providentia Unavailable / Empty)
+
+Activates automatically when:
+- Providentia returns empty results for all queried hosts
+- range-intel MCP is unreachable or errors
+- Operator provides CIDR/range without pre-cached intel (CTF, pentest, ad-hoc)
+
+**Detection:** After Tier 1 queries, if Providentia returned zero hosts AND
+GitLab READMEs returned nothing, enter blind mode. Log to Obsidian engagement
+page: `intel_source: blind_scan`.
+
+### Blind Recon Pipeline
+
+Replaces Tier 1 authoritative data with live scanning. All downstream output
+format stays identical — skills consuming Obsidian target pages do not care
+whether data came from Providentia or blind scanning.
+
+**Step 1: Network discovery**
+- `nmap -sn <CIDR>` sweep of operator-provided range(s)
+- If no CIDR given: ask operator for target range. Do not guess.
+- Output: list of live IPs
+
+**Step 2: Service scan**
+- `nmap -sV -sC -p- <host>` per live host (full port scan + versions)
+- For large ranges (>50 hosts): `nmap -sV -sC --top-ports 1000` first pass,
+  full `-p-` on high-value hosts only
+- Output: service:version table per host
+
+**Step 3: Per-service research** (replaces Providentia+README enrichment)
+- For each service:version found:
+  - `cve_by_product` (cve-mcp) → find CVEs for exact product+version
+  - `cve_enrich` (cve-mcp) → full enrichment for HIGH/CRITICAL CVEs
+  - `exploit_search` (cve-mcp) → public exploit availability
+  - `search_hacktricks` (hacktricks-mcp) → attack techniques by service+version
+  - `nuclei_scan` (nuclei-mcp) → template-based vuln scan, if available
+- This step produces equivalent data to what Providentia+README would give
+
+**Step 4: Write results to Obsidian** (SAME format as Providentia-enriched)
+- Per host → `llm-wiki/wiki/targets/<hostname-or-ip>.md`
+  - Use IP as identifier when hostname unknown
+  - `## Services` section: full service:version table from nmap
+  - `## Attack Vectors` section: CVE research results
+- Engagement page → `## Reachability` matrix (all hosts, status)
+- Raw dump → `llm-wiki/raw/blind-scan-<date>.md`
+- Frontmatter includes `intel_source: blind_scan` (not `providentia`)
+
+**Step 5: Continue to normal phases**
+- Phase 1 (passive recon) queries remaining Tier 2+3 sources as usual
+- Phase 2 reads Obsidian — data is there regardless of source
+- Phase 3 (vuln analysis) runs identically
+
+### Blind Mode Constraints
+
+- OS detection less reliable without Providentia — rely on nmap `-O` fingerprint
+  and service banners
+- No team/role metadata — treat all hosts as equal priority unless operator
+  specifies
+- No GitLab README deploy notes — service defaults unknown, test broader
+  credential sets (still max 3-5 per service)
+- Hostname may be unknown — use IP address as target identifier throughout
+
+### Mixed Mode
+
+If Providentia returns SOME hosts but not all discovered by scan:
+- Providentia-known hosts: use Providentia data (authoritative)
+- Scan-only hosts: use blind pipeline for those hosts
+- Flag scan-only hosts as `intel_source: blind_scan` in Obsidian
+- These are HIGH VALUE findings — undocumented hosts on the network
+
 ## Phases
 
 ### Phase 0: Reachability + Service Enumeration (ONE SCAN, ONCE)
@@ -277,12 +346,16 @@ data on targets:
 
 ## Failure modes
 
-- **Providentia unreachable**: warn operator, proceed with cached data or
-  README only. Never proceed with NO authoritative source.
+- **Providentia unreachable**: activate Blind Mode (see above). Warn operator
+  that intel source is scanning only. Proceed with blind recon pipeline.
+  No longer blocks engagement — scanning replaces authoritative data.
+- **Providentia returns empty**: same as unreachable — activate Blind Mode.
+  Log `intel_source: blind_scan` on engagement page.
 - **Kali spoke unreachable**: passive recon only (Tier 1+2). Cannot do
   active recon without weapons platform. If `degraded_mode: router-only`,
   use degraded active recon above.
-- **Target not in Providentia**: warn operator — target may not exist on
-  range. Require explicit confirmation before proceeding.
+- **Target not in Providentia**: if blind mode active, this is expected —
+  all targets come from scanning. If Providentia IS available but target
+  not found: warn operator, require explicit confirmation before proceeding.
 - **Prior engagement shows all vectors exhausted**: report to operator.
   Recommend: different source IP, different timing, or target deprioritization.

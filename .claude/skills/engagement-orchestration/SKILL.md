@@ -24,6 +24,25 @@ Tuoni cred store: credentials (never plaintext in Obsidian)
 Engagement YAML: thin gate file only (ID, mode, exclusions, wiki pointer)
 ```
 
+## Intel Source Priority (with failover)
+
+Query sources in this order. Lower tiers activate when higher tiers are
+unavailable or return empty. Same Obsidian output format regardless of source.
+
+```
+1. Providentia (range-intel MCP) — ground truth if available
+2. GitLab READMEs (range-intel MCP) — deploy config, known defaults
+3. Wiki collections (outline-readonly) — prior research, vuln notes
+4. FALLBACK: blind nmap scan + research MCPs (always available)
+   Activates when tiers 1-3 return empty or are unreachable.
+   Produces identical Obsidian target pages from live scanning.
+   See recon skill "Blind Mode" section for pipeline details.
+```
+
+Engagement page records `intel_source: providentia | blind_scan | mixed`.
+Downstream skills (initial-access, discovery, lateral-move) consume Obsidian
+target pages and do not check intel source — format is identical.
+
 ## Phase 0: Pre-Engagement (master does directly)
 
 Run these sequentially. No threads needed — master calls skills/MCPs inline.
@@ -41,14 +60,20 @@ Run these sequentially. No threads needed — master calls skills/MCPs inline.
 
 **Purpose:** Scan once, write to Obsidian. No phase after this re-scans.
 
+**If Providentia empty or unavailable:** recon skill activates Blind Mode
+automatically. Pipeline is the same (nmap sweep → service scan → Obsidian),
+but without Providentia cross-reference. Blind Mode produces identical
+Obsidian target pages — downstream phases work unchanged. Engagement page
+records `intel_source: blind_scan`.
+
 ```
 Thread: REACHABILITY-ENUM
-  Skill: recon (Phase 0 section)
+  Skill: recon (Phase 0 section, or Blind Mode if no Providentia)
   From Kali self-agent:
     1. ip route → routable subnets
     2. nmap -sn per subnet → live hosts
     3. nmap -sV -sC -p- per live host → service:version
-    4. Cross-ref with Providentia
+    4. Cross-ref with Providentia (skip if blind mode)
   Output:
     Per host → Obsidian target page § Services
     Summary → Obsidian engagement page § Reachability
