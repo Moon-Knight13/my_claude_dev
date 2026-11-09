@@ -95,31 +95,58 @@ RESEARCH GATE: verify per-service evidence exists before dispatching exploit.
     - 3-5 default creds MAX per service, then CVE exploits only
     - Never brute force. Never hydra/medusa as primary vector.
   If foothold: deploy Tuoni agent (unique payload per RT-SIG rules)
-  Output → Obsidian target page § Access (agent ID, privilege level)
+  If foothold: persist-swarm ROUND 1 fires HERE (per RD-003, in exploit thread)
+  Output → Obsidian target page § Access (agent ID, privilege level, persist round 1 status)
   If blocked → Obsidian target page § Blocked (root cause per vector)
 ```
 
-**Master reviews.** If foothold → dispatch Thread C. If blocked → analyze
-root cause, adjust approach or move to next target.
+**Auto-chain:** When Thread B completes with foothold + persist round 1 confirmed,
+master auto-dispatches Thread C (POST-ACCESS) immediately. No manual review gate
+between exploit and post-access — the persist-swarm round 1 confirmation IS the gate.
+Master still reviews Thread B output but does NOT wait for review to dispatch Thread C.
+If blocked → master reviews, adjusts approach or moves to next target.
 
-### Thread C: POST-ACCESS (sequential steps, one thread)
+### Thread C: POST-ACCESS (auto-dispatched, sequential steps, one thread)
+
+Thread C is auto-dispatched by master when Thread B reports foothold + persist
+round 1 confirmed. Persist-swarm round 1 already ran in Thread B (exploit thread).
 
 ```
-  Skills: persist-swarm, discovery, cred-harvest, collect-intel
-  Input: reads Obsidian target page § Access
-  Steps (in order, do not skip):
-    1. persist-swarm ROUND 1 (low-priv dual-beacon)
-    2. discovery (invoke discovery skill: host-id → ad-enum → net-recon)
+  Skills: discovery, cred-harvest, collect-intel, persist-swarm (round 2 only)
+  Input: reads Obsidian target page § Access (includes privilege level + persist round 1 status)
+  Prerequisite: persist-swarm round 1 CONFIRMED in Thread B output
+
+  IF LANDED AS ROOT/SYSTEM:
+    1. discovery (invoke discovery skill: host-id → ad-enum → net-recon)
        If domain-joined: trigger bloodhound-python collection
-    3. get-system recon_only → privesc exploit → verify root/SYSTEM
-    4. persist-swarm ROUND 2 (elevated dual-beacon)
+    2. Document privesc paths (even though already root — record for report)
+    3. persist-swarm ROUND 2 (elevated dual-beacon, additional mechanisms)
        Archive round 1 once round 2 confirmed
-    5. cred-dump (requires root/SYSTEM)
+    4. cred-dump (full — already have root/SYSTEM)
        Store in Tuoni cred store. Refs only in Obsidian.
        If crackable hashes: hashcat-mcp MANDATORY before lateral planning
        Query bloodhound-mcp for paths new creds unlock
-    6. collect-intel sweep (config dirs, keys, tokens, .env files)
-  Output → Obsidian target page (§ Persistence, § Discovery, § Creds, § Intel)
+    5. collect-intel sweep (config dirs, keys, tokens, .env files)
+
+  IF LANDED AS USER (not root):
+    1. discovery (limited scope — what user can see)
+       If domain-joined: trigger bloodhound-python collection (user-level)
+    2. get-system recon_only → privesc exploit → verify root/SYSTEM
+    3a. IF PRIVESC SUCCEEDS:
+        - persist-swarm ROUND 2 (elevated dual-beacon)
+          Archive round 1 once round 2 confirmed
+        - cred-dump (full — now have root/SYSTEM)
+          Store in Tuoni cred store. Refs only in Obsidian.
+          If crackable hashes: hashcat-mcp MANDATORY before lateral planning
+          Query bloodhound-mcp for paths new creds unlock
+        - collect-intel sweep (config dirs, keys, tokens, .env files)
+    3b. IF PRIVESC FAILS:
+        - Document limitation + attempted vectors in Obsidian § Privesc
+        - cred-dump (user-level only — /etc/shadow inaccessible, harvest what's available)
+        - collect-intel (user-accessible dirs only)
+        - Do NOT block. Continue to next target. Mark host for revisit if new creds arrive.
+
+  Output → Obsidian target page (§ Persistence, § Discovery, § Creds, § Intel, § Privesc)
 ```
 
 **Master reviews** cred harvest + discovery results → lateral decision.
@@ -154,6 +181,8 @@ what's already in Obsidian.
 | Obsidian is the bus | Threads read previous phase, write their phase |
 | Engagement YAML is thin gate | ID + mode + exclusions + wiki pointer only |
 | Credentials in Tuoni store | Refs in Obsidian, never plaintext anywhere |
+| Auto-chain exploit to post-access | Persist round 1 confirmed = gate. No manual dispatch delay. |
+| Persist round 1 in exploit thread | Per RD-003: landing + persist happen together, before post-access |
 
 ## Failure Handling
 
@@ -162,7 +191,7 @@ what's already in Obsidian.
 | Target unreachable | Mark FILTERED/UNREACHABLE in Obsidian, skip |
 | All vectors blocked | Document defense posture in Obsidian, move to next target |
 | Persist fails | STOP all ops on host. Persistence is non-negotiable. |
-| Privesc fails | Stay low-priv. Cred-dump limited. Document what's available. |
+| Privesc fails | Stay low-priv. User-level cred-dump + intel only. Document attempted vectors in § Privesc. Mark host for revisit when new creds arrive from other targets. Do NOT block post-access or lateral planning. |
 | Cred-dump empty | Move to next target. Return when creds available from elsewhere. |
 | Thread shortcuts research | Master catches in review. Reject, re-dispatch with correction. |
 | Brute force attempted | OPSEC violation. Log incident. Stop thread. |
