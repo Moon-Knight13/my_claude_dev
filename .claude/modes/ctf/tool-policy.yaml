@@ -1,10 +1,8 @@
-# ctf mode — CTF platform challenges (HTB/THM/PG).
+# ctf mode — CTF platform challenges (HTB/THM/PG) + range-based CTFs.
 # No OPSEC constraints. Flag-oriented.
-# Allow: cve, hacktricks, lolbins, mitre, hashcat, RE tools.
-# Deny: tuoni (wrong C2), range-intel (wrong infra), outline (no wiki).
+# Allow: cve, hacktricks, lolbins, mitre, hashcat, RE tools,
+#        tuoni (C2 for range CTFs), obsidian (progress tracking),
+#        bloodhound (AD enumeration), range-intel (graceful empty if unavailable).
+# Deny: outline (range wiki, not relevant to CTF).
 deny:
-  - "mcp__tuoni-mcp__*"
-  - "mcp__range-intel__*"
   - "mcp__outline-readonly__*"
-  - "mcp__obsidian-mcp__*"
-  - "mcp__bloodhound-mcp__*"
