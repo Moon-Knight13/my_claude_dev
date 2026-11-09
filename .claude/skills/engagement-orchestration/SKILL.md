@@ -1,7 +1,7 @@
 ---
 name: engagement-orchestration
 description: "Master orchestration flow for red-team engagements. Defines phases, thread patterns, Obsidian-as-bus, and handoffs. Load at engagement start before dispatching any threads."
-modes: [red-team, purple]
+modes: [red-team, purple, ctf]
 ---
 
 # Engagement Orchestration
@@ -234,3 +234,97 @@ what's already in Obsidian.
 - fail2ban: max 2 SSH attempts, 60-min cooldown if banned.
 - Exploit hygiene: extract technique from public PoC, adapt, never run unmodified.
 - Two-round persistence: low-priv on landing, high-priv after escalation.
+
+## Mode Selection
+
+Read `.claude/.active-mode` (or `.claude/.mode-overrides/$CLAUDE_CODE_SESSION_ID`)
+at engagement start:
+
+```
+if mode == "ctf": use CTF Flow section below
+else: use standard red-team flow above (Phases 0-3)
+```
+
+CTF mode is auto-detected when `.claude/modes/ctf/system-prompt.md` is active.
+No operator confirmation needed — mode selection IS the confirmation.
+
+---
+
+## CTF Flow (mode: ctf)
+
+When active mode is `ctf`, orchestration adapts for speed. No gates, no
+mandatory documentation, no OPSEC constraints. Flag-oriented.
+
+### Differences from Red-Team Flow
+
+| Aspect | Red-Team | CTF |
+|--------|----------|-----|
+| Engagement YAML | Mandatory gate | Skip — no YAML needed |
+| Pre-engagement cache | Providentia + wiki | Skip — blind scan |
+| Phase 0 | 4 mandatory checks | Kali agent check only |
+| Research gate | Per-service evidence required | Any scan data sufficient |
+| Target approval | RT-TGT-001 operator gate | Auto-approve all live hosts |
+| OPSEC | Full RT-SIG rules | None — speed over stealth |
+| Persist | Mandatory before proceeding | Optional — flag first |
+| Exploit hygiene | Custom only, no Metasploit | Any working exploit OK |
+| Documentation | Obsidian mandatory | Obsidian optional (recommended for multi-host) |
+| Research dispatch | Thread-only (master blocked) | Master inline OK (no research gate) |
+| Cred spray | Lockout-aware, 3-5 max | Unlimited — no lockout concern |
+
+### CTF Phase 0: Quick Start
+
+1. Check Kali agent alive (`tuoni_agents_list`)
+2. If dead: deploy fresh agent
+3. Done — no other gates
+
+### CTF Phase 1: Blind Recon (parallel threads per CIDR)
+
+Operator provides scope (CIDRs, IPs, or hostnames).
+Per CIDR, dispatch thread:
+
+1. `nmap -sn` sweep → live hosts
+2. `nmap -sV -sC` top 1000 per live host (or `-p-` if time allows)
+3. Per service:version → research MCPs (HackTricks, CVE, nuclei)
+4. Write results to Obsidian target pages (optional but recommended)
+5. Return ranked target list with attack vectors
+
+Master reviews target list. No approval gate — auto-dispatch exploit threads.
+
+### CTF Phase 2: Exploit + Flag (one thread per target)
+
+Single thread per target handles full chain:
+
+1. Attempt ranked vectors from research
+2. If foothold: flag-hunt immediately (`user.txt` / `proof.txt`)
+3. Privesc attempt
+4. If root/SYSTEM: flag-hunt again (`root.txt`)
+5. Optional: persist (only if lateral movement planned)
+6. Optional: cred-dump (for lateral or AD attacks)
+
+Key difference: exploit and post-access are ONE thread for speed.
+Red-team splits them for gate enforcement. CTF combines for velocity.
+
+### CTF Phase 3: Lateral (if multi-host)
+
+1. Cred reuse spray against all live hosts (no lockout concern)
+2. AD enumeration if domain found (BloodHound, Kerberoasting)
+3. Dispatch parallel exploit threads for new targets
+4. Each thread: exploit → flag-hunt → privesc → flag-hunt
+
+### Thread Dispatch Pattern (CTF)
+
+| Pattern | Behavior |
+|---------|----------|
+| Recon | Parallel per CIDR |
+| Exploit | Parallel per target (not sequential like red-team) |
+| Post-access | Combined with exploit thread (not separate) |
+| Master | Can research inline (no dispatch guard) |
+
+### CTF Failure Handling
+
+| Failure | Action |
+|---------|--------|
+| Target unreachable | Skip, move to next |
+| All vectors blocked | Try harder, research more, move on if stuck |
+| Exploit fails | Try next vector immediately, no cooldown |
+| Privesc fails | Grab user flag, note for revisit, move on |
