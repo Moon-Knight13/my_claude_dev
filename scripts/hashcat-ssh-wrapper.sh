@@ -8,7 +8,8 @@ KALI_TMP="/tmp/hashcat-mcp"
 args=()
 files_to_cleanup=()
 
-# Ensure remote temp dir exists
+# Ensure remote temp dir exists (client-side expansion intentional)
+# shellcheck disable=SC2029
 ssh kali "mkdir -p $KALI_TMP" 2>/dev/null
 
 for arg in "$@"; do
@@ -23,12 +24,14 @@ for arg in "$@"; do
     fi
 done
 
-# Run hashcat on Kali
+# Run hashcat on Kali (client-side expansion intentional)
+# shellcheck disable=SC2029
 ssh kali hashcat "${args[@]}"
 rc=$?
 
 # Cleanup remote temp files
 for f in "${files_to_cleanup[@]}"; do
+    # shellcheck disable=SC2029
     ssh kali "rm -f '$f'" 2>/dev/null || true
 done
 
