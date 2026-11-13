@@ -1,4 +1,17 @@
 {
   "_mode": "purple",
-  "_description": "Attack + detection testing. Red-team skills with detection validation and scoring."
+  "_description": "Attack + detection testing. Red-team skills with detection validation and scoring.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/hooks/pretooluse-source-priority.sh"
+          }
+        ]
+      }
+    ]
+  }
 }
