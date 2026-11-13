@@ -1,6 +1,7 @@
 {
   "_mode": "purple",
   "_description": "Attack + detection testing. Red-team skills with detection validation and scoring.",
+  "_offensive_base": true,
   "hooks": {
     "PreToolUse": [
       {
