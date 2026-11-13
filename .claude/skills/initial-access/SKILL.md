@@ -172,6 +172,12 @@ This gate prevents the "enumerate → try passwords → report blocked" pattern.
 **Credential testing:** Max 3-5 product defaults per service ONLY. Never brute
 force. After defaults fail, exploit research is the path forward, not more passwords.
 
+**Nextcloud OCS API false-positive trap:** Nextcloud returns HTTP 200 for ALL
+OCS API requests when LDAP backend is broken. Real auth status is in response
+body field `statuscode` (e.g., `996` = auth failure). Any credential testing
+against Nextcloud MUST parse body `statuscode`, not HTTP status. Hydra and
+similar tools checking only HTTP status will report false positives.
+
 ### Phase 2: Payload Preparation
 
 Build or configure payload on Kali (via tuoni-mcp agent commands):
