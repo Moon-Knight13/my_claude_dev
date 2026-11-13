@@ -91,7 +91,7 @@ if [[ -f "$CONF" ]]; then
     [[ "$_added" == 0 ]] && host_note "config has all current keys"
 else
     install -m 0600 "$SRC_CONF_EXAMPLE" "$CONF"
-    host_info "seeded $CONF — set CTP_ALLOWED_TARGET and CTP_ALLOWED_TEAM before deploying"
+    host_info "seeded $CONF — set CTP_ALLOWED_TARGET and CTP_ALLOWED_ENCLAVES before deploying"
     host_note "until they are set, every deploy is refused (safe default)."
 fi
 

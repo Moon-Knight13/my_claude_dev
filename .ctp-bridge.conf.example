@@ -12,16 +12,20 @@
 # Format: KEY=value, one per line. Lines starting with # are ignored. No shell
 # expansion is performed on values.
 
-# The single box this harness may deploy to, named EXACTLY (including the team
-# suffix). Any mutating verb naming anything else is refused. One name, no
-# wildcard, no list. Example shape: some-box_t02
+# Box allow-list: space-separated hostnames this harness may deploy to. Any
+# mutating verb naming anything else is refused. Example: mail-hn dc-hn
 CTP_ALLOWED_TARGET=
 
-# The authorised team suffix. A mutating target MUST end with _<team> — this is
-# the gate that stops a deploy landing on a live team by mistake, and it holds
-# even if the box allow-list above is ever widened. Both gates must pass. Fail
-# closed: if this is unset, every mutating verb is refused. Example: t02
-CTP_ALLOWED_TEAM=
+# Enclave allow-list: space-separated enclave suffixes. A mutating target's last
+# (or second-to-last) hyphen-separated segment must match one of these. Targets
+# in CTP_ALLOWED_TARGET bypass the enclave check (custom-named hosts). When
+# unset, the enclave gate is inactive. Example: hn af
+CTP_ALLOWED_ENCLAVES=
+
+# Deprecated — kept for backward compatibility. If CTP_ALLOWED_ENCLAVES is unset
+# and this is set, its value is treated as enclave suffixes. Prefer
+# CTP_ALLOWED_ENCLAVES for new installs.
+# CTP_ALLOWED_TEAM=
 
 # The MUTATING verbs the wrapper will run. Allow-list: a verb not named here is
 # refused. Read verbs (host list <box>, project update-inventory) are reachable
