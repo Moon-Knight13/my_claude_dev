@@ -43,6 +43,70 @@ Engagement page records `intel_source: providentia | blind_scan | mixed`.
 Downstream skills (initial-access, discovery, lateral-move) consume Obsidian
 target pages and do not check intel source — format is identical.
 
+## Execution Model — Pre-Beacon vs Post-Beacon
+
+**Hard rule. No exceptions.**
+
+### Pre-Beacon (operator mode)
+
+Before any Tuoni agent is live on target, operator is the execution surface.
+Operator's sole job: get beacon on target as fast as possible.
+
+- Operator handles: RDP GUI paste, physical access, out-of-band delivery
+- Harness handles: payload staging, command generation, listener setup
+- Harness does NOT attempt target interaction without an agent
+
+### Post-Beacon (harness mode)
+
+The moment a Tuoni agent calls back and is confirmed alive, harness takes
+over ALL target interaction. Immediately. No transition period.
+
+```
+On agent callback detected (tuoni_agents_list shows new agent):
+  1. Confirm agent alive: tuoni_agent_command (whoami)
+  2. Announce: "Agent <ID> live on <hostname>. Harness taking over."
+  3. Invoke persist-swarm (non-negotiable, immediate)
+  4. Continue kill chain — discovery, privesc, harvest, lateral
+  Operator role: review Obsidian outputs, approve lateral targets
+```
+
+### Human-in-the-Loop = Degraded Mode
+
+Human-in-the-loop is NOT a neutral operating mode. It is the harness
+operating DEGRADED — 3-4x slower, higher error rate, incomplete logging.
+
+**Detection and correction:**
+- If operator sends target commands after beacon is live: warn
+  "Harness is faster and captures full telemetry. Step back."
+- If operator asks to "do this manually": push back.
+  "Manual execution is degraded mode. Agent is live — harness handles this."
+- Only exception: harness tool failure (MCP down, agent lost). In that case,
+  log `execution_mode: degraded` in engagement YAML and restore harness mode
+  ASAP.
+
+### Execution Model State
+
+Track in engagement YAML per target:
+
+```yaml
+targets:
+  - hostname: <target>
+    execution_model:
+      mode: pre_beacon | harness | degraded
+      agent_id: <tuoni agent ID, null if pre_beacon>
+      switched_at: <ISO8601 timestamp of last mode change>
+      degraded_reason: <null, or reason if degraded>
+```
+
+### Auto-Detection
+
+Harness detects beacon callback and switches automatically:
+
+1. After operator delivers payload (RDP workflow, manual delivery, etc.)
+2. Poll `tuoni_agents_list` for new agents matching target IP
+3. On match: verify agent, switch `execution_model.mode` to `harness`
+4. No operator confirmation needed — beacon IS the signal
+
 ## Phase 0: Pre-Engagement (master does directly)
 
 Run these sequentially. No threads needed — master calls skills/MCPs inline.
