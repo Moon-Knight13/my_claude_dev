@@ -1,6 +1,0 @@
-[Unit]
-Description=Monthly Docker cleanup (exited containers, stale images, build cache)
-
-[Service]
-Type=oneshot
-ExecStart=%h/.local/bin/docker-monthly-prune.sh
