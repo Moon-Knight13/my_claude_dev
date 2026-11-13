@@ -47,11 +47,11 @@ run_install
 check "stale matcher upgraded on re-install" "$(jq -r --arg h "$HOME_DIR/.claude/hooks/pretooluse-ctp.sh" '.hooks.PreToolUse[] | select(.hooks[].command==$h) | .matcher' "$S")" "Bash|Read|Write|Edit"
 
 # preserve an operator-set target across re-install, and MIGRATE a config that
-# predates a required key: CTP_ALLOWED_TEAM must be appended, not left missing.
+# predates a required key: CTP_ALLOWED_ENCLAVES must be appended, not left missing.
 printf 'CTP_ALLOWED_TARGET=mybox\n' > "$HOME_DIR/.ctp-bridge.conf"   # old-format conf
 run_install
 check "config preserved on re-install" "$(grep -c '^CTP_ALLOWED_TARGET=mybox' "$HOME_DIR/.ctp-bridge.conf")" 1
-check "missing key migrated in (CTP_ALLOWED_TEAM)" "$(grep -c '^CTP_ALLOWED_TEAM=' "$HOME_DIR/.ctp-bridge.conf")" 1
+check "missing key migrated in (CTP_ALLOWED_ENCLAVES)" "$(grep -c '^CTP_ALLOWED_ENCLAVES=' "$HOME_DIR/.ctp-bridge.conf")" 1
 # idempotent: still exactly one of our hook entries
 check "hook entry not duplicated" "$(jq --arg h "$HOME_DIR/.claude/hooks/pretooluse-ctp.sh" '[.hooks.PreToolUse[] | select(.hooks[].command==$h)] | length' "$S")" 1
 

@@ -22,8 +22,8 @@ trap 'rm -rf "$TMP"' EXIT
 
 # --- 1. Config parser picks up CTP_REMOTE_HOST --------------------------------
 cat > "$TMP/conf-remote" <<'EOF'
-CTP_ALLOWED_TARGET=test-box_t02
-CTP_ALLOWED_TEAM=t02
+CTP_ALLOWED_TARGET=test-box-hn
+CTP_ALLOWED_ENCLAVES=hn
 CTP_REMOTE_HOST=deploybox
 CTP_PROJECT_DIR=/srv/inventories/range
 EOF
@@ -46,8 +46,8 @@ fi
 
 # --- 2. Config without CTP_REMOTE_HOST leaves it empty -----------------------
 cat > "$TMP/conf-local" <<'EOF'
-CTP_ALLOWED_TARGET=test-box_t02
-CTP_ALLOWED_TEAM=t02
+CTP_ALLOWED_TARGET=test-box-hn
+CTP_ALLOWED_ENCLAVES=hn
 EOF
 
 CTP_REMOTE_HOST=""
@@ -161,19 +161,20 @@ fi
 
 # --- 12. Guard stack still classifies correctly with remote config ------------
 CTP_REMOTE_HOST="deploybox"
-CTP_ALLOWED_TARGET="test-box_t02"
-CTP_ALLOWED_TEAM="t02"
+CTP_ALLOWED_TARGET="test-box-hn"
+CTP_ALLOWED_ENCLAVES="hn"
+CTP_ALLOWED_TEAM=""
 CTP_ALLOWED_VERBS="deploy deploy-role"
-verdict="$(ctp_classify host deploy test-box_t02)" && vrc=0 || vrc=$?
-if [[ "$vrc" -eq 0 && "$verdict" == "confirm mutating deploy test-box_t02" ]]; then
+verdict="$(ctp_classify host deploy test-box-hn)" && vrc=0 || vrc=$?
+if [[ "$vrc" -eq 0 && "$verdict" == "confirm mutating deploy test-box-hn" ]]; then
     ok classify-works-with-remote-config
 else
     bad classify-works-with-remote-config "verdict='$verdict' rc=$vrc"
 fi
 
 # --- 13. Read verbs also work with remote config ------------------------------
-verdict="$(ctp_classify host list test-box_t02)" && vrc=0 || vrc=$?
-if [[ "$vrc" -eq 0 && "$verdict" == "confirm read list test-box_t02" ]]; then
+verdict="$(ctp_classify host list test-box-hn)" && vrc=0 || vrc=$?
+if [[ "$vrc" -eq 0 && "$verdict" == "confirm read list test-box-hn" ]]; then
     ok classify-read-works-remote
 else
     bad classify-read-works-remote "verdict='$verdict' rc=$vrc"

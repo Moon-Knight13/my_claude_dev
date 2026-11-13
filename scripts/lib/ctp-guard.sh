@@ -20,6 +20,7 @@
 # taken literally; no shell expansion beyond a leading ~ in secret paths.
 CTP_ALLOWED_TARGET=""
 CTP_ALLOWED_TEAM=""
+CTP_ALLOWED_ENCLAVES=""
 CTP_ALLOWED_VERBS="deploy deploy-role"
 CTP_CONTAINER=""
 CTP_PROJECT_DIR=""
@@ -41,6 +42,7 @@ ctp_load_config() {
         case "$key" in
             CTP_ALLOWED_TARGET) CTP_ALLOWED_TARGET="$val" ;;
             CTP_ALLOWED_TEAM)   CTP_ALLOWED_TEAM="$val" ;;
+            CTP_ALLOWED_ENCLAVES) CTP_ALLOWED_ENCLAVES="$val" ;;
             CTP_ALLOWED_VERBS)  CTP_ALLOWED_VERBS="$val" ;;
             CTP_CONTAINER)      CTP_CONTAINER="$val" ;;
             CTP_PROJECT_DIR)    CTP_PROJECT_DIR="$val" ;;
@@ -88,12 +90,13 @@ ctp_has_glob() {
 # class is one of: mutating | read | inventory — the wrapper uses it to pick
 # preconditions. The verdict is derived from the parsed argv only.
 #
-# Two independent gates protect a mutating verb, and BOTH must pass:
-#   - team gate: the target must belong to the authorised team (CTP_ALLOWED_TEAM),
-#     i.e. end with _<team>. This is the protection against deploying to a live
-#     team by mistake; it holds even if the box allow-list is later widened.
-#   - box allow-list: the target must equal CTP_ALLOWED_TARGET (one named box).
-# Both fail closed: an unset team or target refuses every mutating verb.
+# Two independent gates protect a mutating verb:
+#   - enclave gate (optional): the target's enclave segment (last or second-to-last
+#     hyphen-separated part) must be in CTP_ALLOWED_ENCLAVES. Targets in
+#     CTP_ALLOWED_TARGET bypass the enclave check (custom-named hosts).
+#     Backward compat: CTP_ALLOWED_TEAM is used when CTP_ALLOWED_ENCLAVES is unset.
+#   - box allow-list (optional): the target must be in CTP_ALLOWED_TARGET.
+# Either gate, when configured, fails closed on mismatch.
 ctp_classify() {
     local a1="${1:-}" a2="${2:-}" a3="${3:-}" a4="${4:-}" verb target
     case "$a1" in
@@ -141,13 +144,32 @@ ctp_classify() {
     [[ -n "$target" ]] || { printf 'refuse mutating-verb-needs-a-target:%s' "$verb"; return 1; }
     [[ -z "$a4" ]] || { printf 'refuse unexpected-extra-args'; return 1; }
     ctp_has_glob "$target" && { printf 'refuse glob-in-target-refused:%s' "$verb"; return 1; }
-    # team gate (mandatory, fail closed; space-separated list of allowed teams)
-    [[ -n "$CTP_ALLOWED_TEAM" ]] || { printf 'refuse no-authorised-team-configured'; return 1; }
-    local _team_suffix="${target##*_}" _team_ok=false _t
-    for _t in $CTP_ALLOWED_TEAM; do
-        [[ "$_team_suffix" == "$_t" ]] && { _team_ok=true; break; }
-    done
-    [[ "$_team_ok" == true ]] || { printf 'refuse target-not-in-authorised-team:%s' "$CTP_ALLOWED_TEAM"; return 1; }
+    # enclave gate (optional; backward compat: CTP_ALLOWED_TEAM treated as enclaves)
+    local _eff_enclaves="$CTP_ALLOWED_ENCLAVES"
+    if [[ -z "$_eff_enclaves" && -n "$CTP_ALLOWED_TEAM" ]]; then
+        _eff_enclaves="$CTP_ALLOWED_TEAM"
+    fi
+    if [[ -n "$_eff_enclaves" ]]; then
+        local _enclave_ok=false _e _seg
+        _seg="${target##*-}"
+        for _e in $_eff_enclaves; do
+            [[ "$_seg" == "$_e" ]] && { _enclave_ok=true; break; }
+        done
+        if [[ "$_enclave_ok" != true ]]; then
+            local _inner="${target%-*}"
+            _inner="${_inner##*-}"
+            for _e in $_eff_enclaves; do
+                [[ "$_inner" == "$_e" ]] && { _enclave_ok=true; break; }
+            done
+        fi
+        if [[ "$_enclave_ok" != true && -n "$CTP_ALLOWED_TARGET" ]]; then
+            local _b
+            for _b in $CTP_ALLOWED_TARGET; do
+                [[ "$target" == "$_b" ]] && { _enclave_ok=true; break; }
+            done
+        fi
+        [[ "$_enclave_ok" == true ]] || { printf 'refuse target-not-in-allowed-enclave:%s' "$_eff_enclaves"; return 1; }
+    fi
     # box allow-list (optional; space-separated list of allowed targets)
     if [[ -n "$CTP_ALLOWED_TARGET" ]]; then
         local _box_ok=false _b

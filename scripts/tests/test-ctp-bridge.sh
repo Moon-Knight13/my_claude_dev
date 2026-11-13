@@ -19,8 +19,8 @@ trap 'rm -rf "$TMP"' EXIT
 
 CONF="$TMP/.ctp-bridge.conf"
 cat > "$CONF" <<EOF
-CTP_ALLOWED_TARGET=trainbox_t02
-CTP_ALLOWED_TEAM=t02
+CTP_ALLOWED_TARGET=mail-hn
+CTP_ALLOWED_ENCLAVES=hn af
 CTP_ALLOWED_VERBS=deploy deploy-role
 CTP_CONTAINER=catapult-tester
 CTP_PROJECT_DIR=/srv/inventories/range
@@ -37,34 +37,47 @@ export CTP_TARGET_HOME="/home/tester"
 
 cls() { ctp_classify "$@" >/dev/null 2>&1 && echo confirm || echo refuse; }
 clsc() { ctp_classify "$@" 2>/dev/null | awk '{print $2}'; }   # the class token
-check "deploy allowed box -> confirm"         "$(cls host deploy trainbox_t02)"      confirm
-check "deploy-role allowed box -> confirm"    "$(cls host deploy-role trainbox_t02)" confirm
-check "  ...class is mutating"                "$(clsc host deploy trainbox_t02)"     mutating
-check "deploy other box (right team) -> refuse" "$(cls host deploy otherbox_t02)"    refuse
-check "deploy right box WRONG TEAM -> refuse"   "$(cls host deploy trainbox_t05)"    refuse
-check "deploy bare name (no team) -> refuse"    "$(cls host deploy trainbox)"        refuse
-check "glob in target -> refuse"              "$(cls host deploy 'trainbox_t0*')"    refuse
+check "deploy allowed box -> confirm"         "$(cls host deploy mail-hn)"      confirm
+check "deploy-role allowed box -> confirm"    "$(cls host deploy-role mail-hn)" confirm
+check "  ...class is mutating"                "$(clsc host deploy mail-hn)"     mutating
+check "deploy other box (right enclave) -> refuse" "$(cls host deploy dc-hn)"  refuse
+check "deploy wrong enclave -> refuse"           "$(cls host deploy mail-mil)"    refuse
+check "deploy bare name (no enclave match) -> refuse" "$(cls host deploy trainbox)"  refuse
+check "glob in target -> refuse"              "$(cls host deploy 'mail-h*')"         refuse
 check "deploy no target -> refuse"            "$(cls host deploy)"                   refuse
-check "list <box> -> confirm (read)"          "$(cls host list trainbox_t02)"        confirm
-check "  ...class is read"                    "$(clsc host list trainbox_t02)"       read
-check "list any box (read, not team-gated)"   "$(cls host list otherbox_t05)"        confirm
+check "list <box> -> confirm (read)"          "$(cls host list mail-hn)"        confirm
+check "  ...class is read"                    "$(clsc host list mail-hn)"       read
+check "list any box (read, not enclave-gated)" "$(cls host list dc-mil)"       confirm
 check "list all -> refuse (no bulk dump)"     "$(cls host list all)"                 refuse
 check "list no target -> refuse"              "$(cls host list)"                     refuse
-check "list glob -> refuse"                   "$(cls host list 'train*')"            refuse
+check "list glob -> refuse"                   "$(cls host list 'mail*')"             refuse
 check "update-inventory -> confirm"           "$(cls project update-inventory)"      confirm
 check "  ...class is inventory"               "$(clsc project update-inventory)"     inventory
 check "project other subverb -> refuse"       "$(cls project nuke)"                  refuse
-check "vars -> refuse (streams detail)"       "$(cls host vars trainbox_t02)"        refuse
-check "redeploy -> refuse"                    "$(cls host redeploy trainbox_t02)"    refuse
-check "remove -> refuse"                      "$(cls host remove trainbox_t02)"      refuse
+check "vars -> refuse (streams detail)"       "$(cls host vars mail-hn)"        refuse
+check "redeploy -> refuse"                    "$(cls host redeploy mail-hn)"    refuse
+check "remove -> refuse"                      "$(cls host remove mail-hn)"      refuse
 check "secrets -> refuse"                     "$(cls secrets edit)"                  refuse
 check "make -> refuse"                        "$(cls make start)"                    refuse
 check "unknown verb -> refuse"                "$(cls frobnicate all)"                refuse
-check "deploy with extra arg -> refuse"       "$(cls host deploy trainbox_t02 --danger)" refuse
-check "list with extra arg -> refuse"         "$(cls host list trainbox_t02 extra)"      refuse
+check "deploy with extra arg -> refuse"       "$(cls host deploy mail-hn --danger)" refuse
+check "list with extra arg -> refuse"         "$(cls host list mail-hn extra)"      refuse
 
-# team gate fails closed when unset
-( CTP_ALLOWED_TEAM=""; check "no team configured -> mutating refused" "$(cls host deploy trainbox_t02)" refuse )
+# enclave gate tests (isolated in subshells)
+( CTP_ALLOWED_ENCLAVES="hn af"; CTP_ALLOWED_TEAM=""; CTP_ALLOWED_TARGET=""
+  check "enclave match last segment -> confirm"     "$(cls host deploy mail-hn)"   confirm
+  check "enclave match second segment -> confirm"   "$(cls host deploy ws-af-01)"  confirm
+  check "enclave mismatch -> refuse"                "$(cls host deploy mail-mil)"  refuse
+)
+( CTP_ALLOWED_ENCLAVES="mil"; check "enclave mismatch (mil only) -> refuse" "$(cls host deploy dc-hn)" refuse )
+( CTP_ALLOWED_ENCLAVES="hn"; CTP_ALLOWED_TARGET="win-vuln-test"
+  check "box allowlist overrides enclave gate" "$(cls host deploy win-vuln-test)" confirm )
+( CTP_ALLOWED_ENCLAVES=""; CTP_ALLOWED_TEAM=""
+  check "no enclave configured -> pass (no gate)" "$(cls host deploy mail-hn)" confirm )
+( CTP_ALLOWED_ENCLAVES=""; CTP_ALLOWED_TEAM="hn"
+  check "CTP_ALLOWED_TEAM backward compat" "$(cls host deploy mail-hn)" confirm )
+( CTP_ALLOWED_ENCLAVES=""; CTP_ALLOWED_TEAM="mil"
+  check "CTP_ALLOWED_TEAM backward compat mismatch" "$(cls host deploy dc-hn)" refuse )
 
 sec() { ctp_is_secret_path "$1" && echo secret || echo ok; }
 check "vault file is secret"        "$(sec /var/tmp/vlt_pf)"            secret
@@ -130,23 +143,23 @@ run_wrap() { # run_wrap <stdin> -- args...   ; prints nothing, sets RC
     RC=$?
 }
 
-run_wrap "" -- host deploy trainbox_t02;  check "non-interactive deploy refused (no auto-yes)" "$RC" 5
-ASSUME_YES=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" bash "$ROOT/scripts/ctp-bridge.sh" host deploy trainbox_t02 </dev/null >/dev/null 2>&1
+run_wrap "" -- host deploy mail-hn;  check "non-interactive deploy refused (no auto-yes)" "$RC" 5
+ASSUME_YES=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" bash "$ROOT/scripts/ctp-bridge.sh" host deploy mail-hn </dev/null >/dev/null 2>&1
 check "ASSUME_YES refused" "$?" 5
 run_wrap "" -- secrets edit;              check "refused verb exits before docker (3)" "$RC" 3
-run_wrap "" -- host deploy trainbox_t05;  check "wrong-team deploy refused (3)" "$RC" 3
-run_wrap "" -- host deploy otherbox_t02;  check "wrong-box deploy refused (3)" "$RC" 3
-MOCK_VAULT_LOCKED=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" bash "$ROOT/scripts/ctp-bridge.sh" host deploy trainbox_t02 </dev/null >/dev/null 2>&1
+run_wrap "" -- host deploy mail-mil;  check "wrong-enclave deploy refused (3)" "$RC" 3
+run_wrap "" -- host deploy dc-hn;  check "wrong-box deploy refused (right enclave) (3)" "$RC" 3
+MOCK_VAULT_LOCKED=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" bash "$ROOT/scripts/ctp-bridge.sh" host deploy mail-hn </dev/null >/dev/null 2>&1
 check "vault locked refused (4)" "$?" 4
-MOCK_VAULT_LOCKED=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" bash "$ROOT/scripts/ctp-bridge.sh" host list trainbox_t02 </dev/null >/dev/null 2>&1
+MOCK_VAULT_LOCKED=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" bash "$ROOT/scripts/ctp-bridge.sh" host list mail-hn </dev/null >/dev/null 2>&1
 check "vault locked refuses a read too (4)" "$?" 4
 # update-inventory (inventory class) does NOT gate on vault -> passes the vault
 # check and refuses later at the confirm gate (no token, non-interactive) = 5
 MOCK_VAULT_LOCKED=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" bash "$ROOT/scripts/ctp-bridge.sh" project update-inventory </dev/null >/dev/null 2>&1
 check "update-inventory skips the vault check (5, not 4)" "$?" 5
-MOCK_BUSY=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" bash "$ROOT/scripts/ctp-bridge.sh" host deploy trainbox_t02 </dev/null >/dev/null 2>&1
+MOCK_BUSY=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" bash "$ROOT/scripts/ctp-bridge.sh" host deploy mail-hn </dev/null >/dev/null 2>&1
 check "busy refused (4)" "$?" 4
-PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$TMP/nope.conf" bash "$ROOT/scripts/ctp-bridge.sh" host deploy trainbox_t02 </dev/null >/dev/null 2>&1
+PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$TMP/nope.conf" bash "$ROOT/scripts/ctp-bridge.sh" host deploy mail-hn </dev/null >/dev/null 2>&1
 check "missing config refused (2)" "$?" 2
 
 # --- hook-approval token: the agent path (no TTY) runs iff a valid token exists
@@ -154,35 +167,35 @@ STATE="$TMP/state"; mkdir -p "$STATE"; APPROVAL="$STATE/approval"
 _mktoken() { printf '%s\t%s\n' "$1" "$2" > "$APPROVAL"; }   # <expiry-epoch> <argv>
 NOW="$(date +%s)"; FUTURE=$((NOW + 120)); PAST=$((NOW - 5))
 
-_mktoken "$FUTURE" "host list trainbox_t02"
+_mktoken "$FUTURE" "host list mail-hn"
 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_BRIDGE_STATE="$STATE" CTP_BRIDGE_LOG="$TMP/c2.log" \
-    bash "$ROOT/scripts/ctp-bridge.sh" host list trainbox_t02 </dev/null >/dev/null 2>&1
+    bash "$ROOT/scripts/ctp-bridge.sh" host list mail-hn </dev/null >/dev/null 2>&1
 check "valid token: non-interactive run proceeds (0)" "$?" 0
 [[ ! -f "$APPROVAL" ]] && ok "token consumed (single-use)" || bad "token consumed (single-use)"
 
-_mktoken "$FUTURE" "host list SOMETHINGELSE_t02"
+_mktoken "$FUTURE" "host list SOMETHINGELSE-hn"
 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_BRIDGE_STATE="$STATE" \
-    bash "$ROOT/scripts/ctp-bridge.sh" host list trainbox_t02 </dev/null >/dev/null 2>&1
+    bash "$ROOT/scripts/ctp-bridge.sh" host list mail-hn </dev/null >/dev/null 2>&1
 check "token for other argv: refused (5)" "$?" 5
 
-_mktoken "$PAST" "host list trainbox_t02"
+_mktoken "$PAST" "host list mail-hn"
 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_BRIDGE_STATE="$STATE" \
-    bash "$ROOT/scripts/ctp-bridge.sh" host list trainbox_t02 </dev/null >/dev/null 2>&1
+    bash "$ROOT/scripts/ctp-bridge.sh" host list mail-hn </dev/null >/dev/null 2>&1
 check "expired token: refused (5)" "$?" 5
 
 # --- working directory: CTP_PROJECT_DIR unset -> translate CWD via bind mount -
 CONF2="$TMP/noproj.conf"; grep -v '^CTP_PROJECT_DIR=' "$CONF" > "$CONF2"
 HOSTPROJ="$TMP/host/proj"; mkdir -p "$HOSTPROJ/inventories/range"
-printf '%s\t%s\n' "$FUTURE" "host list trainbox_t02" > "$STATE/approval"
+printf '%s\t%s\n' "$FUTURE" "host list mail-hn" > "$STATE/approval"
 out="$(cd "$HOSTPROJ/inventories/range" && PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF2" \
     CTP_BRIDGE_STATE="$STATE" MOCK_MOUNTS="$HOSTPROJ"$'\t'"/srv" \
-    bash "$ROOT/scripts/ctp-bridge.sh" host list trainbox_t02 </dev/null 2>&1)"
+    bash "$ROOT/scripts/ctp-bridge.sh" host list mail-hn </dev/null 2>&1)"
 if printf '%s' "$out" | grep -Fq 'WDIR: /srv/inventories/range'; then
     ok "CWD translated through bind mount to container path"
 else bad "CWD translated through bind mount ($(printf '%s' "$out" | grep WDIR: | head -1))"; fi
 # CWD outside any mount, no override -> refuse (4), never guess
 ( cd "$TMP" && PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF2" CTP_BRIDGE_STATE="$STATE" \
-    MOCK_MOUNTS="$HOSTPROJ"$'\t'"/srv" bash "$ROOT/scripts/ctp-bridge.sh" host list trainbox_t02 </dev/null >/dev/null 2>&1 )
+    MOCK_MOUNTS="$HOSTPROJ"$'\t'"/srv" bash "$ROOT/scripts/ctp-bridge.sh" host list mail-hn </dev/null >/dev/null 2>&1 )
 check "CWD outside the mount -> refuse (4)" "$?" 4
 
 # --- exec prelude survives a box with no venv (zsh NOMATCH would abort) -------
@@ -205,12 +218,12 @@ fi
 # to allocate one; skip honestly if unavailable.
 if command -v script >/dev/null 2>&1; then
     rm -f "$TMP/count.log"
-    script -qec "PATH='$BIN:$PATH' CTP_BRIDGE_CONF='$CONF' CTP_BRIDGE_LOG='$TMP/count.log' bash '$ROOT/scripts/ctp-bridge.sh' host deploy-role trainbox_t02" /dev/null <<<"y" >"$TMP/run.out" 2>&1
+    script -qec "PATH='$BIN:$PATH' CTP_BRIDGE_CONF='$CONF' CTP_BRIDGE_LOG='$TMP/count.log' bash '$ROOT/scripts/ctp-bridge.sh' host deploy-role mail-hn" /dev/null <<<"y" >"$TMP/run.out" 2>&1
     # The mock echoes the full docker-exec argv; the ctp args must arrive as
-    # trailing positional params (zsh -s -- host deploy-role trainbox_t02).
+    # trailing positional params (zsh -s -- host deploy-role mail-hn).
     # The setup script is piped to stdin (zsh -s), so only the positional args
     # appear in the mock's RAN: line — not the script body.
-    if grep -Fq 'zsh -s -- host deploy-role trainbox_t02' "$TMP/run.out"; then
+    if grep -Fq 'zsh -s -- host deploy-role mail-hn' "$TMP/run.out"; then
         ok "confirm 'y' runs the exact positional argv"
     else bad "confirm 'y' runs the exact positional argv ($(grep RAN: "$TMP/run.out" | head -1))"; fi
     # the setup script is piped to zsh stdin; verify it contains the prelude by
@@ -222,7 +235,7 @@ if command -v script >/dev/null 2>&1; then
     if grep -Fq 'WDIR: /srv/inventories/range' "$TMP/run.out"; then
         ok "exec sets -w to the project dir (CTP_PROJECT_DIR)"
     else bad "exec sets -w to the project dir ($(grep WDIR: "$TMP/run.out" | head -1))"; fi
-    if [[ -f "$TMP/count.log" ]] && grep -q "deploy-role" "$TMP/count.log" && ! grep -q "trainbox" "$TMP/count.log"; then
+    if [[ -f "$TMP/count.log" ]] && grep -q "deploy-role" "$TMP/count.log" && ! grep -q "mail-hn" "$TMP/count.log"; then
         ok "count log records verb+outcome, not the target"
     else bad "count log records verb+outcome, not the target"; fi
     # a read verb runs too (update-inventory, no target)
@@ -261,16 +274,16 @@ check "Bash docker exec bypass -> deny"   "$(decide "$(bash_json 'docker exec ca
 check "Bash bare ctp -> deny"             "$(decide "$(bash_json 'ctp host deploy trainbox')")"      deny
 check "Bash make start -> deny"           "$(decide "$(bash_json 'make start')")"                    deny
 # the INSTALLED name is `ctp-bridge` (no .sh); the hook must recognise it too
-check "installed name deploy allowed -> ask"  "$(decide "$(bash_json "ctp-bridge host deploy trainbox_t02")")" ask
-check "installed name wrong team -> deny"      "$(decide "$(bash_json "ctp-bridge host deploy trainbox_t05")")" deny
-check "installed name abs path -> ask"         "$(decide "$(bash_json "/home/u/.local/bin/ctp-bridge host deploy trainbox_t02")")" ask
+check "installed name deploy allowed -> ask"  "$(decide "$(bash_json "ctp-bridge host deploy mail-hn")")" ask
+check "installed name wrong enclave -> deny"      "$(decide "$(bash_json "ctp-bridge host deploy mail-mil")")" deny
+check "installed name abs path -> ask"         "$(decide "$(bash_json "/home/u/.local/bin/ctp-bridge host deploy mail-hn")")" ask
 check "installed name update-inventory -> ask" "$(decide "$(bash_json "ctp-bridge project update-inventory")")" ask
-check "Bash wrapper allowed -> ask"       "$(decide "$(bash_json "bash $ROOT/scripts/ctp-bridge.sh host deploy trainbox_t02")")" ask
-check "Bash wrapper wrong team -> deny"   "$(decide "$(bash_json "bash $ROOT/scripts/ctp-bridge.sh host deploy trainbox_t05")")" deny
+check "Bash wrapper allowed -> ask"       "$(decide "$(bash_json "bash $ROOT/scripts/ctp-bridge.sh host deploy mail-hn")")" ask
+check "Bash wrapper wrong enclave -> deny"   "$(decide "$(bash_json "bash $ROOT/scripts/ctp-bridge.sh host deploy mail-mil")")" deny
 check "Bash wrapper update-inventory -> ask" "$(decide "$(bash_json "bash $ROOT/scripts/ctp-bridge.sh project update-inventory")")" ask
-check "Bash wrapper list <box> -> ask"    "$(decide "$(bash_json "bash $ROOT/scripts/ctp-bridge.sh host list trainbox_t02")")" ask
-check "Bash wrapper refused verb -> deny" "$(decide "$(bash_json "bash $ROOT/scripts/ctp-bridge.sh host remove trainbox_t02")")" deny
-check "env cannot override config -> deny" "$(decide "$(bash_json "CTP_ALLOWED_TARGET=evil_t02 bash $ROOT/scripts/ctp-bridge.sh host deploy evil_t02")")" deny
+check "Bash wrapper list <box> -> ask"    "$(decide "$(bash_json "bash $ROOT/scripts/ctp-bridge.sh host list mail-hn")")" ask
+check "Bash wrapper refused verb -> deny" "$(decide "$(bash_json "bash $ROOT/scripts/ctp-bridge.sh host remove mail-hn")")" deny
+check "env cannot override config -> deny" "$(decide "$(bash_json "CTP_ALLOWED_TARGET=evil-zz bash $ROOT/scripts/ctp-bridge.sh host deploy evil-zz")")" deny
 check "prose mentioning ctp -> none"      "$(decide "$(bash_json 'echo use ctp later to deploy')")"  none
 check "unrelated bash -> none"            "$(decide "$(bash_json 'ls -la /workspace')")"             none
 
@@ -284,22 +297,22 @@ check "commit msg says reset --hard -> none" "$(decide "$(bash_json "git commit 
 
 # approving a wrapper call writes a token bound to the exact argv
 rm -f "$HSTATE/approval"
-decide "$(bash_json "ctp-bridge host deploy trainbox_t02")" >/dev/null
-if [[ -f "$HSTATE/approval" ]] && grep -Fq 'host deploy trainbox_t02' "$HSTATE/approval"; then
+decide "$(bash_json "ctp-bridge host deploy mail-hn")" >/dev/null
+if [[ -f "$HSTATE/approval" ]] && grep -Fq 'host deploy mail-hn' "$HSTATE/approval"; then
     ok "ask writes an approval token bound to the argv"
 else bad "ask writes an approval token bound to the argv"; fi
 
 # redirection after the wrapper args is stripped: the bound token matches the argv
 # the wrapper will actually receive (the real 2>&1 | tail bug from the box).
-check "redirected wrapper call -> ask"    "$(decide "$(bash_json "ctp-bridge host list trainbox_t02 2>&1")")" ask
+check "redirected wrapper call -> ask"    "$(decide "$(bash_json "ctp-bridge host list mail-hn 2>&1")")" ask
 rm -f "$HSTATE/approval"
-decide "$(bash_json "ctp-bridge host list trainbox_t02 2>&1 | tail -60")" >/dev/null
-if [[ -f "$HSTATE/approval" ]] && grep -Eq $'\thost list trainbox_t02$' "$HSTATE/approval"; then
+decide "$(bash_json "ctp-bridge host list mail-hn 2>&1 | tail -60")" >/dev/null
+if [[ -f "$HSTATE/approval" ]] && grep -Eq $'\thost list mail-hn$' "$HSTATE/approval"; then
     ok "token bound to clean argv (redirection/pipe stripped)"
 else bad "token bound to clean argv (got: $(cat "$HSTATE/approval" 2>/dev/null))"; fi
 # a refused call writes NO token
 rm -f "$HSTATE/approval"
-decide "$(bash_json "ctp-bridge host deploy trainbox_t05")" >/dev/null
+decide "$(bash_json "ctp-bridge host deploy mail-mil")" >/dev/null
 [[ ! -f "$HSTATE/approval" ]] && ok "refused call writes no token" || bad "refused call writes no token"
 
 # the approval token path is guarded from tools (read/write/bash)

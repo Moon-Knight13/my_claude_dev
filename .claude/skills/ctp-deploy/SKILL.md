@@ -13,12 +13,13 @@ training and authorized security-testing. The bridge targets a **single
 configured box** (`.ctp-bridge.conf`), not the range. If a task needs a different
 box, that is a config change the owner makes — not something to work around.
 
-**The team suffix is a hard boundary.** Range hosts carry a team suffix
-(`..._t02`). Only the **authorised team** (`CTP_ALLOWED_TEAM`) is for dev/test;
-other `_tNN` are live teams. The bridge refuses any mutating target that is not in
-the authorised team, in code — but treat it as a real boundary, not a safety net:
-never try to reach another team's host. A deploy to the wrong team is an outage
-for someone else.
+**The enclave boundary is a hard boundary.** Range hosts embed an enclave suffix
+in their hostname (e.g. `mail-hn`, `dc-af`). Only the **allowed enclaves**
+(`CTP_ALLOWED_ENCLAVES`) are for dev/test; other enclaves belong to other teams.
+The bridge refuses any mutating target whose enclave segment is not in the
+allow-list — but treat it as a real boundary, not a safety net: never try to reach
+another enclave's host. A deploy to the wrong enclave is an outage for someone
+else.
 
 ## The only way to run ctp
 
