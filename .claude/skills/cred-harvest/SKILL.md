@@ -141,6 +141,19 @@ Execute harvesting from agent (through tuoni-mcp):
    - DPAPI protected data
    - Credential Manager vault
 
+### Phase 3 Post-Harvest Checks (Windows)
+
+Run after Windows credential harvesting completes:
+
+1. **SID-500 Renamed Administrator Detection**:
+   - Command via Tuoni agent: `wmic useraccount where "sid like '%-500'" get name,sid`
+   - PowerShell alternative: `Get-WmiObject Win32_UserAccount | Where-Object {$_.SID -match '-500$'} | Select Name,SID`
+   - If returned name != "Administrator": flag as **"Built-in Administrator (renamed)"**
+   - Implications: SID-500 account bypasses UAC token filtering (full admin token
+     on remote logon), eligible for pass-the-hash even when other local admins are not
+   - Store renamed account name in Tuoni cred store metadata
+   - Document in Obsidian target page: `§ SID-500: <actual_name> (renamed)`
+
 ### Phase 3.5: Auto-Crack via Hashcat MCP (when hashes recovered)
 
 When Phase 3 yields crackable hashes (NTLM, NTLMv2, Kerberos TGS, etc.):
