@@ -140,7 +140,8 @@ read -r -d '' CATALOG << CATALOG_JSON || true
     "command": "$WRAPPER",
     "args": ["$PYTHON_CMD", "$PROJECT_DIR/mcp-servers/.venv/share/hashcat-mcp/hashcat_mcp_server.py"],
     "env": {
-      "HASHCAT_MODES_CSV": "$PROJECT_DIR/mcp-servers/.venv/share/hashcat-mcp/hashcat_modes.csv"
+      "HASHCAT_MODES_CSV": "$PROJECT_DIR/mcp-servers/.venv/share/hashcat-mcp/hashcat_modes.csv",
+      "HASHCAT_PATH": "$PROJECT_DIR/scripts/hashcat-ssh-wrapper.sh"
     }
   }
 }
