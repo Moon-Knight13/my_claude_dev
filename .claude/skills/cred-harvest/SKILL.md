@@ -217,6 +217,12 @@ Only with operator approval and lockout policy enumerated:
    - Single credential at a time
    - Monitor for lockouts between attempts
    - Log every attempt (success AND failure) in Obsidian
+   - **Nextcloud OCS API trap**: HTTP 200 does NOT mean auth success.
+     Nextcloud returns HTTP 200 for ALL OCS requests when LDAP backend is
+     broken or misconfigured. Real auth status is in response body field
+     `statuscode` (e.g., `996` = auth failure). Always parse body
+     `statuscode`, never trust HTTP status alone. Tools like hydra that
+     check only HTTP status will report mass false positives.
 4. **On success**:
    - Store new access in tuoni cred store
    - Assess for lateral movement potential
