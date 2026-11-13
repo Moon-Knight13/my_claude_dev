@@ -1,7 +1,7 @@
 ---
 name: recon
 description: "Phase-based reconnaissance skill for red-team and purple modes. Queries authoritative sources first (Providentia, GitLab READMEs, wiki collections), then reference MCPs. Use when operator says 'recon', 'target', 'research <hostname>', or starts an engagement."
-modes: [red-team, purple]
+modes: [red-team, purple, ctf]
 ---
 
 # Recon Skill — Source-Priority Phased Reconnaissance
@@ -9,13 +9,22 @@ modes: [red-team, purple]
 ## When to use
 
 Operator asks to research a target, start an engagement, or perform recon.
-Active in: **red-team**, **purple** modes only.
+Active in: **red-team**, **purple**, **ctf** modes.
 
 ## Entry criteria
 
-- Mode is red-team or purple
+- Mode is red-team, purple, or ctf
 - Operator has named a target (hostname, IP, or role description)
 - Engagement YAML exists or will be created
+
+## Black-Box Engagement Handling
+
+When engagement YAML has `type: black-box`:
+- **Skip Tier 1 entirely** — no Providentia, GitLab, or Outline queries
+- **Enter Blind Mode immediately** — do not wait for empty responses
+- Set `intel_source: blind_scan` on engagement page at start
+- Proceed directly to Blind Recon Pipeline (network discovery → service scan → research)
+- All downstream output format identical — consuming skills do not care about source
 
 ## Source Priority (ENFORCED)
 
@@ -57,16 +66,18 @@ is insufficient for the question.
 12. **CVE intelligence** via cve-mcp — CVE details, EPSS scores, KEV, exploits
 13. **Web research** — last resort when all above insufficient
 
-## Blind Mode (Providentia Unavailable / Empty)
+## Blind Mode (Providentia Unavailable / Empty / Black-Box)
 
 Activates automatically when:
 - Providentia returns empty results for all queried hosts
 - range-intel MCP is unreachable or errors
 - Operator provides CIDR/range without pre-cached intel (CTF, pentest, ad-hoc)
+- **Engagement YAML has `type: black-box`** — immediate activation, no Tier 1 queries attempted
 
-**Detection:** After Tier 1 queries, if Providentia returned zero hosts AND
-GitLab READMEs returned nothing, enter blind mode. Log to Obsidian engagement
-page: `intel_source: blind_scan`.
+**Detection:** When `type: black-box`, enter blind mode immediately without
+querying Tier 1. Otherwise, after Tier 1 queries, if Providentia returned zero
+hosts AND GitLab READMEs returned nothing, enter blind mode. Log to Obsidian
+engagement page: `intel_source: blind_scan`.
 
 ### Blind Recon Pipeline
 

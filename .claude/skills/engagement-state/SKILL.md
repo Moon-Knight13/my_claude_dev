@@ -73,6 +73,7 @@ exists when entering red-team/purple/red-dev mode.
 # GATE FILE ONLY — all detail lives in Obsidian
 engagement_id: <id>
 mode: <active-mode>
+type: <black-box or omit for standard>
 team: <team>
 environment: <env>
 status: active
@@ -80,6 +81,9 @@ wiki_page: llm-wiki/wiki/engagements/<id>.md
 exclusions:
   - "GT accounts per RT-SCOPE-001"
 ```
+
+When `type: black-box`: pre-engagement-cache is skipped, recon enters blind
+mode immediately, and initial-access research gate skips authoritative sources.
 
 5. Create Obsidian engagement page via obsidian-mcp (`obsidian_create_note`):
    Path: `llm-wiki/wiki/engagements/<id>.md`
