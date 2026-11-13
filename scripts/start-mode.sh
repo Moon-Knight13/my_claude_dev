@@ -24,7 +24,7 @@ if [[ "${1:-}" == "--list" || "${1:-}" == "-l" ]]; then
     echo "Available modes:"
     for dir in "$MODES_DIR"/*/; do
         name="$(basename "$dir")"
-        [[ "$name" == "base" ]] && continue
+        [[ "$name" == "base" || "$name" == "offensive-base" ]] && continue
         desc=""
         if [[ -f "$dir/settings.json" ]]; then
             desc=$(jq -r '._description // empty' "$dir/settings.json" 2>/dev/null)
@@ -79,13 +79,25 @@ if [[ -n "$desc" ]]; then
 fi
 echo ""
 
+# --- Build effective system prompt (offensive-base concatenation) ---
+OFFENSIVE_BASE="$MODES_DIR/offensive-base/shared-rules.md"
+HAS_BASE=$(jq -r '._offensive_base // false' "$MODE_SETTINGS" 2>/dev/null)
+
+if [[ "$HAS_BASE" == "true" && -f "$OFFENSIVE_BASE" ]]; then
+    EFFECTIVE_PROMPT=$(mktemp "${TMPDIR:-/tmp}/claude-mode-prompt.XXXXXX")
+    trap 'rm -f "$EFFECTIVE_PROMPT"' EXIT
+    cat "$OFFENSIVE_BASE" "$SYSTEM_PROMPT" > "$EFFECTIVE_PROMPT"
+else
+    EFFECTIVE_PROMPT="$SYSTEM_PROMPT"
+fi
+
 # --- Launch Claude Code ---
 # --append-system-prompt-file: injects mode rules into system prompt
 # --settings: overlays mode metadata on top of project settings
 # --mcp-config + --strict-mcp-config: uses only this mode's MCP servers
 # --name: labels the session in `claude agents` list
 exec claude \
-    --append-system-prompt-file "$SYSTEM_PROMPT" \
+    --append-system-prompt-file "$EFFECTIVE_PROMPT" \
     --settings "$MODE_SETTINGS" \
     --mcp-config "$MCP_FILE" \
     --strict-mcp-config \

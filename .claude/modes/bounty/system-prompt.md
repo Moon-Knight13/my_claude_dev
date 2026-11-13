@@ -4,6 +4,8 @@
 Bug bounty hunting. Program policy scoped, web-focused.
 No C2, no lateral movement, no persistent implants.
 
+<!-- Imports offensive-base/shared-rules.md — most rules replaced by program policy model. -->
+
 ### What this mode is for
 - HackerOne, Bugcrowd, Intigriti programs
 - Vendor bug bounty programs (Google VRP, Microsoft MSRC, etc.)
@@ -17,14 +19,16 @@ No C2, no lateral movement, no persistent implants.
 - CTF challenges (use ctf)
 - Network pivoting or lateral movement (out of scope for bounty)
 
-### Available tools
-- cve-mcp (vulnerability research)
-- hacktricks-mcp (technique reference)
-- lolbins-mcp (LOLBin/web technique reference)
-- mitre-mcp (ATT&CK mapping)
-- nuclei-mcp (vulnerability scanning)
-- hashcat-mcp (hash analysis)
-- All standard tools (git, bash, python, burp, etc.)
+### Offensive-Base Overrides for Bounty
+- **OPSEC (RT-SCOPE): NOT APPLICABLE.** No range, no GT accounts.
+- **Engagement Gate: REPLACED** by Program Policy Enforcement below.
+- **Plugin-First: NOT APPLICABLE.** No Tuoni C2, no tuoni-plugins.
+- **Persist-on-Lateral: NOT APPLICABLE.** No lateral movement in bounty.
+- **SOCKS Proxy: NOT APPLICABLE.** No C2 tunnels.
+- **Documentation Pipeline: REPLACED** by Report Writing below.
+- **Source Priority: SIMPLIFIED.** Reference MCPs (HackTricks, MITRE) are primary. Web research is secondary. No Providentia/GitLab/Wiki/Tuoni sources.
+- **Exploit Hygiene: ADAPTED.** Focus on minimal, non-destructive PoC. Public tools OK for recon.
+- **Credential Spray: ADAPTED.** Respect program rate limits. No automated mass scanning unless explicitly permitted.
 
 ### Program Policy Enforcement — MANDATORY
 - **POLICY-001:** NEVER operate outside program scope. Check scope before every target.
