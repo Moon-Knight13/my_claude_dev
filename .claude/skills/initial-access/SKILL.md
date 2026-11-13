@@ -64,6 +64,85 @@ incomplete — report back to master, do not proceed.
 - **>10 password attempts per service = OPSEC violation.** Log it as such.
 - Version-specific CVE exploit > credential guessing. Always.
 
+## Access Method Probe Sequence
+
+**Run BEFORE technique research.** Determines which access methods work on
+the target. Results feed Phase 1 vector selection — skip researching vectors
+for ports that are closed.
+
+Execute from Kali agent. Each probe has 30-second timeout. Probe in order:
+
+### Probe 1: SSH (port 22/TCP)
+
+```
+nmap -Pn -sS -p 22 --max-retries 1 --host-timeout 30s <target>
+```
+
+If OPEN: test auth with harvested/default creds (max 3-5 attempts per
+fail2ban rules). If auth succeeds → SSH is primary access method.
+Record: `access_methods: [ssh]` with credential used.
+
+### Probe 2: WinRM (ports 5985/TCP HTTP, 5986/TCP HTTPS)
+
+```
+nmap -Pn -sS -p 5985,5986 --max-retries 1 --host-timeout 30s <target>
+```
+
+If OPEN: test auth with harvested/default creds via Tuoni agent or
+`evil-winrm` from Kali. If auth succeeds → WinRM is primary access method.
+Record: `access_methods: [winrm]` with credential and port used.
+
+### Probe 3: SMB Exec (port 445/TCP)
+
+```
+nmap -Pn -sS -p 445 --max-retries 1 --host-timeout 30s <target>
+```
+
+If OPEN: test with harvested/default creds via impacket (psexec, smbexec,
+wmiexec). Try in order: smbexec (quieter) → wmiexec → psexec (noisiest).
+If any succeeds → SMB exec is access method.
+Record: `access_methods: [smb_exec]` with tool and credential used.
+
+### Probe 4: RDP Fallback (port 3389/TCP)
+
+```
+nmap -Pn -sS -p 3389 --max-retries 1 --host-timeout 30s <target>
+```
+
+If OPEN: RDP requires operator GUI interaction. Cannot be automated.
+Trigger RDP Beacon Delivery Workflow (see below).
+Record: `access_methods: [rdp]` — operator-assisted.
+
+### Probe Result Handling
+
+```yaml
+# Written to Obsidian target page § Access Methods
+access_probe:
+  timestamp: <ISO8601>
+  results:
+    ssh:    { port: 22,   state: open|closed|filtered, auth: success|failed|skipped }
+    winrm:  { port: 5985, state: open|closed|filtered, auth: success|failed|skipped }
+    smb:    { port: 445,  state: open|closed|filtered, auth: success|failed|skipped }
+    rdp:    { port: 3389, state: open|closed|filtered, auth: skipped }
+  primary_method: <first successful method, or "rdp" if only RDP open>
+  fallback_methods: <other open methods in probe order>
+```
+
+**When ALL probes fail** (all ports closed/filtered, or open but auth fails):
+
+1. Report to operator: "No automated access path. All probes failed."
+2. List what was tried and results per method
+3. Suggest: staged payload delivery if any port accepts inbound connections
+4. Provide manual intervention instructions:
+   - Stage payload on Kali HTTP server (`tuoni_payload_create` + file server)
+   - Template command for operator to deliver via out-of-band access
+   - Use curl.exe template from Delivery Templates section if Windows target
+5. Record: `access_methods: [manual]` — requires operator intervention
+
+**Method priority override:** If engagement YAML specifies `preferred_access`,
+use that method first regardless of probe order. Still probe all methods and
+record results.
+
 ## Phases
 
 ### Phase 0: Tool Availability Check
