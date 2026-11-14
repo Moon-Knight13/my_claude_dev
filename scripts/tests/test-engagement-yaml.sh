@@ -189,6 +189,59 @@ cache_timestamp: "2026-11-02T14:30:00Z"
 EOF
 run_test "cache_timestamp accepted" "$CACHE_TS" 0
 
+# type: black-box accepted
+BLACKBOX="$TMPDIR/blackbox.yaml"
+cat > "$BLACKBOX" << 'EOF'
+metadata:
+  id: test-bb
+  operator: tester
+phase: recon
+type: black-box
+targets: []
+agents: []
+cred_refs: []
+findings: []
+persistence: []
+lateral_moves: []
+handoff: ""
+EOF
+run_test "type black-box accepted" "$BLACKBOX" 0
+
+# Invalid type rejected
+BAD_TYPE="$TMPDIR/bad-type.yaml"
+cat > "$BAD_TYPE" << 'EOF'
+metadata:
+  id: test-badtype
+  operator: tester
+phase: recon
+type: grey-box
+targets: []
+agents: []
+cred_refs: []
+findings: []
+persistence: []
+lateral_moves: []
+handoff: ""
+EOF
+run_test "invalid type fails" "$BAD_TYPE" 1
+
+# type omitted (standard) still passes
+STD_TYPE="$TMPDIR/std-type.yaml"
+cat > "$STD_TYPE" << 'EOF'
+metadata:
+  id: test-stdtype
+  operator: tester
+phase: recon
+targets: []
+agents: []
+cred_refs: []
+findings: []
+persistence: []
+lateral_moves: []
+handoff: ""
+EOF
+run_test "omitted type accepted (standard)" "$STD_TYPE" 0
+
 # Both fields together
 BOTH="$TMPDIR/both.yaml"
 cat > "$BOTH" << 'EOF'

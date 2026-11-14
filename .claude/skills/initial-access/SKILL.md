@@ -1,7 +1,7 @@
 ---
 name: initial-access
 description: "Guided initial access skill for red-team mode. Takes recon output, researches exploit techniques via reference MCPs, enforces OPSEC exploit hygiene (no Metasploit defaults), and stages custom exploitation from Kali."
-modes: [red-team, purple]
+modes: [red-team, purple, ctf]
 ---
 
 # Initial Access Skill — OPSEC-Compliant Exploitation
@@ -11,7 +11,7 @@ modes: [red-team, purple]
 Operator ready to exploit a target after recon phase. Takes ranked attack
 vectors from recon skill output or engagement YAML.
 
-Active in: **red-team** mode only.
+Active in: **red-team**, **purple**, **ctf** modes.
 
 ## Thread Orchestration
 
@@ -28,6 +28,10 @@ incomplete — report back to master, do not proceed.
 ## Entry criteria
 
 - **Target marked REACHABLE** in recon Phase 0 reachability matrix (MANDATORY)
+- **Reachability verified FROM the specific pivot/agent being used** — not just
+  from Kali. If exploiting through a router agent, that agent must have routes
+  to the target (pivot_type: offensive, not c2_only). Recon Phase 0 classifies
+  this; if classification missing, probe before proceeding.
 - **Obsidian target page exists** with completed research (services, CVEs, PoCs)
 - Attack vectors ranked and operator-approved
 - Target explicitly in scope (RT-TGT-001 confirmed)
@@ -98,6 +102,7 @@ For each identified service+version, research attack techniques:
    Providentia vuln tags against what enumeration actually found. Discrepancies
    (vuln listed but service not running, or service found but no vuln listed)
    are high-value findings.
+   **Skip if `type: black-box`** — no Providentia data to cross-reference.
 0b. **BloodHound attack paths** (bloodhound-mcp — AD environments):
    - Query attack paths from current access to target (DA, EA, specific accounts)
    - Identify kerberoastable SPNs on shortest paths — prioritize for credential attacks
@@ -165,6 +170,13 @@ evidence EXISTS — not where it came from. Specifically:
 - All other checks remain mandatory
 
 The gate validates DEPTH of research per service, not intel SOURCE.
+
+**Black-box engagement (`type: black-box` in YAML):** Same as blind-scan
+evidence rules above — authoritative source checks (GitLab README, wiki
+vulns-docs, Providentia cross-ref) are skipped. Live enumeration + reference
+MCPs (cve-mcp, hacktricks-mcp, nuclei-mcp, mitre-mcp) remain mandatory.
+Graceful degradation: if any reference MCP is also unavailable, log the gap
+and continue with remaining sources rather than stalling.
 
 If ANY service lacks this research, complete it BEFORE attempting exploitation.
 This gate prevents the "enumerate → try passwords → report blocked" pattern.

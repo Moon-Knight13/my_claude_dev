@@ -65,6 +65,16 @@ credential store — requires creds stored via `tuoni_credential_add` first.
 
 ### Phase 1: Target Selection
 
+0pre. **Route verification from source pivot** (MANDATORY before lateral attempt):
+   - From source agent, probe reachability to candidate target:
+     `ping -c1 -W2 <target_ip>` or TCP connect to known open port
+   - If unreachable: check `ip route` on source for target subnet
+   - If no route exists: this pivot CANNOT reach that target. Skip it.
+     Select a different source pivot that has target subnet routes.
+   - If source Obsidian page has `pivot_type: c2_only`: do NOT attempt
+     lateral movement through this host. It has no target routes.
+   - Log: "lateral skip: <source> cannot route to <target> (<reason>)"
+
 0. **Read source host Obsidian page** (`llm-wiki/wiki/targets/<source>.md`):
    - Harvested cred refs, discovered lateral paths, routes, proxy chain
    - This is the input — don't re-derive what discovery already found
