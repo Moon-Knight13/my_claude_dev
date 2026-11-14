@@ -329,9 +329,9 @@ All paths are under `llm-wiki/` in the `my_notes` Obsidian vault.
 |-----------------|------------|-------------|
 | Recon | `llm-wiki/raw/<host>-recon-<date>.md` | `llm-wiki/wiki/targets/<host>.md` (create) |
 | Initial Access | `llm-wiki/raw/<host>-initial-access-<date>.md` | `llm-wiki/wiki/techniques/<technique>.md` |
-| Discovery | `llm-wiki/raw/<host>-discovery-<date>.md` | `llm-wiki/wiki/targets/<host>.md` (update) |
+| Discovery | `llm-wiki/raw/<host>-discovery-<date>.md` | `llm-wiki/wiki/targets/<host>.md` (update), `llm-wiki/wiki/zone-sweeps/<segment>-<date>.md` (create per segment), `llm-wiki/wiki/engagements/<id>-reachability.md` (create or update) |
 | Cred Harvest | `llm-wiki/raw/<host>-creds-<date>.md` | `llm-wiki/wiki/targets/<host>.md` (refs only) |
-| Lateral Move | `llm-wiki/raw/<host>-lateral-<date>.md` | `llm-wiki/wiki/targets/<host>.md` (update) |
+| Lateral Move | `llm-wiki/raw/<host>-lateral-<date>.md` | `llm-wiki/wiki/targets/<host>.md` (update), `llm-wiki/wiki/engagements/<id>-reachability.md` (update) |
 | Persist | — | `llm-wiki/wiki/targets/<host>.md` (update persistence) |
 
 ### Templates (in `llm-wiki/templates/`)
@@ -343,6 +343,8 @@ All paths are under `llm-wiki/` in the `my_notes` Obsidian vault.
 | `credential.md` | Credential ref page: username, domain, type, source (NO plaintext) |
 | `ioc.md` | IOC page: type, value, context, associated targets |
 | `engagement.md` | Engagement overview: scope, objectives, timeline, findings summary |
+| `zone-sweep.md` | Per-segment scan results: hosts up, ports, services, Providentia reconciliation (in `docs/templates/`) |
+| `reachability-matrix.md` | Cross-foothold reachability: source/dest/port/status, SOCKS proxies, pivot plan (in `docs/templates/`) |
 
 ### Engagement Wiki Page
 
