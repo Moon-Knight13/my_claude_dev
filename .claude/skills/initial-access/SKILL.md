@@ -27,7 +27,7 @@ incomplete — report back to master, do not proceed.
 
 ## Entry criteria
 
-- **Target marked REACHABLE** in recon Phase 0 reachability matrix (MANDATORY)
+- **Target classified `confirmed`** in engagement state (MANDATORY — replaces legacy REACHABLE check)
 - **Reachability verified FROM the specific pivot/agent being used** — not just
   from Kali. If exploiting through a router agent, that agent must have routes
   to the target (pivot_type: offensive, not c2_only). Recon Phase 0 classifies
@@ -327,10 +327,20 @@ outcome. This prevents re-trying exhausted vectors in future sessions.
 
 ## State writes
 
+On successful initial access, invoke engagement-state **Reclassify Target**:
+`confirmed` → `compromised` with agent ID and technique as evidence.
+
+On all vectors exhausted without success:
+`confirmed` → `hardened` (3+ logged technique attempts required).
+
+On specific CVE confirmed patched:
+`confirmed` → `patched` with version/response evidence.
+
 ```yaml
 # engagement.yaml updates
 targets:
   - hostname: <target>
+    classification: compromised
     phase: initial_access
     access:
       agent_id: <tuoni agent ID>
