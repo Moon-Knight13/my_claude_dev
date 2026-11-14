@@ -2,7 +2,7 @@
 # golang.org/x/crypto v0.35.0 (indirect), which carries CVE-2026-56854 in the
 # x/crypto/ssh package. gitleaks doesn't call that path (govulncheck confirms),
 # but Trivy flags the embedded module version. Clone, bump the dep, then build.
-FROM golang:1.27.2 AS gitleaks-build
+FROM golang:1.27.3 AS gitleaks-build
 ARG GITLEAKS_VERSION=8.30.1
 RUN git clone --depth 1 --branch "v${GITLEAKS_VERSION}" \
       https://github.com/gitleaks/gitleaks.git /build/gitleaks
