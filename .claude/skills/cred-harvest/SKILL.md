@@ -141,6 +141,19 @@ Execute harvesting from agent (through tuoni-mcp):
    - DPAPI protected data
    - Credential Manager vault
 
+### Phase 3 Post-Harvest Checks (Windows)
+
+Run after Windows credential harvesting completes:
+
+1. **SID-500 Renamed Administrator Detection**:
+   - Command via Tuoni agent: `wmic useraccount where "sid like '%-500'" get name,sid`
+   - PowerShell alternative: `Get-WmiObject Win32_UserAccount | Where-Object {$_.SID -match '-500$'} | Select Name,SID`
+   - If returned name != "Administrator": flag as **"Built-in Administrator (renamed)"**
+   - Implications: SID-500 account bypasses UAC token filtering (full admin token
+     on remote logon), eligible for pass-the-hash even when other local admins are not
+   - Store renamed account name in Tuoni cred store metadata
+   - Document in Obsidian target page: `§ SID-500: <actual_name> (renamed)`
+
 ### Phase 3.5: Auto-Crack via Hashcat MCP (when hashes recovered)
 
 When Phase 3 yields crackable hashes (NTLM, NTLMv2, Kerberos TGS, etc.):
@@ -173,7 +186,16 @@ On Kali (NOT target):
    - Zero creds stored = engagement failure (see redteam-test2 post-mortem)
 3. **Record ref in engagement YAML** (tuoni_cred_id only, NEVER plaintext):
    - Add to `credentials[]` with ref_id, type, username, domain, source_host
-4. **Assess value for lateral movement**:
+4. **MANDATORY: Auto-populate engagement credential inventory**:
+   - Invoke `engagement-state` skill's **Update Credential Inventory** operation
+   - Pass: `tuoni_cred_id`, `username`, `domain`, `type` (hash subtype if
+     applicable: NTLM, NTLMv2, Kerberos, NetNTLMv2, etc.), `source_host`,
+     `harvest_method` (MITRE technique ID or plugin name), current ISO-8601
+     timestamp, `status: untested`
+   - Engagement-state deduplicates by `(username, domain, type, source_host)`
+   - **This is a gate step — do NOT proceed to lateral assessment until
+     inventory confirms the entry (new or existing)**
+5. **Assess value for lateral movement**:
    - Domain admin? Service accounts with broad access?
    - Match `tuoni_credentials_list` filter by realm against `range_targets` by network
    - Programmatic lateral opportunity mapping, not manual
@@ -182,11 +204,93 @@ On Kali (NOT target):
      this credential unlocks. "shortest path from <user> to Domain Admins",
      "what can <user> reach via delegation". New creds may open paths that
      were previously blocked.
-5. **Document in Obsidian** (refs only):
+   - **Query untested creds** from engagement-state before planning spray or
+     lateral move — prioritize creds not yet validated on other hosts
+6. **Document in Obsidian** (refs only):
    - `llm-wiki/wiki/targets/<hostname>.md`: update cred refs section
    - Use template `llm-wiki/templates/credential.md` for credential ref page
    - `obsidian_add_tags`: `#engagement/<id>`, `#phase/cred-harvest`, `#target/<hostname>`
    - NEVER write actual credential values
+
+### Phase 4.5: Automated Cred-Reuse Spray (same-template hosts)
+
+After storing credentials (Phase 4 gate), automatically identify hosts where
+the same credential is likely valid — same OS, same role/template in
+Providentia. This is TARGETED REUSE, not a broad spray.
+
+**This phase runs automatically after Phase 4.** Operator approval NOT required
+for reuse against same-template hosts (single attempt per host). Operator IS
+notified of results.
+
+#### Step 1: Identify source host template
+
+```
+source_template = range_host(<source hostname>)
+  → extract: os, role, template_name, network_segment, team
+```
+
+#### Step 2: Query same-template hosts
+
+```
+candidates = range_targets_summary()
+  → filter: same os AND (same role OR same template_name)
+  → exclude:
+    - source host itself
+    - hosts already compromised (agent_id present in engagement YAML)
+    - GT infrastructure (RT-SCOPE-001)
+    - hosts outside engagement scope
+    - hosts with active lockout/ban recorded in engagement YAML
+```
+
+If zero candidates remain: skip to Phase 5, log "no reuse targets".
+
+#### Step 3: Lockout gate — invoke opsec-cred-spray
+
+**MANDATORY.** Even single-attempt reuse can trigger fail2ban or PAM lockout.
+
+1. Check engagement YAML for cached lockout policy of target platform
+2. If no cached policy: enumerate per opsec-cred-spray Step 1
+3. Calculate safe parameters per opsec-cred-spray Step 2
+4. For single-attempt reuse: verify threshold >= 2 (need room for one failure)
+5. If threshold unknown: one attempt only, 30-min window between hosts
+6. fail2ban check on gateway targets per opsec-cred-spray (max 1 attempt)
+
+#### Step 4: Execute reuse spray
+
+For each candidate host, strictly sequential:
+
+1. **Single attempt** with harvested credential against matching service
+   - SSH key → SSH port
+   - NTLM hash → SMB/WMI/WinRM (pass-the-hash)
+   - Plaintext → protocol matching source harvest
+   - Kerberos ticket → Kerberos-enabled services
+2. **Wait** between attempts per lockout window (even if threshold allows more)
+3. **Log every attempt** (success AND failure) to engagement YAML:
+   ```yaml
+   cred_reuse_attempts:
+     - credential_ref: <tuoni cred ID>
+       source_host: <where cred was harvested>
+       target_host: <candidate>
+       service: <ssh|smb|winrm|wmi|rdp>
+       result: <success|failed|timeout|banned>
+       timestamp: <ISO 8601>
+   ```
+4. **On success**: store new access in tuoni cred store, mark host as
+   lateral-move ready. Do NOT immediately move — queue for lateral-move skill.
+5. **On failure**: mark cred as invalid for this host. Do NOT retry.
+6. **On ban/lockout**: invoke opsec-cred-spray Step 6 immediately. STOP
+   remaining reuse attempts. Report to operator.
+
+#### Step 5: Reuse results assessment
+
+After all candidates tested:
+
+1. **Report to operator**: table of results (host, service, result)
+2. **Update engagement YAML** `lateral_targets[]` on source cred ref
+3. **Update Obsidian** target pages for successful reuse hits
+4. **Queue lateral-move** for confirmed hosts (feed to lateral-move Phase 1)
+5. **Technique scoring**: if technique-scoring data available, record
+   reuse success rate by template type for future prioritization
 
 ### Phase 5: Credential Spray (if operator approves)
 
@@ -204,10 +308,23 @@ Only with operator approval and lockout policy enumerated:
    - Single credential at a time
    - Monitor for lockouts between attempts
    - Log every attempt (success AND failure) in Obsidian
+   - **Nextcloud OCS API trap**: HTTP 200 does NOT mean auth success.
+     Nextcloud returns HTTP 200 for ALL OCS requests when LDAP backend is
+     broken or misconfigured. Real auth status is in response body field
+     `statuscode` (e.g., `996` = auth failure). Always parse body
+     `statuscode`, never trust HTTP status alone. Tools like hydra that
+     check only HTTP status will report mass false positives.
 4. **On success**:
    - Store new access in tuoni cred store
+   - Auto-populate engagement credential inventory (Phase 4 step 4)
+   - Mark sprayed credential as `tested:success` in engagement-state
+     via **Mark Credential Tested** operation
    - Assess for lateral movement potential
    - Do NOT immediately use — plan lateral move first
+5. **On failure** (credential valid but access denied):
+   - Mark sprayed credential as `tested:failed` with target host in
+     engagement-state via **Mark Credential Tested** operation
+   - Log failure for spray coverage tracking
 
 ## State writes
 
@@ -223,6 +340,24 @@ targets:
         type: <hash|plaintext|key|token|ticket>
         scope: <local|domain|service>
         lateral_targets: [<hostnames where cred may work>]
+
+# cred-reuse spray tracking (Phase 4.5)
+cred_reuse_attempts:
+  - credential_ref: <tuoni cred ID>
+    source_host: <host cred was harvested from>
+    target_host: <same-template candidate>
+    template: <Providentia template/role name>
+    service: <ssh|smb|winrm|wmi|rdp>
+    result: <success|failed|timeout|banned>
+    timestamp: <ISO 8601>
+
+cred_reuse_summary:
+  last_run: <ISO 8601>
+  total_candidates: <N>
+  tested: <N>
+  successful: <N>
+  failed: <N>
+  skipped_lockout: <N>
 ```
 
 ### Obsidian writes (llm-wiki paths — ENFORCED)

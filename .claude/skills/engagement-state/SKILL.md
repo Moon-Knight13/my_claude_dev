@@ -1,6 +1,6 @@
 ---
 name: engagement-state
-description: "Create, update, query, resume, and archive engagement state. Primary state in Obsidian llm-wiki. Thin YAML gate file for existence check only. Triggers: 'engagement', 'state', 'resume engagement', 'what targets', 'new engagement', 'add target', 'record technique', 'what creds', 'archive engagement', 'clean slate'."
+description: "Create, update, query, resume, and archive engagement state. Primary state in Obsidian llm-wiki. Thin YAML gate file for existence check only. Triggers: 'engagement', 'state', 'resume engagement', 'what targets', 'new engagement', 'add target', 'record technique', 'what creds', 'archive engagement', 'clean slate', 'untested creds', 'creds from host', 'credential inventory', 'spray candidates', 'mark cred tested', 'reclassify target', 'mark target as', 'show confirmed targets', 'show unreachable targets', 'target status'."
 modes: [red-team, purple]
 ---
 
@@ -16,6 +16,69 @@ lives in Obsidian.
 **Why Obsidian, not YAML:** Single source of truth. Threads already read/write
 Obsidian for target pages. No split brain between YAML and Obsidian. Obsidian
 pages are structured markdown — queryable, taggable, cross-linkable.
+
+## Target Classification
+
+Targets progress through classification states as engagement advances.
+Classification drives which kill-chain skills apply and what actions are valid.
+
+### State Machine
+
+```
+candidate ──┬── confirmed ──┬── compromised
+             │                ├── hardened
+             │                └── patched
+             ├── unreachable
+             └── different-than-expected ──┬── confirmed (re-recon)
+                                            └── unreachable
+```
+
+| Classification | Set by | Meaning |
+|----------------|--------|---------|
+| `candidate` | `pre-engagement-cache`, `add target` | Providentia/operator says host exists. Not yet verified. |
+| `confirmed` | `recon` Phase 0 | Reachable, services match Providentia (or blind scan populated services). |
+| `unreachable` | `recon` Phase 0 | No route, no response, or all ports filtered after scan. |
+| `different-than-expected` | `recon` Phase 0 | Reachable but services diverge significantly from Providentia data. |
+| `compromised` | `initial-access`, `lateral-move` | Agent established, persistence deployed. |
+| `hardened` | `initial-access` | All vectors exhausted, target resists exploitation. |
+| `patched` | `initial-access` | Specific CVE/vuln confirmed patched during attempt. |
+
+### Classification Rules
+
+- Every target starts as `candidate`. No target enters scope as `confirmed`.
+- `confirmed` requires live scan evidence (nmap, service response).
+- `unreachable` can revert to `confirmed` if later pivot opens route.
+- `different-than-expected` triggers operator notification — Providentia may need
+  correction, or host was rebuilt. Operator decides whether to proceed.
+- `compromised` requires active agent + persistence (per persist-swarm).
+- `hardened` requires documented exhaustion of prioritized vectors (minimum 3
+  technique attempts logged in `## Techniques Tried`).
+- `patched` records specific CVE/vuln and evidence of patch (version string,
+  error response, etc.).
+
+### Where Classification Lives
+
+- **Obsidian engagement page `## Targets`**: classification column in target table.
+- **Obsidian target page**: `classification` field in frontmatter + full
+  `## Classification History` section with timestamped entries.
+- **Engagement YAML**: `classification` field per target (lean reference only).
+
+### Classification History Format (Obsidian target page)
+
+Each reclassification appends to `## Classification History`:
+
+```markdown
+## Classification History
+
+| Timestamp | From | To | Reason | Evidence | Actor |
+|-----------|------|----|--------|----------|-------|
+| 2026-11-14T10:30:00Z | candidate | confirmed | Phase 0 sweep: 5 services match Providentia | nmap scan llm-wiki/raw/network-sweep-2026-11-14.md | recon |
+| 2026-11-14T14:15:00Z | confirmed | compromised | Initial access via CVE-2024-XXXX | agent ID a1b2c3, persist-swarm deployed | initial-access |
+```
+
+Columns: ISO-8601 timestamp, previous classification, new classification,
+human-readable reason, evidence pointer (raw dump path, agent ID, scan
+reference), skill/phase that triggered reclassification.
 
 ## Operations
 
@@ -85,10 +148,12 @@ exclusions:
    Path: `llm-wiki/wiki/engagements/<id>.md`
    Content sections:
    - **## Overview** — engagement ID, start date, operator, team, mode, scope
-   - **## Targets** — added after RT-TGT-001 approval (host, IP, phase, status, wiki page link)
+   - **## Targets** — added after RT-TGT-001 approval (host, IP, OS, classification, phase, wiki page link)
    - **## Reachability** — populated by Phase 0 sweep
    - **## Agents** — self-agent ID, target agents as they're deployed
-   - **## Credentials** — REFS ONLY (tuoni_cred_id, type, username, domain, source)
+   - **## Credentials** — REFS ONLY, auto-populated by cred-harvest. Table columns:
+     `| Ref ID | Username | Domain | Type | Source Host | Harvest Method | Timestamp | Status |`
+     Status values: `untested`, `tested:success`, `tested:failed`, `tested:expired`
    - **## Findings** — technique outcomes (ID, target, result, timestamp)
    - **## Techniques Tried** — per-target log
    - **## Next Steps** — operator-curated task list
@@ -109,9 +174,74 @@ in the current message. Discovered hosts are NOT automatically in scope.
 1. Confirm operator explicitly named the targets in this message.
 2. For each target, query `range_targets` or `range_host` via range-intel for
    ground truth (IP, role, OS, services).
-3. Update Obsidian engagement page `## Targets` section with new target entries.
-4. Create Obsidian target page (`llm-wiki/wiki/targets/<hostname>.md`) if not exists.
-5. Report: targets added, total scope count.
+3. Set initial classification to `candidate` for each target.
+4. Update Obsidian engagement page `## Targets` table with new entries including
+   classification column:
+   ```markdown
+   | Host | IP | OS | Classification | Phase | Wiki |
+   |------|----|----|----------------|-------|------|
+   | <hostname> | <ip> | <os> | candidate | pending | [[targets/<hostname>]] |
+   ```
+5. Create Obsidian target page (`llm-wiki/wiki/targets/<hostname>.md`) if not exists.
+   Include `classification: candidate` in frontmatter and initialize empty
+   `## Classification History` table.
+6. Update engagement YAML target entry:
+   ```yaml
+   targets:
+     - hostname: <target>
+       classification: candidate
+       phase: pending
+       wiki_page: llm-wiki/wiki/targets/<hostname>.md
+   ```
+7. Report: targets added as candidates, total scope count.
+   Remind operator: targets need recon Phase 0 before they become `confirmed`.
+
+### Reclassify Target
+
+Trigger: automatic after recon Phase 0 sweep, after initial-access attempt,
+after lateral-move landing, or operator says "reclassify", "mark target as",
+"target is unreachable", "target compromised".
+
+**Auto-reclassification points** (skills invoke this automatically):
+- **recon Phase 0**: `candidate` → `confirmed` | `unreachable` | `different-than-expected`
+- **initial-access**: `confirmed` → `compromised` | `hardened` | `patched`
+- **lateral-move**: `confirmed` → `compromised` (on successful pivot landing)
+- **Operator override**: any transition at any time with stated reason
+
+**Procedure:**
+
+1. Validate transition is legal per state machine (see Target Classification).
+   Illegal transitions (e.g., `candidate` → `compromised` skipping `confirmed`)
+   require operator override with explicit reason.
+2. Read current classification from Obsidian target page frontmatter.
+3. Update Obsidian target page:
+   a. Set `classification: <new>` in frontmatter.
+   b. Append row to `## Classification History` table:
+      `| <ISO-8601> | <old> | <new> | <reason> | <evidence> | <actor-skill> |`
+4. Update Obsidian engagement page `## Targets` table: set classification column.
+5. Update engagement YAML target entry: `classification: <new>`.
+6. Apply Obsidian tag: `#classification/<new>` to target page.
+7. Report reclassification to operator.
+
+**Post-reclassification actions:**
+
+| New Classification | Action |
+|--------------------|--------|
+| `confirmed` | Target eligible for Phase 1+ recon and initial-access. |
+| `unreachable` | Log reason. Skip in attack planning. Re-check after pivot. |
+| `different-than-expected` | Alert operator. Log Providentia discrepancy. Await guidance. |
+| `compromised` | Trigger persist-swarm if not already deployed. Update agent list. |
+| `hardened` | Log exhausted vectors. Deprioritize unless new intel arrives. |
+| `patched` | Log specific patch evidence. Flag for Providentia accuracy feedback. |
+
+**Bulk reclassification** (after Phase 0 sweep): reclassify all scanned targets
+in one pass. Group by new classification and report summary:
+```
+Reclassification summary:
+  confirmed: 5 (host1, host2, ...)
+  unreachable: 2 (host3, host4)
+  different-than-expected: 1 (host5 — expected SSH+HTTP, found only RDP)
+```
 
 ### Record Technique Outcome
 
@@ -143,22 +273,107 @@ orchestrator should prefer techniques with high empirical success rates on
 this range over theoretical Providentia/EPSS scores. See
 `config/technique-scoring.yaml` for weights and thresholds.
 
-### Add Credential Reference
+**note-search enrichment:** After scoring, invoke `note-search` for each top-N
+technique (by MITRE ID and name). Operator notes add qualitative context that
+empirical scores miss:
+- Prior success notes reveal working commands and exact parameters
+- Prior failure notes reveal environmental blockers (e.g. "fail2ban on SSH",
+  "AppLocker blocks LOLBins on this host type")
+- OPSEC notes from write-ups flag detection risk not captured in scoring
 
-Trigger: credentials harvested during engagement.
+Present note-search results alongside technique scores. Operator experience
+can promote a lower-scored technique (operator has proven PoC) or demote a
+higher-scored one (operator notes show environmental blocker on this target type).
+
+### Update Credential Inventory (Auto-Called by cred-harvest)
+
+Trigger: **automatic** — called by cred-harvest Phase 4 step 4, Phase 5 spray
+success, and lateral-move on credential validation. Also callable manually:
+"add cred", "record credential".
 
 **REFS ONLY — never store plaintext passwords, hashes, tickets, or keys in
 the engagement YAML or Obsidian notes.**
 
-1. Store actual credential in Tuoni credential store via `tuoni_credential_add`.
-2. Record REF in Obsidian engagement page `## Credentials` section:
-   - `tuoni_cred_id`: ID from Tuoni store
-   - `type`: password | hash | ticket | key | token
-   - `username`, `domain`: identity info (these are not secrets)
-   - `source_host`, `source_technique`: provenance
-   - `notes`: brief context
-3. Update target page with cred ref under `## Credentials` section.
-4. **NEVER store plaintext passwords, hashes, tickets, or keys in Obsidian.**
+#### Input fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `tuoni_cred_id` | yes | ID from Tuoni credential store |
+| `username` | yes | Account name (not a secret) |
+| `domain` | no | Domain or realm (not a secret) |
+| `type` | yes | password, NTLM, NTLMv2, NetNTLMv2, Kerberos, key, token, certificate |
+| `source_host` | yes | Host where credential was harvested |
+| `harvest_method` | yes | MITRE technique ID (e.g. T1003.001) or plugin name |
+| `timestamp` | yes | ISO-8601 harvest time |
+| `status` | yes | `untested` (default on harvest) or `tested` |
+
+#### Procedure
+
+1. Store actual credential in Tuoni credential store via `tuoni_credential_add`
+   (if not already stored by cred-harvest — check `tuoni_cred_id` exists).
+2. **Dedup check**: Read Obsidian engagement page `## Credentials` section.
+   Search for existing entry matching `(username, domain, type, source_host)`.
+   - **Match found**: update existing entry's `tuoni_cred_id` if changed,
+     append `harvest_method` if new method, update `timestamp` to latest.
+     Do NOT create duplicate row.
+   - **No match**: append new entry.
+3. Record entry in Obsidian engagement page `## Credentials` section using
+   this table row format:
+   ```
+   | <tuoni_cred_id> | <username> | <domain> | <type> | <source_host> | <harvest_method> | <timestamp> | <status> |
+   ```
+4. Update target page (`llm-wiki/wiki/targets/<source_host>.md`) with cred ref
+   under `## Credentials` section.
+5. Return confirmation: `new` (entry created) or `existing` (deduped).
+6. **NEVER store plaintext passwords, hashes, tickets, or keys in Obsidian.**
+
+### Mark Credential Tested
+
+Trigger: **automatic** — called by cred-harvest Phase 5 (spray result),
+lateral-move (credential validated on new host), or manually: "mark cred tested".
+
+1. Read Obsidian engagement page `## Credentials` section.
+2. Find entry by `tuoni_cred_id` or `(username, domain)`.
+3. Update `status` column:
+   - `tested:success` — credential validated on at least one target
+   - `tested:failed` — credential attempted but access denied
+   - `tested:expired` — credential no longer valid (password changed, token expired)
+4. Optionally append tested-against host to a `tested_on` note if provided.
+5. Update target page if tested on a new host.
+
+### Query Credential Inventory
+
+Trigger: "list all creds", "what creds", "untested creds", "creds from host X",
+"creds for domain Y", "credential inventory", "spray candidates".
+
+Read Obsidian engagement page `## Credentials` section and filter:
+
+| Query | Filter |
+|-------|--------|
+| "list all creds" / "credential inventory" | Return full table |
+| "untested creds" / "spray candidates" | Filter `status = untested` |
+| "tested creds" | Filter `status` starts with `tested` |
+| "creds from host X" | Filter `source_host = X` |
+| "creds for domain Y" | Filter `domain = Y` |
+| "creds of type Z" | Filter `type = Z` (e.g. NTLM, key, token) |
+| "creds for user U" | Filter `username = U` |
+
+Compound queries supported: "untested NTLM creds from host X" applies all
+matching filters.
+
+Report format:
+```
+## Credential Inventory — <engagement_id>
+Total: N | Untested: N | Tested (success): N | Tested (failed): N
+
+| Ref ID | Username | Domain | Type | Source | Method | Harvested | Status |
+|--------|----------|--------|------|--------|--------|-----------|--------|
+| ...    | ...      | ...    | ...  | ...    | ...    | ...       | ...    |
+```
+
+For "spray candidates" queries, also cross-reference against known target hosts
+from `## Targets` section — report which untested creds could plausibly work
+on which targets based on domain match.
 
 ### Record Detection Score (Purple Mode)
 
@@ -177,16 +392,46 @@ Trigger: after detection validation step in purple mode.
 ### Query Engagement
 
 Trigger: "what targets", "what creds", "what techniques worked on <host>",
-"engagement status", "scope check".
+"engagement status", "scope check", "show confirmed targets",
+"show unreachable targets", "show compromised", "target status".
 
 Read Obsidian engagement page (`obsidian_read_note`) and answer the query:
 - **Targets**: read `## Targets` section
-- **Credentials**: read `## Credentials` section (refs only, never actual creds)
+- **Targets by classification**: filter `## Targets` table by classification column.
+  Supports: "show all confirmed", "show unreachable", "show candidates",
+  "show compromised", "show hardened", "show patched", "show different-than-expected".
+  Also: "show actionable" = confirmed (not yet compromised/hardened/patched).
+  Also: "show stale candidates" = candidate targets with no recon Phase 0 data.
+- **Target classification history**: read specific target page `## Classification History`
+- **Classification summary**: count per classification state:
+  ```
+  Target classifications:
+    candidate: 2
+    confirmed: 4
+    unreachable: 1
+    compromised: 2
+    hardened: 1
+  ```
+- **Credentials**: use **Query Credential Inventory** (supports filtering by
+  status, host, domain, type, username — see that section for full query syntax)
 - **Techniques on host**: read `## Techniques Tried`, filter by target
 - **Findings**: read `## Findings`, filter by result=success/partial
 - **Next steps**: read `## Next Steps`
 - **Detection scores** (purple): per-technique and average
-- **Status summary**: target count, agent count, finding count, cred ref count
+- **Status summary**: target count (by classification), agent count, finding count,
+  cred ref count, untested cred count
+- **Operator notes**: invoke `note-search` for each queried target/technique
+  to surface relevant personal notes (MITRE write-ups, prior engagement
+  experience, vuln lab results). Present under **Prior Knowledge** in response.
+
+Additionally, search by Obsidian tags for cross-engagement queries:
+- `#classification/confirmed` — all confirmed targets across engagements
+- `#classification/compromised` — all compromised targets across engagements
+
+When answering technique-specific queries ("what works on <host>",
+"what techniques for <service>"), auto-invoke `note-search` with the
+technique/service name. Operator notes that show prior success or
+failure on similar targets add context beyond engagement YAML data.
 
 ### Cross-Session Resume
 
@@ -200,14 +445,19 @@ or skill detects existing engagement file.
 4. Refresh agent list from `tuoni_agents_list` — update `## Agents` section,
    flag agents that disappeared since last session.
 5. Load related Obsidian pages via `obsidian_search_vault` for `#engagement/<id>`.
-6. Summarize state to operator:
+6. Invoke `note-search` for each active target (hostname + IP) to refresh
+   operator knowledge context. New notes written since last session surface
+   here — operator may have done research or lab work between sessions.
+7. Summarize state to operator:
    - Engagement ID, start date, mode
    - Active targets (count + list)
    - Live agents (count, any lost since last session)
    - Credential refs (count)
    - Last technique tried + result
    - Next steps from previous session
-5. Ask operator: "Resume this engagement? Any scope changes?"
+   - **New operator notes** since last session (if note-search finds notes
+     not already referenced in engagement page)
+8. Ask operator: "Resume this engagement? Any scope changes?"
 
 ### Archive Engagement
 
@@ -403,6 +653,7 @@ After every note write, apply tags via `obsidian_add_tags`:
 | `#engagement/<id>` | Every note created during this engagement |
 | `#phase/<phase>` | recon, initial-access, discovery, cred-harvest, persist, lateral |
 | `#target/<hostname>` | Every note mentioning a specific target |
+| `#classification/<state>` | candidate, confirmed, unreachable, different-than-expected, compromised, hardened, patched — updated on reclassification (replace previous classification tag) |
 | `#mitre/<T-id>` | Every technique note with MITRE mapping |
 | `#result/<outcome>` | success, failed, partial, blocked |
 

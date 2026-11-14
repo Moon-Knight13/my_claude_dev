@@ -68,6 +68,9 @@ credential store — requires creds stored via `tuoni_credential_add` first.
 0. **Read source host Obsidian page** (`llm-wiki/wiki/targets/<source>.md`):
    - Harvested cred refs, discovered lateral paths, routes, proxy chain
    - This is the input — don't re-derive what discovery already found
+   - **Check `cred_reuse_attempts` in engagement YAML**: cred-harvest Phase 4.5
+     may have already confirmed which same-template hosts accept this credential.
+     Confirmed hosts skip credential matching — go direct to Phase 3.
 1. **BloodHound AD paths** (bloodhound-mcp — AD environments):
    - Query shortest paths from current access to high-value targets (DA, EA)
    - Match BloodHound paths against available credentials
@@ -80,6 +83,8 @@ credential store — requires creds stored via `tuoni_credential_add` first.
    - Host roles: prioritize per RT-DEP-001 deployment order
    - Team assignments: stay within engagement scope
 3. **Match credentials to targets** (programmatic, not manual):
+   - **First**: check `cred_reuse_attempts` where `result: success` — these are
+     confirmed-working creds from cred-harvest Phase 4.5. Prioritize these.
    - `tuoni_credentials_list` filter by realm/type against `range_targets` by network
    - Domain creds: which hosts are domain-joined?
    - Local admin: reuse across similar builds?
@@ -181,7 +186,8 @@ After all planned lateral moves complete:
    - Dispatch net-recon sweep from new foothold via tuoni plugin
    - Map what this host can reach that Kali couldn't
    - Update reachability matrix in engagement YAML + Obsidian
-   - Newly-reachable targets become candidates for next lateral wave
+   - Newly-reachable targets added as `candidate`, then reclassified via
+     engagement-state Reclassify Target based on scan results
 3. **Assess new attack surface**:
    - New network segments reachable?
    - New credential harvesting opportunities?
@@ -208,6 +214,7 @@ lateral_moves:
 
 targets:
   - hostname: <new target>
+    classification: compromised
     phase: lateral_move
     access:
       agent_id: <tuoni agent ID>

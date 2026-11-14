@@ -33,15 +33,87 @@ unavailable or return empty. Same Obsidian output format regardless of source.
 1. Providentia (range-intel MCP) — ground truth if available
 2. GitLab READMEs (range-intel MCP) — deploy config, known defaults
 3. Wiki collections (outline-readonly) — prior research, vuln notes
-4. FALLBACK: blind nmap scan + research MCPs (always available)
-   Activates when tiers 1-3 return empty or are unreachable.
+4. Operator notes (note-search skill) — personal MITRE notes, prior
+   engagement experience, technique write-ups, vuln lab results.
+   Always available. Queries vault for target hostname/IP/technique.
+5. FALLBACK: blind nmap scan + research MCPs (always available)
+   Activates when tiers 1-4 return empty or are unreachable.
    Produces identical Obsidian target pages from live scanning.
    See recon skill "Blind Mode" section for pipeline details.
 ```
 
+**note-search integration:** Operator notes (tier 4) run in parallel with
+tiers 1-3, not as fallback. Results enrich Obsidian target pages with prior
+experience context. If operator has technique notes for a target's services,
+those inform vector ranking in Phase 2.
+
 Engagement page records `intel_source: providentia | blind_scan | mixed`.
 Downstream skills (initial-access, discovery, lateral-move) consume Obsidian
 target pages and do not check intel source — format is identical.
+
+## Execution Model — Pre-Beacon vs Post-Beacon
+
+**Hard rule. No exceptions.**
+
+### Pre-Beacon (operator mode)
+
+Before any Tuoni agent is live on target, operator is the execution surface.
+Operator's sole job: get beacon on target as fast as possible.
+
+- Operator handles: RDP GUI paste, physical access, out-of-band delivery
+- Harness handles: payload staging, command generation, listener setup
+- Harness does NOT attempt target interaction without an agent
+
+### Post-Beacon (harness mode)
+
+The moment a Tuoni agent calls back and is confirmed alive, harness takes
+over ALL target interaction. Immediately. No transition period.
+
+```
+On agent callback detected (tuoni_agents_list shows new agent):
+  1. Confirm agent alive: tuoni_agent_command (whoami)
+  2. Announce: "Agent <ID> live on <hostname>. Harness taking over."
+  3. Invoke persist-swarm (non-negotiable, immediate)
+  4. Continue kill chain — discovery, privesc, harvest, lateral
+  Operator role: review Obsidian outputs, approve lateral targets
+```
+
+### Human-in-the-Loop = Degraded Mode
+
+Human-in-the-loop is NOT a neutral operating mode. It is the harness
+operating DEGRADED — 3-4x slower, higher error rate, incomplete logging.
+
+**Detection and correction:**
+- If operator sends target commands after beacon is live: warn
+  "Harness is faster and captures full telemetry. Step back."
+- If operator asks to "do this manually": push back.
+  "Manual execution is degraded mode. Agent is live — harness handles this."
+- Only exception: harness tool failure (MCP down, agent lost). In that case,
+  log `execution_mode: degraded` in engagement YAML and restore harness mode
+  ASAP.
+
+### Execution Model State
+
+Track in engagement YAML per target:
+
+```yaml
+targets:
+  - hostname: <target>
+    execution_model:
+      mode: pre_beacon | harness | degraded
+      agent_id: <tuoni agent ID, null if pre_beacon>
+      switched_at: <ISO8601 timestamp of last mode change>
+      degraded_reason: <null, or reason if degraded>
+```
+
+### Auto-Detection
+
+Harness detects beacon callback and switches automatically:
+
+1. After operator delivers payload (RDP workflow, manual delivery, etc.)
+2. Poll `tuoni_agents_list` for new agents matching target IP
+3. On match: verify agent, switch `execution_model.mode` to `harness`
+4. No operator confirmation needed — beacon IS the signal
 
 ## Phase 0: Pre-Engagement (master does directly)
 
@@ -74,13 +146,23 @@ Thread: REACHABILITY-ENUM
     2. nmap -sn per subnet → live hosts
     3. nmap -sV -sC -p- per live host → service:version
     4. Cross-ref with Providentia (skip if blind mode)
+    5. note-search per live host (hostname + IP)
+       → surfaces prior engagement experience with this target
+       → flags known techniques, OPSEC notes, prior access paths
   Output:
     Per host → Obsidian target page § Services
+    Per host → Obsidian target page § Operator Notes (from note-search)
     Summary → Obsidian engagement page § Reachability
     Raw → llm-wiki/raw/network-sweep-<date>.md
 ```
 
-**Master reviews** reachability matrix + service tables.
+**note-search at recon:** For each discovered host, invoke `note-search` with
+hostname and IP. If operator has prior notes (technique write-ups, vuln lab
+results, past engagement findings), append summary to target page under
+`§ Operator Notes`. This gives master context before target selection — a host
+with documented prior access paths may be higher priority.
+
+**Master reviews** reachability matrix + service tables + operator note matches.
 Selects targets. Gets RT-TGT-001 operator approval.
 Sets up ScheduleWakeup to monitor thread.
 
@@ -93,7 +175,7 @@ between phases. Threads are short and focused — context comes from Obsidian.
 
 ```
   Skill: recon (Phase 3 — vulnerability analysis)
-  Input: reads Obsidian target page § Services
+  Input: reads Obsidian target page § Services + § Operator Notes
   Runs per service:version:
     - cve-mcp: cve_by_product → cve_enrich → exploit_search → kev_check
     - hacktricks-mcp: search → outline → section → cheatsheet
@@ -103,22 +185,37 @@ between phases. Threads are short and focused — context comes from Obsidian.
     - Obsidian: prior engagement findings
     - lolbins-mcp: analyze_opsec_risk per technique
     - mitre-mcp: technique IDs + detection sources
+    - note-search: per technique/service → operator's prior experience
+      Query: "<service> <version>" AND each candidate MITRE technique ID
+      Returns: prior success/failure on similar targets, known commands,
+      OPSEC notes from operator's own write-ups
   Output → Obsidian target page § Attack Vectors (ranked, with PoC details)
   Also → llm-wiki/wiki/vulnerabilities/<cve>.md per finding
 ```
 
-**Master reviews** ranked vectors. Approves execution order.
+**note-search at research:** For each candidate technique, invoke `note-search`
+with technique name and MITRE ID. Operator's prior success/failure history
+influences vector ranking: techniques the operator has successfully executed
+before rank higher. Prior failure notes include root-cause context that avoids
+repeating mistakes. Commands from technique notes provide tested PoC snippets.
+
+**Master reviews** ranked vectors (with operator experience context). Approves execution order.
 RESEARCH GATE: verify per-service evidence exists before dispatching exploit.
 
 ### Thread B: EXPLOIT (sequential per target, operator-approved vectors)
 
 ```
   Skill: initial-access (Phase 2-3)
-  Input: reads Obsidian target page § Attack Vectors
+  Input: reads Obsidian target page § Attack Vectors + § Operator Notes
   GATE CHECK: research evidence per service exists (or reject back to master)
+  PRE-EXPLOIT: note-search per approved vector technique name
+    → pull operator's tested commands and OPSEC warnings
+    → if operator notes show prior failure on identical service:version,
+      include root-cause in thread context to avoid repeating
   From Kali: execute ranked vectors
     - 3-5 default creds MAX per service, then CVE exploits only
     - Never brute force. Never hydra/medusa as primary vector.
+    - Prefer command sequences from operator technique notes when available
   If foothold: deploy Tuoni agent (unique payload per RT-SIG rules)
   If foothold: persist-swarm ROUND 1 fires HERE (per RD-003, in exploit thread)
   Output → Obsidian target page § Access (agent ID, privilege level, persist round 1 status)
@@ -184,13 +281,15 @@ round 1 confirmed. Persist-swarm round 1 already ran in Thread B (exploit thread
 ```
   Skill: lateral-move
   Thread pattern: one thread per lateral target (master approves each)
-  
+
   1. Master reads harvest results + BloodHound paths from Obsidian
-  2. Selects next target (RT-TGT-001 approval — sequential, not parallel)
-  3. If new zone: set up SOCKS proxy through foothold FIRST
-  4. Dispatch lateral-move thread (handles SOCKS + payload + persist internally)
-  5. Re-run Phase 1 scan from new foothold (new vantage point, new zone only)
-  6. Newly-discovered hosts get full Phase 2 treatment:
+  2. note-search per lateral target + lateral technique (e.g. "pass-the-hash",
+     "winrm lateral", "psexec") → operator experience with this move type
+  3. Selects next target (RT-TGT-001 approval — sequential, not parallel)
+  4. If new zone: set up SOCKS proxy through foothold FIRST
+  5. Dispatch lateral-move thread (handles SOCKS + payload + persist internally)
+  6. Re-run Phase 1 scan from new foothold (new vantage point, new zone only)
+  7. Newly-discovered hosts get full Phase 2 treatment:
      Thread A (RESEARCH) → Thread B (EXPLOIT) → Thread C (POST-ACCESS)
 ```
 
@@ -211,6 +310,7 @@ what's already in Obsidian.
 | Credentials in Tuoni store | Refs in Obsidian, never plaintext anywhere |
 | Auto-chain exploit to post-access | Persist round 1 confirmed = gate. No manual dispatch delay. |
 | Persist round 1 in exploit thread | Per RD-003: landing + persist happen together, before post-access |
+| note-search at every phase | Operator notes ground decisions in real experience, not just MCP data |
 
 ## Failure Handling
 
