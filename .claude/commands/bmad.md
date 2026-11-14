@@ -1,3 +1,9 @@
+---
+name: bmad
+description: "/bmad — BMAD Planning Session"
+modes: [platform-ops, dev]
+---
+
 # /bmad — BMAD Planning Session
 
 Start a structured BMAD planning session for the current task or feature.

@@ -1,3 +1,9 @@
+---
+name: note-search
+description: "/note-search — Search personal notes for technique knowledge"
+modes: [red-team, purple, red-dev, ctf, pentest, bounty]
+---
+
 # /note-search — Search personal notes for technique knowledge
 
 Search the operator's Obsidian vault for relevant technique notes and

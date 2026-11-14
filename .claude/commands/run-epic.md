@@ -1,3 +1,9 @@
+---
+name: run-epic
+description: "/run-epic — Orchestrate an epic's stories across subagents"
+modes: [platform-ops, dev]
+---
+
 # /run-epic — Orchestrate an epic's stories across subagents
 
 Take ownership of an epic and drive its child stories to completion, fanning work
