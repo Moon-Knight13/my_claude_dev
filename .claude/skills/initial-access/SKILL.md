@@ -28,6 +28,10 @@ incomplete — report back to master, do not proceed.
 ## Entry criteria
 
 - **Target marked REACHABLE** in recon Phase 0 reachability matrix (MANDATORY)
+- **Reachability verified FROM the specific pivot/agent being used** — not just
+  from Kali. If exploiting through a router agent, that agent must have routes
+  to the target (pivot_type: offensive, not c2_only). Recon Phase 0 classifies
+  this; if classification missing, probe before proceeding.
 - **Obsidian target page exists** with completed research (services, CVEs, PoCs)
 - Attack vectors ranked and operator-approved
 - Target explicitly in scope (RT-TGT-001 confirmed)

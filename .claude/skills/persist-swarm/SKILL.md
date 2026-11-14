@@ -77,8 +77,18 @@ From initial agent (the one that just landed):
 
 1. **OS identification**: Windows/Linux/network device
 2. **Privilege level**: what can we persist as?
-3. **AV/EDR presence**: what's running? (process list)
-4. **Persistence mechanism availability**:
+3. **Routing context** (routers/pivots only): probe target reachability
+   - `ip route` — check for routes to target subnets
+   - Probe 1-2 sample target IPs (TCP connect or ping)
+   - Classify: `pivot_type: offensive` (has target routes) or
+     `pivot_type: c2_only` (C2 callback works, no target routes)
+   - Write `pivot_type` to Obsidian target page frontmatter
+   - **Still deploy persistence** regardless of pivot_type — C2-ONLY hosts
+     retain value for network position even without current target routes.
+     But downstream skills (recon, lateral-move) will skip C2-ONLY pivots
+     for offensive operations.
+4. **AV/EDR presence**: what's running? (process list)
+5. **Persistence mechanism availability**:
    - Windows: services, scheduled tasks, registry run keys, WMI subscriptions, startup folder
    - Linux: cron, systemd services, rc.local, .bashrc/.profile, SSH authorized_keys
    - Network device: config persistence, scheduled scripts

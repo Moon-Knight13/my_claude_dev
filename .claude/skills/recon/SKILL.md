@@ -137,8 +137,19 @@ No subsequent phase re-scans — all later threads READ Obsidian instead.
 Do not skip this phase. Do not assume Providentia IPs are routable.
 ALL scanning from Kali — NEVER from hub.
 
-**Step 1: Network position**
+**Step 1: Network position + pivot classification**
 - `ip route`, `ip addr` on self-agent → routable subnets
+- If using router/pivot agents (not Kali): probe target reachability
+  FROM each pivot before scanning through it:
+  1. Pick 2-3 sample target IPs from Providentia (`range_targets_summary`)
+  2. Run `ping -c1 -W2 <ip>` or `python3 -c "import socket; s=socket.socket(); s.settimeout(2); s.connect_ex(('<ip>',22))"` from each pivot agent
+  3. Classify each pivot:
+     - **OFFENSIVE-PIVOT** — can reach target subnets (use for scanning + exploitation)
+     - **C2-ONLY** — has C2 callback but no target routes (retain for persistence, skip for scanning)
+  4. Write classification to Obsidian engagement page under `## Pivot Classification`
+  5. Log C2-ONLY pivots as findings: `pivot has C2 but no target routes`
+- **Do NOT use C2-ONLY pivots for scanning or exploitation.** They waste
+  commands and produce false negatives (host appears down when route missing).
 
 **Step 2: Host discovery** (fast sweep)
 - `nmap -sn <subnet> --min-rate 1000` per routable subnet
