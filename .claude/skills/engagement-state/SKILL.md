@@ -145,6 +145,18 @@ orchestrator should prefer techniques with high empirical success rates on
 this range over theoretical Providentia/EPSS scores. See
 `config/technique-scoring.yaml` for weights and thresholds.
 
+**note-search enrichment:** After scoring, invoke `note-search` for each top-N
+technique (by MITRE ID and name). Operator notes add qualitative context that
+empirical scores miss:
+- Prior success notes reveal working commands and exact parameters
+- Prior failure notes reveal environmental blockers (e.g. "fail2ban on SSH",
+  "AppLocker blocks LOLBins on this host type")
+- OPSEC notes from write-ups flag detection risk not captured in scoring
+
+Present note-search results alongside technique scores. Operator experience
+can promote a lower-scored technique (operator has proven PoC) or demote a
+higher-scored one (operator notes show environmental blocker on this target type).
+
 ### Update Credential Inventory (Auto-Called by cred-harvest)
 
 Trigger: **automatic** — called by cred-harvest Phase 4 step 4, Phase 5 spray
@@ -264,6 +276,14 @@ Read Obsidian engagement page (`obsidian_read_note`) and answer the query:
 - **Detection scores** (purple): per-technique and average
 - **Status summary**: target count, agent count, finding count, cred ref count,
   untested cred count
+- **Operator notes**: invoke `note-search` for each queried target/technique
+  to surface relevant personal notes (MITRE write-ups, prior engagement
+  experience, vuln lab results). Present under **Prior Knowledge** in response.
+
+When answering technique-specific queries ("what works on <host>",
+"what techniques for <service>"), auto-invoke `note-search` with the
+technique/service name. Operator notes that show prior success or
+failure on similar targets add context beyond engagement YAML data.
 
 ### Cross-Session Resume
 
@@ -277,14 +297,19 @@ or skill detects existing engagement file.
 4. Refresh agent list from `tuoni_agents_list` — update `## Agents` section,
    flag agents that disappeared since last session.
 5. Load related Obsidian pages via `obsidian_search_vault` for `#engagement/<id>`.
-6. Summarize state to operator:
+6. Invoke `note-search` for each active target (hostname + IP) to refresh
+   operator knowledge context. New notes written since last session surface
+   here — operator may have done research or lab work between sessions.
+7. Summarize state to operator:
    - Engagement ID, start date, mode
    - Active targets (count + list)
    - Live agents (count, any lost since last session)
    - Credential refs (count)
    - Last technique tried + result
    - Next steps from previous session
-5. Ask operator: "Resume this engagement? Any scope changes?"
+   - **New operator notes** since last session (if note-search finds notes
+     not already referenced in engagement page)
+8. Ask operator: "Resume this engagement? Any scope changes?"
 
 ### Archive Engagement
 
