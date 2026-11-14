@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PreToolUse hook: source-priority guard for red-team mode.
+# PreToolUse hook: source-priority guard for red-team and purple modes.
 #
 # Warns (but does not block) when reference MCPs (Tier 3) are queried
 # before authoritative sources (Tier 1/2) for the same target. Tracking
@@ -19,11 +19,11 @@ STATE_FILE="$STATE_DIR/queried-tiers"
 mkdir -p "$STATE_DIR"
 touch "$STATE_FILE"
 
-# Only applies in red-team mode
+# Only applies in red-team and purple modes
 MODE_FILE="${CLAUDE_PROJECT_DIR:-.}/.claude/settings.json"
 if [[ -f "$MODE_FILE" ]]; then
     current_mode="$(jq -r '._mode // "unknown"' "$MODE_FILE" 2>/dev/null || echo "unknown")"
-    if [[ "$current_mode" != "red-team" ]]; then
+    if [[ "$current_mode" != "red-team" && "$current_mode" != "purple" ]]; then
         exit 0
     fi
 fi

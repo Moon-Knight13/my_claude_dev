@@ -1,3 +1,9 @@
+---
+name: log-finding
+description: "/log-finding — Log an engagement finding to personal MITRE notes"
+modes: [red-team, purple, ctf, pentest, bounty]
+---
+
 # /log-finding — Log an engagement finding to personal MITRE notes
 
 Create or append a field observation to the operator's Obsidian vault

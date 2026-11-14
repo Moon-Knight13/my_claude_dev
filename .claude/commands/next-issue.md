@@ -1,3 +1,9 @@
+---
+name: next-issue
+description: "/next-issue — Claim and build the next ready card"
+modes: [platform-ops, dev]
+---
+
 # /next-issue — Claim and build the next ready card
 
 Pick up the top ready card from the board without colliding with anyone else,
