@@ -41,5 +41,21 @@ if [[ ! -d "$REPO_ROOT/_bmad" ]]; then
   exit 1
 fi
 
+# Remove deprecated skill directories superseded in bmad-method >=6.x.
+# bmad-create-architecture → bmad-architecture
+# bmad-create-prd, bmad-edit-prd, bmad-validate-prd → bmad-prd
+DEPRECATED_SKILLS=(
+  bmad-create-architecture
+  bmad-create-prd
+  bmad-edit-prd
+  bmad-validate-prd
+)
+for skill in "${DEPRECATED_SKILLS[@]}"; do
+  if [[ -d "$REPO_ROOT/.claude/skills/$skill" ]]; then
+    rm -rf "$REPO_ROOT/.claude/skills/$skill"
+    echo "Removed deprecated skill: $skill"
+  fi
+done
+
 echo "$BMAD_VERSION" > "$MARKER_FILE"
 echo "BMAD install complete."
