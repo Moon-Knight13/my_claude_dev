@@ -112,6 +112,32 @@ Pinned to specific tag + recorded commit SHA. Refuses install on drift.
 - `bash scripts/validate-template.sh` — template invariants; runs in CI.
 - `pre-commit run --all-files` — covers gitleaks and semgrep.
 
+## Skill mode filtering
+
+Skills (`.claude/skills/*/SKILL.md`) and commands (`.claude/commands/*.md`)
+declare which modes they belong to via `modes:` YAML frontmatter:
+
+```yaml
+---
+name: recon
+description: "..."
+modes: [red-team, purple]
+---
+```
+
+Two layers enforce filtering:
+
+1. **Soft guidance** (`scripts/hooks/mode-inject.sh`, UserPromptSubmit) — injects
+   a filtered skill/command list into each prompt so Claude sees only relevant
+   entries.
+2. **Hard enforcement** (`.claude/hooks/skill-mode-gate.sh`, PreToolUse on
+   `Skill`) — denies Skill tool calls when the active mode is not in the skill's
+   `modes:` list. Returns a structured deny with the allowed modes.
+
+Skills or commands without a `modes:` field are allowed in all modes (backwards
+compatible). The `mode` and `day0-check` commands intentionally omit `modes:` so
+they remain universally available.
+
 ## Deep-dive references
 
 - [`docs/SAFETY_GATES.md`](SAFETY_GATES.md) — ctp-bridge, destructive-action gate, git guard, path guard, commit guard, secret/PII protection details

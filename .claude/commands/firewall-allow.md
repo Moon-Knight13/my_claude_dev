@@ -1,3 +1,9 @@
+---
+name: firewall-allow
+description: "/firewall-allow — Add an egress host to the dev container firewall"
+modes: [platform-ops, dev]
+---
+
 # /firewall-allow — Add an egress host to the dev container firewall
 
 Use this whenever a change (new dependency, tool, installer, or service) needs the dev
