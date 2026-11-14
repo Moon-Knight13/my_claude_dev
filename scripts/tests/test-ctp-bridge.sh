@@ -17,16 +17,23 @@ check(){ if [[ "$2" == "$3" ]]; then ok "$1"; else bad "$1 (got '$2', want '$3')
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-# --- seed team cache for tests ------------------------------------------------
-TEAM_CACHE="$TMP/cache"
-mkdir -p "$TEAM_CACHE"
-printf '%s\n' "mail-hn" "dc-hn" "ws-hn" > "$TEAM_CACHE/team-hosts-t10.txt"
-printf '%s\n' "mail-af" "dc-af" > "$TEAM_CACHE/team-hosts-t05.txt"
+# --- mock team query for tests ------------------------------------------------
+# The mock returns team numbers based on hostname convention:
+#   *-hn → team 10, *-af → team 05, exit 1 for unknown hosts
+_mock_query_team() {
+    local target="$1"
+    case "$target" in
+        mail-hn|dc-hn|ws-hn)  printf '10'; return 0 ;;
+        mail-af|dc-af)        printf '05'; return 0 ;;
+        *)                    return 1 ;;  # host not in inventory
+    esac
+}
+export -f _mock_query_team
 
 CONF="$TMP/.ctp-bridge.conf"
 cat > "$CONF" <<EOF
 CTP_ALLOWED_TARGET=custom-box
-CTP_ALLOWED_TEAMS=t10
+CTP_ALLOWED_TEAM_NR=10
 CTP_ALLOWED_VERBS=deploy deploy-role
 CTP_CONTAINER=catapult-tester
 CTP_PROJECT_DIR=/srv/inventories/range
@@ -40,15 +47,18 @@ echo "== guard (pure classification) =="
 source "$ROOT/scripts/lib/ctp-guard.sh"
 ctp_load_config "$CONF"
 export CTP_TARGET_HOME="/home/tester"
-export CTP_TEAMS_CACHE_DIR="$TEAM_CACHE"
+export CTP_QUERY_TEAM_FN="_mock_query_team"
+# exported for child bash processes (wrapper, hook) — the function is already
+# export -f'd above; this env var tells ctp_query_team() to call it instead of
+# the real SSH/ansible-inventory path.
 
 cls() { ctp_classify "$@" >/dev/null 2>&1 && echo confirm || echo refuse; }
 clsc() { ctp_classify "$@" 2>/dev/null | awk '{print $2}'; }   # the class token
-check "deploy cached host -> confirm"          "$(cls host deploy mail-hn)"       confirm
-check "deploy-role cached host -> confirm"     "$(cls host deploy-role mail-hn)"  confirm
+check "deploy team-10 host -> confirm"          "$(cls host deploy mail-hn)"       confirm
+check "deploy-role team-10 host -> confirm"     "$(cls host deploy-role mail-hn)"  confirm
 check "  ...class is mutating"                 "$(clsc host deploy mail-hn)"      mutating
 check "deploy explicit override -> confirm"    "$(cls host deploy custom-box)"    confirm
-check "deploy host not in cache -> refuse"     "$(cls host deploy mail-mil)"      refuse
+check "deploy team-05 host with NR=10 -> refuse" "$(cls host deploy mail-af)"     refuse
 check "deploy unknown host -> refuse"          "$(cls host deploy trainbox)"      refuse
 check "glob in target -> refuse"               "$(cls host deploy 'mail-h*')"     refuse
 check "deploy no target -> refuse"             "$(cls host deploy)"               refuse
@@ -71,36 +81,39 @@ check "deploy with extra arg -> refuse"        "$(cls host deploy mail-hn --dang
 check "list with extra arg -> refuse"          "$(cls host list mail-hn extra)"      refuse
 
 # team gate tests (isolated in subshells)
-( CTP_ALLOWED_TEAMS="t10"; CTP_ALLOWED_TEAM=""; CTP_ALLOWED_TARGET=""
-  check "host in t10 cache -> confirm"          "$(cls host deploy dc-hn)"        confirm
-  check "host not in any cache -> refuse"       "$(cls host deploy mail-mil)"     refuse
+( CTP_ALLOWED_TEAM_NR="10"; CTP_ALLOWED_TEAM=""; CTP_ALLOWED_TARGET=""
+  check "host in team 10 -> confirm"            "$(cls host deploy dc-hn)"        confirm
+  check "host in team 05 with NR=10 -> refuse"  "$(cls host deploy mail-af)"      refuse
+  check "host not in inventory -> refuse"       "$(cls host deploy unknown-zz)"   refuse
 )
-( CTP_ALLOWED_TEAMS="t05"; CTP_ALLOWED_TARGET=""
-  check "host in t05 cache -> confirm"          "$(cls host deploy mail-af)"      confirm
-  check "host not in t05 -> refuse"             "$(cls host deploy mail-hn)"      refuse
+( CTP_ALLOWED_TEAM_NR="05"; CTP_ALLOWED_TARGET=""
+  check "host in team 05 with NR=05 -> confirm" "$(cls host deploy mail-af)"      confirm
+  check "host in team 10 with NR=05 -> refuse"  "$(cls host deploy mail-hn)"      refuse
 )
-( CTP_ALLOWED_TEAMS="t10 t05"; CTP_ALLOWED_TARGET=""
-  check "host in either team cache -> confirm"  "$(cls host deploy mail-af)"      confirm
-  check "host from first team -> confirm"       "$(cls host deploy dc-hn)"        confirm
-)
-( CTP_ALLOWED_TEAMS=""; CTP_ALLOWED_TEAM=""
-  check "no teams configured -> refuse"         "$(cls host deploy mail-hn)"      refuse
+( CTP_ALLOWED_TEAM_NR=""; CTP_ALLOWED_TEAM=""
+  check "no team configured -> refuse"          "$(cls host deploy mail-hn)"      refuse
 )
 # CTP_ALLOWED_TEAM backward compat
-( CTP_ALLOWED_TEAMS=""; CTP_ALLOWED_TEAM="t10"; CTP_ALLOWED_TARGET=""
+( CTP_ALLOWED_TEAM_NR=""; CTP_ALLOWED_TEAM="10"; CTP_ALLOWED_TARGET=""
   check "CTP_ALLOWED_TEAM backward compat"      "$(cls host deploy mail-hn)"      confirm
 )
-( CTP_ALLOWED_TEAMS=""; CTP_ALLOWED_TEAM="t05"; CTP_ALLOWED_TARGET=""
+( CTP_ALLOWED_TEAM_NR=""; CTP_ALLOWED_TEAM="05"; CTP_ALLOWED_TARGET=""
   check "CTP_ALLOWED_TEAM compat mismatch"      "$(cls host deploy mail-hn)"      refuse
 )
-# explicit override bypasses cache
-( CTP_ALLOWED_TEAMS="t10"; CTP_ALLOWED_TARGET="special-host"
-  check "explicit override bypasses cache"       "$(cls host deploy special-host)" confirm
-  check "non-override still uses cache"          "$(cls host deploy mail-hn)"      confirm
+# explicit override bypasses query
+( CTP_ALLOWED_TEAM_NR="10"; CTP_ALLOWED_TARGET="special-host"
+  check "explicit override bypasses query"       "$(cls host deploy special-host)" confirm
+  check "non-override still queries inventory"   "$(cls host deploy mail-hn)"      confirm
 )
-# missing cache file -> refuse
-( CTP_ALLOWED_TEAMS="t99"; CTP_ALLOWED_TARGET=""
-  check "missing cache file -> refuse"           "$(cls host deploy mail-hn)"      refuse
+# query failure for unknown host
+( CTP_ALLOWED_TEAM_NR="10"; CTP_ALLOWED_TARGET=""
+  check "unknown host -> refuse (not in inventory)" "$(cls host deploy trainbox)"  refuse
+)
+# mock returning error (query-failed path)
+( _mock_query_fail() { return 2; }
+  CTP_QUERY_TEAM_FN="_mock_query_fail"
+  CTP_ALLOWED_TEAM_NR="10"; CTP_ALLOWED_TARGET=""
+  check "query failure -> refuse"               "$(cls host deploy mail-hn)"      refuse
 )
 
 sec() { ctp_is_secret_path "$1" && echo secret || echo ok; }
@@ -163,28 +176,28 @@ chmod +x "$BIN/docker"
 run_wrap() { # run_wrap <stdin> -- args...   ; prints nothing, sets RC
     local input="$1"; shift; [[ "$1" == "--" ]] && shift
     PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_BRIDGE_LOG="$TMP/count.log" \
-        CTP_TEAMS_CACHE_DIR="$TEAM_CACHE" \
+        CTP_QUERY_TEAM_FN="_mock_query_team" \
         bash "$ROOT/scripts/ctp-bridge.sh" "$@" <<<"$input" >/dev/null 2>&1
     RC=$?
 }
 
 run_wrap "" -- host deploy mail-hn;  check "non-interactive deploy refused (no auto-yes)" "$RC" 5
-ASSUME_YES=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_TEAMS_CACHE_DIR="$TEAM_CACHE" bash "$ROOT/scripts/ctp-bridge.sh" host deploy mail-hn </dev/null >/dev/null 2>&1
+ASSUME_YES=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_QUERY_TEAM_FN="_mock_query_team" bash "$ROOT/scripts/ctp-bridge.sh" host deploy mail-hn </dev/null >/dev/null 2>&1
 check "ASSUME_YES refused" "$?" 5
 run_wrap "" -- secrets edit;              check "refused verb exits before docker (3)" "$RC" 3
-run_wrap "" -- host deploy mail-mil;  check "not-in-cache deploy refused (3)" "$RC" 3
+run_wrap "" -- host deploy mail-af;   check "wrong-team deploy refused (3)" "$RC" 3
 run_wrap "" -- host deploy unknown-host;  check "unknown-host deploy refused (3)" "$RC" 3
-MOCK_VAULT_LOCKED=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_TEAMS_CACHE_DIR="$TEAM_CACHE" bash "$ROOT/scripts/ctp-bridge.sh" host deploy mail-hn </dev/null >/dev/null 2>&1
+MOCK_VAULT_LOCKED=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_QUERY_TEAM_FN="_mock_query_team" bash "$ROOT/scripts/ctp-bridge.sh" host deploy mail-hn </dev/null >/dev/null 2>&1
 check "vault locked refused (4)" "$?" 4
-MOCK_VAULT_LOCKED=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_TEAMS_CACHE_DIR="$TEAM_CACHE" bash "$ROOT/scripts/ctp-bridge.sh" host list mail-hn </dev/null >/dev/null 2>&1
+MOCK_VAULT_LOCKED=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_QUERY_TEAM_FN="_mock_query_team" bash "$ROOT/scripts/ctp-bridge.sh" host list mail-hn </dev/null >/dev/null 2>&1
 check "vault locked refuses a read too (4)" "$?" 4
 # update-inventory (inventory class) does NOT gate on vault -> passes the vault
 # check and refuses later at the confirm gate (no token, non-interactive) = 5
-MOCK_VAULT_LOCKED=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_TEAMS_CACHE_DIR="$TEAM_CACHE" bash "$ROOT/scripts/ctp-bridge.sh" project update-inventory </dev/null >/dev/null 2>&1
+MOCK_VAULT_LOCKED=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_QUERY_TEAM_FN="_mock_query_team" bash "$ROOT/scripts/ctp-bridge.sh" project update-inventory </dev/null >/dev/null 2>&1
 check "update-inventory skips the vault check (5, not 4)" "$?" 5
-MOCK_BUSY=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_TEAMS_CACHE_DIR="$TEAM_CACHE" bash "$ROOT/scripts/ctp-bridge.sh" host deploy mail-hn </dev/null >/dev/null 2>&1
+MOCK_BUSY=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_QUERY_TEAM_FN="_mock_query_team" bash "$ROOT/scripts/ctp-bridge.sh" host deploy mail-hn </dev/null >/dev/null 2>&1
 check "busy refused (4)" "$?" 4
-PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$TMP/nope.conf" CTP_TEAMS_CACHE_DIR="$TEAM_CACHE" bash "$ROOT/scripts/ctp-bridge.sh" host deploy mail-hn </dev/null >/dev/null 2>&1
+PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$TMP/nope.conf" CTP_QUERY_TEAM_FN="_mock_query_team" bash "$ROOT/scripts/ctp-bridge.sh" host deploy mail-hn </dev/null >/dev/null 2>&1
 check "missing config refused (2)" "$?" 2
 
 # --- hook-approval token: the agent path (no TTY) runs iff a valid token exists
@@ -194,20 +207,20 @@ NOW="$(date +%s)"; FUTURE=$((NOW + 120)); PAST=$((NOW - 5))
 
 _mktoken "$FUTURE" "host list mail-hn"
 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_BRIDGE_STATE="$STATE" CTP_BRIDGE_LOG="$TMP/c2.log" \
-    CTP_TEAMS_CACHE_DIR="$TEAM_CACHE" \
+    CTP_QUERY_TEAM_FN="_mock_query_team" \
     bash "$ROOT/scripts/ctp-bridge.sh" host list mail-hn </dev/null >/dev/null 2>&1
 check "valid token: non-interactive run proceeds (0)" "$?" 0
 [[ ! -f "$APPROVAL" ]] && ok "token consumed (single-use)" || bad "token consumed (single-use)"
 
 _mktoken "$FUTURE" "host list SOMETHINGELSE"
 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_BRIDGE_STATE="$STATE" \
-    CTP_TEAMS_CACHE_DIR="$TEAM_CACHE" \
+    CTP_QUERY_TEAM_FN="_mock_query_team" \
     bash "$ROOT/scripts/ctp-bridge.sh" host list mail-hn </dev/null >/dev/null 2>&1
 check "token for other argv: refused (5)" "$?" 5
 
 _mktoken "$PAST" "host list mail-hn"
 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_BRIDGE_STATE="$STATE" \
-    CTP_TEAMS_CACHE_DIR="$TEAM_CACHE" \
+    CTP_QUERY_TEAM_FN="_mock_query_team" \
     bash "$ROOT/scripts/ctp-bridge.sh" host list mail-hn </dev/null >/dev/null 2>&1
 check "expired token: refused (5)" "$?" 5
 
@@ -216,7 +229,7 @@ CONF2="$TMP/noproj.conf"; grep -v '^CTP_PROJECT_DIR=' "$CONF" > "$CONF2"
 HOSTPROJ="$TMP/host/proj"; mkdir -p "$HOSTPROJ/inventories/range"
 printf '%s\t%s\n' "$FUTURE" "host list mail-hn" > "$STATE/approval"
 out="$(cd "$HOSTPROJ/inventories/range" && PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF2" \
-    CTP_BRIDGE_STATE="$STATE" CTP_TEAMS_CACHE_DIR="$TEAM_CACHE" \
+    CTP_BRIDGE_STATE="$STATE" CTP_QUERY_TEAM_FN="_mock_query_team" \
     MOCK_MOUNTS="$HOSTPROJ"$'\t'"/srv" \
     bash "$ROOT/scripts/ctp-bridge.sh" host list mail-hn </dev/null 2>&1)"
 if printf '%s' "$out" | grep -Fq 'WDIR: /srv/inventories/range'; then
@@ -224,7 +237,7 @@ if printf '%s' "$out" | grep -Fq 'WDIR: /srv/inventories/range'; then
 else bad "CWD translated through bind mount ($(printf '%s' "$out" | grep WDIR: | head -1))"; fi
 # CWD outside any mount, no override -> refuse (4), never guess
 ( cd "$TMP" && PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF2" CTP_BRIDGE_STATE="$STATE" \
-    CTP_TEAMS_CACHE_DIR="$TEAM_CACHE" \
+    CTP_QUERY_TEAM_FN="_mock_query_team" \
     MOCK_MOUNTS="$HOSTPROJ"$'\t'"/srv" bash "$ROOT/scripts/ctp-bridge.sh" host list mail-hn </dev/null >/dev/null 2>&1 )
 check "CWD outside the mount -> refuse (4)" "$?" 4
 
@@ -248,7 +261,7 @@ fi
 # to allocate one; skip honestly if unavailable.
 if command -v script >/dev/null 2>&1; then
     rm -f "$TMP/count.log"
-    script -qec "PATH='$BIN:$PATH' CTP_BRIDGE_CONF='$CONF' CTP_BRIDGE_LOG='$TMP/count.log' CTP_TEAMS_CACHE_DIR='$TEAM_CACHE' bash '$ROOT/scripts/ctp-bridge.sh' host deploy-role mail-hn" /dev/null <<<"y" >"$TMP/run.out" 2>&1
+    script -qec "PATH='$BIN:$PATH' CTP_BRIDGE_CONF='$CONF' CTP_BRIDGE_LOG='$TMP/count.log' CTP_QUERY_TEAM_FN='_mock_query_team' bash '$ROOT/scripts/ctp-bridge.sh' host deploy-role mail-hn" /dev/null <<<"y" >"$TMP/run.out" 2>&1
     # The mock echoes the full docker-exec argv; the ctp args must arrive as
     # trailing positional params (zsh -s -- host deploy-role mail-hn).
     # The setup script is piped to stdin (zsh -s), so only the positional args
@@ -269,7 +282,7 @@ if command -v script >/dev/null 2>&1; then
         ok "count log records verb+outcome, not the target"
     else bad "count log records verb+outcome, not the target"; fi
     # a read verb runs too (update-inventory, no target)
-    script -qec "PATH='$BIN:$PATH' CTP_BRIDGE_CONF='$CONF' CTP_TEAMS_CACHE_DIR='$TEAM_CACHE' bash '$ROOT/scripts/ctp-bridge.sh' project update-inventory" /dev/null <<<"y" >"$TMP/inv.out" 2>&1
+    script -qec "PATH='$BIN:$PATH' CTP_BRIDGE_CONF='$CONF' CTP_QUERY_TEAM_FN='_mock_query_team' bash '$ROOT/scripts/ctp-bridge.sh' project update-inventory" /dev/null <<<"y" >"$TMP/inv.out" 2>&1
     if grep -Fq 'zsh -s -- project update-inventory' "$TMP/inv.out"; then
         ok "update-inventory runs (no target)"
     else bad "update-inventory runs ($(grep RAN: "$TMP/inv.out" | head -1))"; fi
@@ -288,7 +301,7 @@ decide() { # decide <json> -> prints allow|deny|ask|none
     local out
     out="$(CTP_BRIDGE_CONF="$CONF" CTP_BRIDGE_STATE="$HSTATE" CTP_TARGET_USER=tester \
         CTP_TARGET_HOME=/home/tester HOME=/home/tester \
-        CTP_TEAMS_CACHE_DIR="$TEAM_CACHE" bash "$HOOK" <<<"$1" 2>/dev/null)"
+        CTP_QUERY_TEAM_FN="_mock_query_team" bash "$HOOK" <<<"$1" 2>/dev/null)"
     if [[ -z "$out" ]]; then echo none
     else printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null || echo parse-error
     fi
@@ -300,17 +313,17 @@ check "Read vault file -> deny"           "$(decide "$(read_json /var/tmp/vlt_pf
 check "Read ssh key -> deny"              "$(decide "$(read_json /home/tester/.ssh/id_ed25519)")"    deny
 check "Read normal file -> none"          "$(decide "$(read_json /workspace/README.md)")"            none
 check "Bash cat vault -> deny"            "$(decide "$(bash_json 'cat /var/tmp/vlt_pf')")"           deny
-check "Bash cat ssh key (~) -> deny"      "$(decide "$(bash_json 'cat ~/.ssh/id_ed25519')")"        deny
+check "Bash cat ssh key (~) -> deny"      "$(decide "$(bash_json 'cat ~/.ssh/id_ed25519')")"         deny
 check "Bash docker exec bypass -> deny"   "$(decide "$(bash_json 'docker exec catapult-tester zsh -c ctp')")" deny
 check "Bash bare ctp -> deny"             "$(decide "$(bash_json 'ctp host deploy trainbox')")"      deny
 check "Bash make start -> deny"           "$(decide "$(bash_json 'make start')")"                    deny
 # the INSTALLED name is `ctp-bridge` (no .sh); the hook must recognise it too
-check "installed name deploy cached host -> ask"  "$(decide "$(bash_json "ctp-bridge host deploy mail-hn")")" ask
-check "installed name deploy not in cache -> deny" "$(decide "$(bash_json "ctp-bridge host deploy mail-mil")")" deny
+check "installed name deploy team-10 host -> ask"  "$(decide "$(bash_json "ctp-bridge host deploy mail-hn")")" ask
+check "installed name deploy wrong team -> deny" "$(decide "$(bash_json "ctp-bridge host deploy mail-af")")" deny
 check "installed name abs path -> ask"         "$(decide "$(bash_json "/home/u/.local/bin/ctp-bridge host deploy mail-hn")")" ask
 check "installed name update-inventory -> ask" "$(decide "$(bash_json "ctp-bridge project update-inventory")")" ask
 check "Bash wrapper allowed -> ask"       "$(decide "$(bash_json "bash $ROOT/scripts/ctp-bridge.sh host deploy mail-hn")")" ask
-check "Bash wrapper not in cache -> deny" "$(decide "$(bash_json "bash $ROOT/scripts/ctp-bridge.sh host deploy mail-mil")")" deny
+check "Bash wrapper wrong team -> deny"   "$(decide "$(bash_json "bash $ROOT/scripts/ctp-bridge.sh host deploy mail-af")")" deny
 check "Bash wrapper update-inventory -> ask" "$(decide "$(bash_json "bash $ROOT/scripts/ctp-bridge.sh project update-inventory")")" ask
 check "Bash wrapper list <box> -> ask"    "$(decide "$(bash_json "bash $ROOT/scripts/ctp-bridge.sh host list mail-hn")")" ask
 check "Bash wrapper refused verb -> deny" "$(decide "$(bash_json "bash $ROOT/scripts/ctp-bridge.sh host remove mail-hn")")" deny
@@ -343,7 +356,7 @@ if [[ -f "$HSTATE/approval" ]] && grep -Eq $'\thost list mail-hn$' "$HSTATE/appr
 else bad "token bound to clean argv (got: $(cat "$HSTATE/approval" 2>/dev/null))"; fi
 # a refused call writes NO token
 rm -f "$HSTATE/approval"
-decide "$(bash_json "ctp-bridge host deploy mail-mil")" >/dev/null
+decide "$(bash_json "ctp-bridge host deploy trainbox")" >/dev/null
 [[ ! -f "$HSTATE/approval" ]] && ok "refused call writes no token" || bad "refused call writes no token"
 
 # the approval token path is guarded from tools (read/write/bash)

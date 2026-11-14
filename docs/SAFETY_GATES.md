@@ -29,15 +29,16 @@ The gates that matter, all in code on the parsed argv (never string-matched), an
 shared between wrapper and hook via `scripts/lib/ctp-guard.sh` so the two cannot
 drift:
 
-- **Two gates on a mutating target.** A **team cache gate** —
-  `CTP_ALLOWED_TEAMS`, e.g. `t10` — checks the target hostname against cached
-  per-team host lists (`~/.cache/ctp-bridge/team-hosts-<team>.txt`, populated by
-  `ctp-bridge cache-teams`). Fails closed: no teams configured or missing cache
-  file = refuse. An **explicit override** — `CTP_ALLOWED_TARGET` — bypasses the
-  cache for custom-named hosts. A glob metacharacter in a target is refused
+- **Two gates on a mutating target.** A **live inventory query** —
+  `CTP_ALLOWED_TEAM_NR`, e.g. `10` — queries the target via `ansible-inventory
+  --host` on the catapult container (the same Providentia plugin actual deploys
+  use). The returned `actor_nr_str` must match the configured team number. Fails
+  closed: no team configured = refuse; host not in inventory = refuse; query
+  failure = refuse. An **explicit override** — `CTP_ALLOWED_TARGET` — bypasses
+  the query for custom-named hosts. A glob metacharacter in a target is refused
   outright.
-- **Reachable verbs.** Mutating: `host deploy`, `host deploy-role` (team cache
-  gated). Read: `host list <box>` (verify a target) and `project update-inventory`
+- **Reachable verbs.** Mutating: `host deploy`, `host deploy-role` (inventory
+  query gated). Read: `host list <box>` (verify a target) and `project update-inventory`
   (required after making a Providentia box). `host vars`/`redeploy`/`remove` are
   not reachable (`vars` would stream box detail into the transcript); `secrets` and
   `make` are refused outright (credentials). Every reachable verb is still

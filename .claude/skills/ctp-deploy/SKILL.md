@@ -13,13 +13,14 @@ training and authorized security-testing. The bridge targets a **single
 configured box** (`.ctp-bridge.conf`), not the range. If a task needs a different
 box, that is a config change the owner makes — not something to work around.
 
-**The team boundary is a hard boundary.** Only hosts belonging to **allowed
-teams** (`CTP_ALLOWED_TEAMS`) are reachable for mutating verbs. The bridge checks
-each target against cached per-team host lists
-(`~/.cache/ctp-bridge/team-hosts-<team>.txt`, populated by `ctp-bridge cache-teams`
-or the pre-engagement-cache skill). Hosts not in any allowed team's cache are
-refused. Treat it as a real boundary, not a safety net: never try to reach another
-team's host. A deploy to the wrong team is an outage for someone else.
+**The team boundary is a hard boundary.** Only hosts belonging to the
+**configured team** (`CTP_ALLOWED_TEAM_NR`) are reachable for mutating verbs. The
+bridge queries each target via `ansible-inventory --host` on the catapult
+container — the same Providentia plugin actual deploys use — and the returned
+`actor_nr_str` must match. Hosts not in the inventory or belonging to another
+team are refused. Treat it as a real boundary, not a safety net: never try to
+reach another team's host. A deploy to the wrong team is an outage for someone
+else.
 
 ## The only way to run ctp
 
@@ -30,7 +31,7 @@ It works from anywhere, including the range checkout where the work happens. Nev
 (installed into `~/.claude/`) denies both, because the bridge is where every gate
 lives. Reachable verbs:
 
-- `host deploy <box>` — full deploy of the box (mutating; team cache gated).
+- `host deploy <box>` — full deploy of the box (mutating; inventory query gated).
 - `host deploy-role <box>` — redeploy just the role; the quicker iteration path
   when only the box's content/config changed, not its base (mutating; gated).
 - `host list <box>` — read-only; use it to confirm a box resolves before you act.

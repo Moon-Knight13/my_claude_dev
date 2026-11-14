@@ -83,7 +83,7 @@ set an env var in the same call could otherwise rewrite its own limits.
 
 | Control | Gates | Verdict | Config |
 |---------|-------|---------|--------|
-| **Build-tooling bridge** | any attempt to drive `ctp`/`docker exec` into the container directly | `deny` bare access; `ask` for a permitted wrapper verb; `deny` a refused verb | `CTP_ALLOWED_TARGET`, `CTP_ALLOWED_TEAMS`, `CTP_ALLOWED_VERBS` |
+| **Build-tooling bridge** | any attempt to drive `ctp`/`docker exec` into the container directly | `deny` bare access; `ask` for a permitted wrapper verb; `deny` a refused verb | `CTP_ALLOWED_TARGET`, `CTP_ALLOWED_TEAM_NR`, `CTP_ALLOWED_VERBS` |
 | **Secret-read deny** | Read/Write/Edit/Bash touching a credential path | `deny` | `CTP_SECRET_PATHS` |
 | **A · Destructive-action gate** | `rm -rf`, `shred`, `mkfs`, `dd of=`, `dropdb`, `DROP`/`TRUNCATE`, `terraform destroy`, `kubectl delete`, `docker prune`/`rm -f` | `ask` (→ `deny` with no human) | `~/.config/safety-guard.conf` (`SAFETY_ALLOWLIST`) |
 | **C1 · PII/IP path guard** | Read/Write/Edit/Bash touching an Org-data path | `deny` | `CTP_PII_PATHS` (opt-in) |
