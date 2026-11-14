@@ -66,6 +66,19 @@ _docker() {
     fi
 }
 
+# --- local verbs (not forwarded to ctp) ---------------------------------------
+if [[ "${1:-}" == "cache-teams" ]]; then
+    shift
+    _CACHE_SCRIPT=""
+    for _c in "$_HERE/ctp-cache-teams.sh" \
+              "$_HERE/lib/ctp-cache-teams.sh" \
+              "$HOME/.local/lib/ctp-bridge/ctp-cache-teams.sh"; do
+        [[ -f "$_c" ]] && { _CACHE_SCRIPT="$_c"; break; }
+    done
+    [[ -n "$_CACHE_SCRIPT" ]] || { host_warn "cannot locate ctp-cache-teams.sh"; exit 2; }
+    exec bash "$_CACHE_SCRIPT" "$@"
+fi
+
 # --- classify (shared gates) -------------------------------------------------
 verdict="$(ctp_classify "$@")" && rc=0 || rc=$?
 read -r decision CLASS VERB TARGET <<<"$verdict"

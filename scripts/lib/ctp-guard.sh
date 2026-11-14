@@ -19,6 +19,7 @@
 # 1 if the file is missing (the caller decides whether that is fatal). Values are
 # taken literally; no shell expansion beyond a leading ~ in secret paths.
 CTP_ALLOWED_TARGET=""
+CTP_ALLOWED_TEAMS=""
 CTP_ALLOWED_TEAM=""
 CTP_ALLOWED_VERBS="deploy deploy-role"
 CTP_CONTAINER=""
@@ -40,6 +41,7 @@ ctp_load_config() {
         # shellcheck disable=SC2034  # CTP_PROJECT_DIR is consumed cross-file by ctp-bridge.sh
         case "$key" in
             CTP_ALLOWED_TARGET) CTP_ALLOWED_TARGET="$val" ;;
+            CTP_ALLOWED_TEAMS)  CTP_ALLOWED_TEAMS="$val" ;;
             CTP_ALLOWED_TEAM)   CTP_ALLOWED_TEAM="$val" ;;
             CTP_ALLOWED_VERBS)  CTP_ALLOWED_VERBS="$val" ;;
             CTP_CONTAINER)      CTP_CONTAINER="$val" ;;
@@ -50,6 +52,12 @@ ctp_load_config() {
         esac
     done < "$conf"
     return 0
+}
+
+# ctp_teams_cache_dir — the directory holding per-team host list cache files.
+# Override via CTP_TEAMS_CACHE_DIR for testing.
+ctp_teams_cache_dir() {
+    printf '%s' "${CTP_TEAMS_CACHE_DIR:-$HOME/.cache/ctp-bridge}"
 }
 
 # --- approval handoff (hook -> wrapper) --------------------------------------
@@ -88,12 +96,14 @@ ctp_has_glob() {
 # class is one of: mutating | read | inventory — the wrapper uses it to pick
 # preconditions. The verdict is derived from the parsed argv only.
 #
-# Two independent gates protect a mutating verb, and BOTH must pass:
-#   - team gate: the target must belong to the authorised team (CTP_ALLOWED_TEAM),
-#     i.e. end with _<team>. This is the protection against deploying to a live
-#     team by mistake; it holds even if the box allow-list is later widened.
-#   - box allow-list: the target must equal CTP_ALLOWED_TARGET (one named box).
-# Both fail closed: an unset team or target refuses every mutating verb.
+# Two gates protect a mutating verb:
+#   - explicit override: CTP_ALLOWED_TARGET (space-separated hostnames) —
+#     a target matching any entry passes immediately (custom-named hosts).
+#   - team cache: CTP_ALLOWED_TEAMS (space-separated team names). Each team
+#     has a cached host list at ~/.cache/ctp-bridge/team-hosts-<team>.txt,
+#     populated by `ctp-bridge cache-teams`. The target must appear in at
+#     least one team's cache file.
+# Fail closed: no teams configured = refuse; missing cache file = refuse.
 ctp_classify() {
     local a1="${1:-}" a2="${2:-}" a3="${3:-}" a4="${4:-}" verb target
     case "$a1" in
@@ -135,27 +145,41 @@ ctp_classify() {
             printf 'refuse unknown-host-verb:%s' "${verb:-<empty>}"; return 1 ;;
     esac
 
-    # --- mutating verb: allow-list, glob, team gate, box gate ---
+    # --- mutating verb: allow-list, glob, team gate ---
     local allowed=" $CTP_ALLOWED_VERBS "
     [[ "$allowed" == *" $verb "* ]] || { printf 'refuse verb-not-in-config-allow-list:%s' "$verb"; return 1; }
     [[ -n "$target" ]] || { printf 'refuse mutating-verb-needs-a-target:%s' "$verb"; return 1; }
     [[ -z "$a4" ]] || { printf 'refuse unexpected-extra-args'; return 1; }
     ctp_has_glob "$target" && { printf 'refuse glob-in-target-refused:%s' "$verb"; return 1; }
-    # team gate (mandatory, fail closed; space-separated list of allowed teams)
-    [[ -n "$CTP_ALLOWED_TEAM" ]] || { printf 'refuse no-authorised-team-configured'; return 1; }
-    local _team_suffix="${target##*_}" _team_ok=false _t
-    for _t in $CTP_ALLOWED_TEAM; do
-        [[ "$_team_suffix" == "$_t" ]] && { _team_ok=true; break; }
-    done
-    [[ "$_team_ok" == true ]] || { printf 'refuse target-not-in-authorised-team:%s' "$CTP_ALLOWED_TEAM"; return 1; }
-    # box allow-list (optional; space-separated list of allowed targets)
-    if [[ -n "$CTP_ALLOWED_TARGET" ]]; then
-        local _box_ok=false _b
-        for _b in $CTP_ALLOWED_TARGET; do
-            [[ "$target" == "$_b" ]] && { _box_ok=true; break; }
-        done
-        [[ "$_box_ok" == true ]] || { printf 'refuse target-not-allowed'; return 1; }
+    # resolve effective teams (CTP_ALLOWED_TEAM is deprecated alias)
+    local _eff_teams="$CTP_ALLOWED_TEAMS"
+    if [[ -z "$_eff_teams" && -n "$CTP_ALLOWED_TEAM" ]]; then
+        _eff_teams="$CTP_ALLOWED_TEAM"
     fi
+    [[ -n "$_eff_teams" ]] || { printf 'refuse no-authorised-teams-configured'; return 1; }
+    # explicit target override: CTP_ALLOWED_TARGET bypasses team cache
+    if [[ -n "$CTP_ALLOWED_TARGET" ]]; then
+        local _explicit_ok=false _b
+        for _b in $CTP_ALLOWED_TARGET; do
+            [[ "$target" == "$_b" ]] && { _explicit_ok=true; break; }
+        done
+        if [[ "$_explicit_ok" == true ]]; then
+            printf 'confirm mutating %s %s' "$verb" "$target"; return 0
+        fi
+    fi
+    # team cache gate: target must appear in at least one allowed team's host list
+    local _cache_dir _team_ok=false _t _cache_file
+    _cache_dir="$(ctp_teams_cache_dir)"
+    for _t in $_eff_teams; do
+        _cache_file="$_cache_dir/team-hosts-${_t}.txt"
+        if [[ ! -f "$_cache_file" ]]; then
+            printf 'refuse team-cache-missing:%s:run-ctp-bridge-cache-teams' "$_t"; return 1
+        fi
+        if grep -qxF "$target" "$_cache_file" 2>/dev/null; then
+            _team_ok=true; break
+        fi
+    done
+    [[ "$_team_ok" == true ]] || { printf 'refuse target-not-in-any-team-cache'; return 1; }
 
     printf 'confirm mutating %s %s' "$verb" "$target"; return 0
 }

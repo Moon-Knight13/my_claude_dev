@@ -13,12 +13,13 @@ training and authorized security-testing. The bridge targets a **single
 configured box** (`.ctp-bridge.conf`), not the range. If a task needs a different
 box, that is a config change the owner makes — not something to work around.
 
-**The team suffix is a hard boundary.** Range hosts carry a team suffix
-(`..._t02`). Only the **authorised team** (`CTP_ALLOWED_TEAM`) is for dev/test;
-other `_tNN` are live teams. The bridge refuses any mutating target that is not in
-the authorised team, in code — but treat it as a real boundary, not a safety net:
-never try to reach another team's host. A deploy to the wrong team is an outage
-for someone else.
+**The team boundary is a hard boundary.** Only hosts belonging to **allowed
+teams** (`CTP_ALLOWED_TEAMS`) are reachable for mutating verbs. The bridge checks
+each target against cached per-team host lists
+(`~/.cache/ctp-bridge/team-hosts-<team>.txt`, populated by `ctp-bridge cache-teams`
+or the pre-engagement-cache skill). Hosts not in any allowed team's cache are
+refused. Treat it as a real boundary, not a safety net: never try to reach another
+team's host. A deploy to the wrong team is an outage for someone else.
 
 ## The only way to run ctp
 
@@ -29,7 +30,7 @@ It works from anywhere, including the range checkout where the work happens. Nev
 (installed into `~/.claude/`) denies both, because the bridge is where every gate
 lives. Reachable verbs:
 
-- `host deploy <box>` — full deploy of the box (mutating; team + box gated).
+- `host deploy <box>` — full deploy of the box (mutating; team cache gated).
 - `host deploy-role <box>` — redeploy just the role; the quicker iteration path
   when only the box's content/config changed, not its base (mutating; gated).
 - `host list <box>` — read-only; use it to confirm a box resolves before you act.
@@ -59,8 +60,7 @@ body to a file first; there is nothing unsafe about the command itself.
 1. Make the box on Providentia (outside ctp).
 2. `project update-inventory` — so ctp learns the new box. Without this, the next
    step finds nothing.
-3. `host list <box>` — confirm it resolves, and that the name carries the
-   authorised team suffix.
+3. `host list <box>` — confirm it resolves and appears in the team cache.
 4. Write/adjust the playbooks and role content as ordinary files (no bridge
    needed — this is where most of the work is).
 5. First stand-up: `host deploy <box>`.

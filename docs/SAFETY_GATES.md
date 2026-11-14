@@ -29,13 +29,14 @@ The gates that matter, all in code on the parsed argv (never string-matched), an
 shared between wrapper and hook via `scripts/lib/ctp-guard.sh` so the two cannot
 drift:
 
-- **Two gates on a mutating target, both mandatory.** A **team gate** —
-  `CTP_ALLOWED_TEAM`, e.g. `t02` — requires the target to end with the authorised
-  team suffix, so a deploy cannot land on a live team by mistake; it holds even if
-  the box list is widened, and fails closed when unset. A **box allow-list** —
-  `CTP_ALLOWED_TARGET`, one named box — on top of it. A glob metacharacter in a
-  target is refused outright.
-- **Reachable verbs.** Mutating: `host deploy`, `host deploy-role` (team + box
+- **Two gates on a mutating target.** A **team cache gate** —
+  `CTP_ALLOWED_TEAMS`, e.g. `t10` — checks the target hostname against cached
+  per-team host lists (`~/.cache/ctp-bridge/team-hosts-<team>.txt`, populated by
+  `ctp-bridge cache-teams`). Fails closed: no teams configured or missing cache
+  file = refuse. An **explicit override** — `CTP_ALLOWED_TARGET` — bypasses the
+  cache for custom-named hosts. A glob metacharacter in a target is refused
+  outright.
+- **Reachable verbs.** Mutating: `host deploy`, `host deploy-role` (team cache
   gated). Read: `host list <box>` (verify a target) and `project update-inventory`
   (required after making a Providentia box). `host vars`/`redeploy`/`remove` are
   not reachable (`vars` would stream box detail into the transcript); `secrets` and

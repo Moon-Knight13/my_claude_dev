@@ -93,8 +93,8 @@ Bump `PROVISION_VERSION` when provisioning steps change.
 ### Build-tooling commands are confirmed manually
 
 Every tool command is confirmed manually. The ctp-bridge is the **only** path to
-run `ctp`. Gates: team gate (`CTP_ALLOWED_TEAM`), box allow-list
-(`CTP_ALLOWED_TARGET`). No `ASSUME_YES`/`--yes`. Non-interactive callers are refused.
+run `ctp`. Gates: team cache (`CTP_ALLOWED_TEAMS` + cached host lists),
+explicit override (`CTP_ALLOWED_TARGET`). No `ASSUME_YES`/`--yes`. Non-interactive callers are refused.
 Full details: [`docs/SAFETY_GATES.md`](SAFETY_GATES.md).
 
 ### Network changes are deliberate

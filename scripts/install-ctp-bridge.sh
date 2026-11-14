@@ -28,6 +28,7 @@ SRC_SEG="$_HERE/lib/cmd-segment.sh"
 SRC_SAFETY="$_HERE/lib/safety-guard.sh"
 SRC_GITGUARD="$_HERE/lib/git-guard.sh"
 SRC_STACK="$_HERE/lib/guard-stack.sh"
+SRC_CACHE_TEAMS="$_HERE/lib/ctp-cache-teams.sh"
 SRC_HOOK="$_REPO/.claude/hooks/pretooluse-ctp.sh"
 SRC_CONF_EXAMPLE="$_REPO/.ctp-bridge.conf.example"
 SRC_SAFETY_CONF="$_REPO/.safety-guard.conf.example"
@@ -45,7 +46,7 @@ SETTINGS="$HOME/.claude/settings.json"
 
 host_step "Installing ctp tool bridge for $(id -un) (home: $HOME)"
 
-for f in "$SRC_WRAPPER" "$SRC_GUARD" "$SRC_SEG" "$SRC_SAFETY" "$SRC_GITGUARD" "$SRC_HOOK" "$SRC_CONF_EXAMPLE" "$SRC_SAFETY_CONF" "$SRC_GITGUARD_CONF"; do
+for f in "$SRC_WRAPPER" "$SRC_GUARD" "$SRC_SEG" "$SRC_SAFETY" "$SRC_GITGUARD" "$SRC_CACHE_TEAMS" "$SRC_HOOK" "$SRC_CONF_EXAMPLE" "$SRC_SAFETY_CONF" "$SRC_GITGUARD_CONF"; do
     [[ -f "$f" ]] || host_fail "missing source: $f"
 done
 (( ${#HOST_FAILURES[@]} == 0 )) || { host_warn "cannot install; source files missing"; exit 1; }
@@ -63,21 +64,23 @@ install -m 0644 "$SRC_SAFETY" "$LIB_DIR/safety-guard.sh"
 install -m 0644 "$SRC_GITGUARD" "$LIB_DIR/git-guard.sh"
 # The composed stack the hook calls; without it the hook holds no opinion at all.
 install -m 0644 "$SRC_STACK" "$LIB_DIR/guard-stack.sh"
+install -m 0755 "$SRC_CACHE_TEAMS" "$LIB_DIR/ctp-cache-teams.sh"
 install -m 0755 "$SRC_WRAPPER" "$BIN"
 install -m 0755 "$SRC_HOOK" "$HOOK"
-host_info "wrapper -> $BIN"
-host_info "guard   -> $LIB_DIR/ctp-guard.sh"
-host_info "segment -> $LIB_DIR/cmd-segment.sh"
-host_info "safety  -> $LIB_DIR/safety-guard.sh"
-host_info "gitguard-> $LIB_DIR/git-guard.sh"
-host_info "stack   -> $LIB_DIR/guard-stack.sh"
-host_info "hook    -> $HOOK"
+host_info "wrapper    -> $BIN"
+host_info "guard      -> $LIB_DIR/ctp-guard.sh"
+host_info "segment    -> $LIB_DIR/cmd-segment.sh"
+host_info "safety     -> $LIB_DIR/safety-guard.sh"
+host_info "gitguard   -> $LIB_DIR/git-guard.sh"
+host_info "stack      -> $LIB_DIR/guard-stack.sh"
+host_info "cache-teams-> $LIB_DIR/ctp-cache-teams.sh"
+host_info "hook       -> $HOOK"
 
 # --- 2. seed config (never overwrite an existing target) ---------------------
 if [[ -f "$CONF" ]]; then
     host_note "kept existing $CONF (your settings are preserved)"
     # Migrate: a config seeded before a key existed would silently lack it, and a
-    # missing required key (e.g. CTP_ALLOWED_TEAM) reads as "configured" while the
+    # missing required key (e.g. CTP_ALLOWED_TEAMS) reads as "configured" while the
     # gate is actually unset. Append any example key the config does not have, at
     # its example (fail-closed) value, so it is visible to fill in.
     _added=0
@@ -91,8 +94,8 @@ if [[ -f "$CONF" ]]; then
     [[ "$_added" == 0 ]] && host_note "config has all current keys"
 else
     install -m 0600 "$SRC_CONF_EXAMPLE" "$CONF"
-    host_info "seeded $CONF — set CTP_ALLOWED_TARGET and CTP_ALLOWED_TEAM before deploying"
-    host_note "until they are set, every deploy is refused (safe default)."
+    host_info "seeded $CONF — set CTP_ALLOWED_TEAMS and run 'ctp-bridge cache-teams' before deploying"
+    host_note "until CTP_ALLOWED_TEAMS is set (and cache populated), every deploy is refused (safe default)."
 fi
 
 # --- 2b. seed the destructive-action gate config (never overwrite) -----------
