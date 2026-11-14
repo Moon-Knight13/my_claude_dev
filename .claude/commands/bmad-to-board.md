@@ -1,3 +1,9 @@
+---
+name: bmad-to-board
+description: "/bmad-to-board — Turn a BMAD decomposition into board issues"
+modes: [platform-ops, dev]
+---
+
 # /bmad-to-board — Turn a BMAD decomposition into board issues
 
 Bridge BMAD planning to the Kanban board: read the latest Task-Decomposition
