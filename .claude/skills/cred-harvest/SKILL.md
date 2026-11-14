@@ -186,7 +186,16 @@ On Kali (NOT target):
    - Zero creds stored = engagement failure (see redteam-test2 post-mortem)
 3. **Record ref in engagement YAML** (tuoni_cred_id only, NEVER plaintext):
    - Add to `credentials[]` with ref_id, type, username, domain, source_host
-4. **Assess value for lateral movement**:
+4. **MANDATORY: Auto-populate engagement credential inventory**:
+   - Invoke `engagement-state` skill's **Update Credential Inventory** operation
+   - Pass: `tuoni_cred_id`, `username`, `domain`, `type` (hash subtype if
+     applicable: NTLM, NTLMv2, Kerberos, NetNTLMv2, etc.), `source_host`,
+     `harvest_method` (MITRE technique ID or plugin name), current ISO-8601
+     timestamp, `status: untested`
+   - Engagement-state deduplicates by `(username, domain, type, source_host)`
+   - **This is a gate step — do NOT proceed to lateral assessment until
+     inventory confirms the entry (new or existing)**
+5. **Assess value for lateral movement**:
    - Domain admin? Service accounts with broad access?
    - Match `tuoni_credentials_list` filter by realm against `range_targets` by network
    - Programmatic lateral opportunity mapping, not manual
@@ -195,7 +204,9 @@ On Kali (NOT target):
      this credential unlocks. "shortest path from <user> to Domain Admins",
      "what can <user> reach via delegation". New creds may open paths that
      were previously blocked.
-5. **Document in Obsidian** (refs only):
+   - **Query untested creds** from engagement-state before planning spray or
+     lateral move — prioritize creds not yet validated on other hosts
+6. **Document in Obsidian** (refs only):
    - `llm-wiki/wiki/targets/<hostname>.md`: update cred refs section
    - Use template `llm-wiki/templates/credential.md` for credential ref page
    - `obsidian_add_tags`: `#engagement/<id>`, `#phase/cred-harvest`, `#target/<hostname>`
@@ -225,8 +236,15 @@ Only with operator approval and lockout policy enumerated:
      check only HTTP status will report mass false positives.
 4. **On success**:
    - Store new access in tuoni cred store
+   - Auto-populate engagement credential inventory (Phase 4 step 4)
+   - Mark sprayed credential as `tested:success` in engagement-state
+     via **Mark Credential Tested** operation
    - Assess for lateral movement potential
    - Do NOT immediately use — plan lateral move first
+5. **On failure** (credential valid but access denied):
+   - Mark sprayed credential as `tested:failed` with target host in
+     engagement-state via **Mark Credential Tested** operation
+   - Log failure for spray coverage tracking
 
 ## State writes
 

@@ -1,6 +1,6 @@
 ---
 name: engagement-state
-description: "Create, update, query, resume, and archive engagement state. Primary state in Obsidian llm-wiki. Thin YAML gate file for existence check only. Triggers: 'engagement', 'state', 'resume engagement', 'what targets', 'new engagement', 'add target', 'record technique', 'what creds', 'archive engagement', 'clean slate'."
+description: "Create, update, query, resume, and archive engagement state. Primary state in Obsidian llm-wiki. Thin YAML gate file for existence check only. Triggers: 'engagement', 'state', 'resume engagement', 'what targets', 'new engagement', 'add target', 'record technique', 'what creds', 'archive engagement', 'clean slate', 'untested creds', 'creds from host', 'credential inventory', 'spray candidates', 'mark cred tested'."
 modes: [red-team, purple]
 ---
 
@@ -88,7 +88,9 @@ exclusions:
    - **## Targets** — added after RT-TGT-001 approval (host, IP, phase, status, wiki page link)
    - **## Reachability** — populated by Phase 0 sweep
    - **## Agents** — self-agent ID, target agents as they're deployed
-   - **## Credentials** — REFS ONLY (tuoni_cred_id, type, username, domain, source)
+   - **## Credentials** — REFS ONLY, auto-populated by cred-harvest. Table columns:
+     `| Ref ID | Username | Domain | Type | Source Host | Harvest Method | Timestamp | Status |`
+     Status values: `untested`, `tested:success`, `tested:failed`, `tested:expired`
    - **## Findings** — technique outcomes (ID, target, result, timestamp)
    - **## Techniques Tried** — per-target log
    - **## Next Steps** — operator-curated task list
@@ -143,22 +145,95 @@ orchestrator should prefer techniques with high empirical success rates on
 this range over theoretical Providentia/EPSS scores. See
 `config/technique-scoring.yaml` for weights and thresholds.
 
-### Add Credential Reference
+### Update Credential Inventory (Auto-Called by cred-harvest)
 
-Trigger: credentials harvested during engagement.
+Trigger: **automatic** — called by cred-harvest Phase 4 step 4, Phase 5 spray
+success, and lateral-move on credential validation. Also callable manually:
+"add cred", "record credential".
 
 **REFS ONLY — never store plaintext passwords, hashes, tickets, or keys in
 the engagement YAML or Obsidian notes.**
 
-1. Store actual credential in Tuoni credential store via `tuoni_credential_add`.
-2. Record REF in Obsidian engagement page `## Credentials` section:
-   - `tuoni_cred_id`: ID from Tuoni store
-   - `type`: password | hash | ticket | key | token
-   - `username`, `domain`: identity info (these are not secrets)
-   - `source_host`, `source_technique`: provenance
-   - `notes`: brief context
-3. Update target page with cred ref under `## Credentials` section.
-4. **NEVER store plaintext passwords, hashes, tickets, or keys in Obsidian.**
+#### Input fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `tuoni_cred_id` | yes | ID from Tuoni credential store |
+| `username` | yes | Account name (not a secret) |
+| `domain` | no | Domain or realm (not a secret) |
+| `type` | yes | password, NTLM, NTLMv2, NetNTLMv2, Kerberos, key, token, certificate |
+| `source_host` | yes | Host where credential was harvested |
+| `harvest_method` | yes | MITRE technique ID (e.g. T1003.001) or plugin name |
+| `timestamp` | yes | ISO-8601 harvest time |
+| `status` | yes | `untested` (default on harvest) or `tested` |
+
+#### Procedure
+
+1. Store actual credential in Tuoni credential store via `tuoni_credential_add`
+   (if not already stored by cred-harvest — check `tuoni_cred_id` exists).
+2. **Dedup check**: Read Obsidian engagement page `## Credentials` section.
+   Search for existing entry matching `(username, domain, type, source_host)`.
+   - **Match found**: update existing entry's `tuoni_cred_id` if changed,
+     append `harvest_method` if new method, update `timestamp` to latest.
+     Do NOT create duplicate row.
+   - **No match**: append new entry.
+3. Record entry in Obsidian engagement page `## Credentials` section using
+   this table row format:
+   ```
+   | <tuoni_cred_id> | <username> | <domain> | <type> | <source_host> | <harvest_method> | <timestamp> | <status> |
+   ```
+4. Update target page (`llm-wiki/wiki/targets/<source_host>.md`) with cred ref
+   under `## Credentials` section.
+5. Return confirmation: `new` (entry created) or `existing` (deduped).
+6. **NEVER store plaintext passwords, hashes, tickets, or keys in Obsidian.**
+
+### Mark Credential Tested
+
+Trigger: **automatic** — called by cred-harvest Phase 5 (spray result),
+lateral-move (credential validated on new host), or manually: "mark cred tested".
+
+1. Read Obsidian engagement page `## Credentials` section.
+2. Find entry by `tuoni_cred_id` or `(username, domain)`.
+3. Update `status` column:
+   - `tested:success` — credential validated on at least one target
+   - `tested:failed` — credential attempted but access denied
+   - `tested:expired` — credential no longer valid (password changed, token expired)
+4. Optionally append tested-against host to a `tested_on` note if provided.
+5. Update target page if tested on a new host.
+
+### Query Credential Inventory
+
+Trigger: "list all creds", "what creds", "untested creds", "creds from host X",
+"creds for domain Y", "credential inventory", "spray candidates".
+
+Read Obsidian engagement page `## Credentials` section and filter:
+
+| Query | Filter |
+|-------|--------|
+| "list all creds" / "credential inventory" | Return full table |
+| "untested creds" / "spray candidates" | Filter `status = untested` |
+| "tested creds" | Filter `status` starts with `tested` |
+| "creds from host X" | Filter `source_host = X` |
+| "creds for domain Y" | Filter `domain = Y` |
+| "creds of type Z" | Filter `type = Z` (e.g. NTLM, key, token) |
+| "creds for user U" | Filter `username = U` |
+
+Compound queries supported: "untested NTLM creds from host X" applies all
+matching filters.
+
+Report format:
+```
+## Credential Inventory — <engagement_id>
+Total: N | Untested: N | Tested (success): N | Tested (failed): N
+
+| Ref ID | Username | Domain | Type | Source | Method | Harvested | Status |
+|--------|----------|--------|------|--------|--------|-----------|--------|
+| ...    | ...      | ...    | ...  | ...    | ...    | ...       | ...    |
+```
+
+For "spray candidates" queries, also cross-reference against known target hosts
+from `## Targets` section — report which untested creds could plausibly work
+on which targets based on domain match.
 
 ### Record Detection Score (Purple Mode)
 
@@ -181,12 +256,14 @@ Trigger: "what targets", "what creds", "what techniques worked on <host>",
 
 Read Obsidian engagement page (`obsidian_read_note`) and answer the query:
 - **Targets**: read `## Targets` section
-- **Credentials**: read `## Credentials` section (refs only, never actual creds)
+- **Credentials**: use **Query Credential Inventory** (supports filtering by
+  status, host, domain, type, username — see that section for full query syntax)
 - **Techniques on host**: read `## Techniques Tried`, filter by target
 - **Findings**: read `## Findings`, filter by result=success/partial
 - **Next steps**: read `## Next Steps`
 - **Detection scores** (purple): per-technique and average
-- **Status summary**: target count, agent count, finding count, cred ref count
+- **Status summary**: target count, agent count, finding count, cred ref count,
+  untested cred count
 
 ### Cross-Session Resume
 
