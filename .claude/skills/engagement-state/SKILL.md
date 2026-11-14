@@ -1,6 +1,6 @@
 ---
 name: engagement-state
-description: "Create, update, query, resume, and archive engagement state. Primary state in Obsidian llm-wiki. Thin YAML gate file for existence check only. Triggers: 'engagement', 'state', 'resume engagement', 'what targets', 'new engagement', 'add target', 'record technique', 'what creds', 'archive engagement', 'clean slate'."
+description: "Create, update, query, resume, and archive engagement state. Primary state in Obsidian llm-wiki. Thin YAML gate file for existence check only. Triggers: 'engagement', 'state', 'resume engagement', 'what targets', 'new engagement', 'add target', 'record technique', 'what creds', 'archive engagement', 'clean slate', 'reclassify target', 'mark target as', 'show confirmed targets', 'show unreachable targets', 'target status'."
 modes: [red-team, purple]
 ---
 
@@ -16,6 +16,69 @@ lives in Obsidian.
 **Why Obsidian, not YAML:** Single source of truth. Threads already read/write
 Obsidian for target pages. No split brain between YAML and Obsidian. Obsidian
 pages are structured markdown — queryable, taggable, cross-linkable.
+
+## Target Classification
+
+Targets progress through classification states as engagement advances.
+Classification drives which kill-chain skills apply and what actions are valid.
+
+### State Machine
+
+```
+candidate ──┬── confirmed ──┬── compromised
+             │                ├── hardened
+             │                └── patched
+             ├── unreachable
+             └── different-than-expected ──┬── confirmed (re-recon)
+                                            └── unreachable
+```
+
+| Classification | Set by | Meaning |
+|----------------|--------|---------|
+| `candidate` | `pre-engagement-cache`, `add target` | Providentia/operator says host exists. Not yet verified. |
+| `confirmed` | `recon` Phase 0 | Reachable, services match Providentia (or blind scan populated services). |
+| `unreachable` | `recon` Phase 0 | No route, no response, or all ports filtered after scan. |
+| `different-than-expected` | `recon` Phase 0 | Reachable but services diverge significantly from Providentia data. |
+| `compromised` | `initial-access`, `lateral-move` | Agent established, persistence deployed. |
+| `hardened` | `initial-access` | All vectors exhausted, target resists exploitation. |
+| `patched` | `initial-access` | Specific CVE/vuln confirmed patched during attempt. |
+
+### Classification Rules
+
+- Every target starts as `candidate`. No target enters scope as `confirmed`.
+- `confirmed` requires live scan evidence (nmap, service response).
+- `unreachable` can revert to `confirmed` if later pivot opens route.
+- `different-than-expected` triggers operator notification — Providentia may need
+  correction, or host was rebuilt. Operator decides whether to proceed.
+- `compromised` requires active agent + persistence (per persist-swarm).
+- `hardened` requires documented exhaustion of prioritized vectors (minimum 3
+  technique attempts logged in `## Techniques Tried`).
+- `patched` records specific CVE/vuln and evidence of patch (version string,
+  error response, etc.).
+
+### Where Classification Lives
+
+- **Obsidian engagement page `## Targets`**: classification column in target table.
+- **Obsidian target page**: `classification` field in frontmatter + full
+  `## Classification History` section with timestamped entries.
+- **Engagement YAML**: `classification` field per target (lean reference only).
+
+### Classification History Format (Obsidian target page)
+
+Each reclassification appends to `## Classification History`:
+
+```markdown
+## Classification History
+
+| Timestamp | From | To | Reason | Evidence | Actor |
+|-----------|------|----|--------|----------|-------|
+| 2026-11-14T10:30:00Z | candidate | confirmed | Phase 0 sweep: 5 services match Providentia | nmap scan llm-wiki/raw/network-sweep-2026-11-14.md | recon |
+| 2026-11-14T14:15:00Z | confirmed | compromised | Initial access via CVE-2024-XXXX | agent ID a1b2c3, persist-swarm deployed | initial-access |
+```
+
+Columns: ISO-8601 timestamp, previous classification, new classification,
+human-readable reason, evidence pointer (raw dump path, agent ID, scan
+reference), skill/phase that triggered reclassification.
 
 ## Operations
 
@@ -85,7 +148,7 @@ exclusions:
    Path: `llm-wiki/wiki/engagements/<id>.md`
    Content sections:
    - **## Overview** — engagement ID, start date, operator, team, mode, scope
-   - **## Targets** — added after RT-TGT-001 approval (host, IP, phase, status, wiki page link)
+   - **## Targets** — added after RT-TGT-001 approval (host, IP, OS, classification, phase, wiki page link)
    - **## Reachability** — populated by Phase 0 sweep
    - **## Agents** — self-agent ID, target agents as they're deployed
    - **## Credentials** — REFS ONLY (tuoni_cred_id, type, username, domain, source)
@@ -109,9 +172,74 @@ in the current message. Discovered hosts are NOT automatically in scope.
 1. Confirm operator explicitly named the targets in this message.
 2. For each target, query `range_targets` or `range_host` via range-intel for
    ground truth (IP, role, OS, services).
-3. Update Obsidian engagement page `## Targets` section with new target entries.
-4. Create Obsidian target page (`llm-wiki/wiki/targets/<hostname>.md`) if not exists.
-5. Report: targets added, total scope count.
+3. Set initial classification to `candidate` for each target.
+4. Update Obsidian engagement page `## Targets` table with new entries including
+   classification column:
+   ```markdown
+   | Host | IP | OS | Classification | Phase | Wiki |
+   |------|----|----|----------------|-------|------|
+   | <hostname> | <ip> | <os> | candidate | pending | [[targets/<hostname>]] |
+   ```
+5. Create Obsidian target page (`llm-wiki/wiki/targets/<hostname>.md`) if not exists.
+   Include `classification: candidate` in frontmatter and initialize empty
+   `## Classification History` table.
+6. Update engagement YAML target entry:
+   ```yaml
+   targets:
+     - hostname: <target>
+       classification: candidate
+       phase: pending
+       wiki_page: llm-wiki/wiki/targets/<hostname>.md
+   ```
+7. Report: targets added as candidates, total scope count.
+   Remind operator: targets need recon Phase 0 before they become `confirmed`.
+
+### Reclassify Target
+
+Trigger: automatic after recon Phase 0 sweep, after initial-access attempt,
+after lateral-move landing, or operator says "reclassify", "mark target as",
+"target is unreachable", "target compromised".
+
+**Auto-reclassification points** (skills invoke this automatically):
+- **recon Phase 0**: `candidate` → `confirmed` | `unreachable` | `different-than-expected`
+- **initial-access**: `confirmed` → `compromised` | `hardened` | `patched`
+- **lateral-move**: `confirmed` → `compromised` (on successful pivot landing)
+- **Operator override**: any transition at any time with stated reason
+
+**Procedure:**
+
+1. Validate transition is legal per state machine (see Target Classification).
+   Illegal transitions (e.g., `candidate` → `compromised` skipping `confirmed`)
+   require operator override with explicit reason.
+2. Read current classification from Obsidian target page frontmatter.
+3. Update Obsidian target page:
+   a. Set `classification: <new>` in frontmatter.
+   b. Append row to `## Classification History` table:
+      `| <ISO-8601> | <old> | <new> | <reason> | <evidence> | <actor-skill> |`
+4. Update Obsidian engagement page `## Targets` table: set classification column.
+5. Update engagement YAML target entry: `classification: <new>`.
+6. Apply Obsidian tag: `#classification/<new>` to target page.
+7. Report reclassification to operator.
+
+**Post-reclassification actions:**
+
+| New Classification | Action |
+|--------------------|--------|
+| `confirmed` | Target eligible for Phase 1+ recon and initial-access. |
+| `unreachable` | Log reason. Skip in attack planning. Re-check after pivot. |
+| `different-than-expected` | Alert operator. Log Providentia discrepancy. Await guidance. |
+| `compromised` | Trigger persist-swarm if not already deployed. Update agent list. |
+| `hardened` | Log exhausted vectors. Deprioritize unless new intel arrives. |
+| `patched` | Log specific patch evidence. Flag for Providentia accuracy feedback. |
+
+**Bulk reclassification** (after Phase 0 sweep): reclassify all scanned targets
+in one pass. Group by new classification and report summary:
+```
+Reclassification summary:
+  confirmed: 5 (host1, host2, ...)
+  unreachable: 2 (host3, host4)
+  different-than-expected: 1 (host5 — expected SSH+HTTP, found only RDP)
+```
 
 ### Record Technique Outcome
 
@@ -177,16 +305,36 @@ Trigger: after detection validation step in purple mode.
 ### Query Engagement
 
 Trigger: "what targets", "what creds", "what techniques worked on <host>",
-"engagement status", "scope check".
+"engagement status", "scope check", "show confirmed targets",
+"show unreachable targets", "show compromised", "target status".
 
 Read Obsidian engagement page (`obsidian_read_note`) and answer the query:
 - **Targets**: read `## Targets` section
+- **Targets by classification**: filter `## Targets` table by classification column.
+  Supports: "show all confirmed", "show unreachable", "show candidates",
+  "show compromised", "show hardened", "show patched", "show different-than-expected".
+  Also: "show actionable" = confirmed (not yet compromised/hardened/patched).
+  Also: "show stale candidates" = candidate targets with no recon Phase 0 data.
+- **Target classification history**: read specific target page `## Classification History`
+- **Classification summary**: count per classification state:
+  ```
+  Target classifications:
+    candidate: 2
+    confirmed: 4
+    unreachable: 1
+    compromised: 2
+    hardened: 1
+  ```
 - **Credentials**: read `## Credentials` section (refs only, never actual creds)
 - **Techniques on host**: read `## Techniques Tried`, filter by target
 - **Findings**: read `## Findings`, filter by result=success/partial
 - **Next steps**: read `## Next Steps`
 - **Detection scores** (purple): per-technique and average
-- **Status summary**: target count, agent count, finding count, cred ref count
+- **Status summary**: target count (by classification), agent count, finding count, cred ref count
+
+Additionally, search by Obsidian tags for cross-engagement queries:
+- `#classification/confirmed` — all confirmed targets across engagements
+- `#classification/compromised` — all compromised targets across engagements
 
 ### Cross-Session Resume
 
@@ -403,6 +551,7 @@ After every note write, apply tags via `obsidian_add_tags`:
 | `#engagement/<id>` | Every note created during this engagement |
 | `#phase/<phase>` | recon, initial-access, discovery, cred-harvest, persist, lateral |
 | `#target/<hostname>` | Every note mentioning a specific target |
+| `#classification/<state>` | candidate, confirmed, unreachable, different-than-expected, compromised, hardened, patched — updated on reclassification (replace previous classification tag) |
 | `#mitre/<T-id>` | Every technique note with MITRE mapping |
 | `#result/<outcome>` | success, failed, partial, blocked |
 

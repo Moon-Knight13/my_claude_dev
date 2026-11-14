@@ -149,7 +149,7 @@ ALL scanning from Kali — NEVER from hub.
 - Also: `net-recon routing_recon` + `net-recon web_fingerprint` via tuoni plugins
 - Capture: every open port, every service version string, every banner
 
-**Step 4: Cross-reference with Providentia**
+**Step 4: Cross-reference with Providentia + reclassify targets**
 - Match responding hosts against `range_targets_summary`
 - Categorize each Providentia host:
   - **REACHABLE** — responds, has service:version table
@@ -157,6 +157,11 @@ ALL scanning from Kali — NEVER from hub.
   - **UNREACHABLE** — no route or no response
   - **NOT_DEPLOYED** — Providentia lists it but tagged not_ready/no IP
 - Flag discrepancies: services found but not in Providentia = HIGH VALUE
+- **Invoke engagement-state Reclassify Target** for each scanned host:
+  - REACHABLE + services match Providentia → `confirmed`
+  - REACHABLE + services diverge significantly → `different-than-expected`
+  - FILTERED / UNREACHABLE / NOT_DEPLOYED → `unreachable`
+  - Use bulk reclassification: one pass, grouped summary to operator
 
 **Step 5: Write to Obsidian** (the ONLY place scan results live)
 - Per reachable host → create/update `llm-wiki/wiki/targets/<hostname>.md`
@@ -165,9 +170,10 @@ ALL scanning from Kali — NEVER from hub.
 - Raw dump → `llm-wiki/raw/network-sweep-<date>.md`
 
 **Step 6: Target selection**
-- Only REACHABLE hosts with open ports proceed to research
-- FILTERED hosts need pivot/firewall bypass first
-- Master reviews, gets RT-TGT-001 approval for selected targets
+- Only `confirmed` targets proceed to Phase 1+ research
+- `unreachable` targets need pivot/firewall bypass before re-evaluation
+- `different-than-expected` targets need operator decision before proceeding
+- Master reviews reclassification summary, gets RT-TGT-001 approval for selected targets
 
 **Re-run after lateral movement** opens new network segments — from new
 foothold, not Kali. New hosts get same treatment: scan once, write to Obsidian.
@@ -273,12 +279,13 @@ This prevents threads from shortcutting research to jump to credential testing.
 
 ## Exit criteria
 
+- All targets reclassified from `candidate` (no stale candidates remain)
 - Target profile complete (all Tier 1 sources queried)
 - Active recon results documented (Phase 2 service:version table)
 - Per-service CVE research complete (Phase 3 — ALL services, not just first one)
 - Attack vectors ranked with PoC details (not just CVE numbers)
 - Obsidian target page fully populated (services, CVEs, vectors, PoCs)
-- Engagement YAML updated: phase=recon, status only (detail in Obsidian)
+- Engagement YAML updated: phase=recon, classification set, status only (detail in Obsidian)
 - `/log-finding` invoked for each significant recon result
 
 ## State writes
@@ -290,6 +297,7 @@ This prevents threads from shortcutting research to jump to credential testing.
 # engagement.yaml — LEAN, status only
 targets:
   - hostname: <target>
+    classification: confirmed
     phase: recon
     status: complete
     wiki_page: llm-wiki/wiki/targets/<hostname>.md

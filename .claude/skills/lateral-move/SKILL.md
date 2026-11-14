@@ -181,7 +181,8 @@ After all planned lateral moves complete:
    - Dispatch net-recon sweep from new foothold via tuoni plugin
    - Map what this host can reach that Kali couldn't
    - Update reachability matrix in engagement YAML + Obsidian
-   - Newly-reachable targets become candidates for next lateral wave
+   - Newly-reachable targets added as `candidate`, then reclassified via
+     engagement-state Reclassify Target based on scan results
 3. **Assess new attack surface**:
    - New network segments reachable?
    - New credential harvesting opportunities?
@@ -208,6 +209,7 @@ lateral_moves:
 
 targets:
   - hostname: <new target>
+    classification: compromised
     phase: lateral_move
     access:
       agent_id: <tuoni agent ID>
