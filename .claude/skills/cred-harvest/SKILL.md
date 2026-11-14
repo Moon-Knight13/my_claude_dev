@@ -188,6 +188,86 @@ On Kali (NOT target):
    - `obsidian_add_tags`: `#engagement/<id>`, `#phase/cred-harvest`, `#target/<hostname>`
    - NEVER write actual credential values
 
+### Phase 4.5: Automated Cred-Reuse Spray (same-template hosts)
+
+After storing credentials (Phase 4 gate), automatically identify hosts where
+the same credential is likely valid — same OS, same role/template in
+Providentia. This is TARGETED REUSE, not a broad spray.
+
+**This phase runs automatically after Phase 4.** Operator approval NOT required
+for reuse against same-template hosts (single attempt per host). Operator IS
+notified of results.
+
+#### Step 1: Identify source host template
+
+```
+source_template = range_host(<source hostname>)
+  → extract: os, role, template_name, network_segment, team
+```
+
+#### Step 2: Query same-template hosts
+
+```
+candidates = range_targets_summary()
+  → filter: same os AND (same role OR same template_name)
+  → exclude:
+    - source host itself
+    - hosts already compromised (agent_id present in engagement YAML)
+    - GT infrastructure (RT-SCOPE-001)
+    - hosts outside engagement scope
+    - hosts with active lockout/ban recorded in engagement YAML
+```
+
+If zero candidates remain: skip to Phase 5, log "no reuse targets".
+
+#### Step 3: Lockout gate — invoke opsec-cred-spray
+
+**MANDATORY.** Even single-attempt reuse can trigger fail2ban or PAM lockout.
+
+1. Check engagement YAML for cached lockout policy of target platform
+2. If no cached policy: enumerate per opsec-cred-spray Step 1
+3. Calculate safe parameters per opsec-cred-spray Step 2
+4. For single-attempt reuse: verify threshold >= 2 (need room for one failure)
+5. If threshold unknown: one attempt only, 30-min window between hosts
+6. fail2ban check on gateway targets per opsec-cred-spray (max 1 attempt)
+
+#### Step 4: Execute reuse spray
+
+For each candidate host, strictly sequential:
+
+1. **Single attempt** with harvested credential against matching service
+   - SSH key → SSH port
+   - NTLM hash → SMB/WMI/WinRM (pass-the-hash)
+   - Plaintext → protocol matching source harvest
+   - Kerberos ticket → Kerberos-enabled services
+2. **Wait** between attempts per lockout window (even if threshold allows more)
+3. **Log every attempt** (success AND failure) to engagement YAML:
+   ```yaml
+   cred_reuse_attempts:
+     - credential_ref: <tuoni cred ID>
+       source_host: <where cred was harvested>
+       target_host: <candidate>
+       service: <ssh|smb|winrm|wmi|rdp>
+       result: <success|failed|timeout|banned>
+       timestamp: <ISO 8601>
+   ```
+4. **On success**: store new access in tuoni cred store, mark host as
+   lateral-move ready. Do NOT immediately move — queue for lateral-move skill.
+5. **On failure**: mark cred as invalid for this host. Do NOT retry.
+6. **On ban/lockout**: invoke opsec-cred-spray Step 6 immediately. STOP
+   remaining reuse attempts. Report to operator.
+
+#### Step 5: Reuse results assessment
+
+After all candidates tested:
+
+1. **Report to operator**: table of results (host, service, result)
+2. **Update engagement YAML** `lateral_targets[]` on source cred ref
+3. **Update Obsidian** target pages for successful reuse hits
+4. **Queue lateral-move** for confirmed hosts (feed to lateral-move Phase 1)
+5. **Technique scoring**: if technique-scoring data available, record
+   reuse success rate by template type for future prioritization
+
 ### Phase 5: Credential Spray (if operator approves)
 
 Only with operator approval and lockout policy enumerated:
@@ -223,6 +303,24 @@ targets:
         type: <hash|plaintext|key|token|ticket>
         scope: <local|domain|service>
         lateral_targets: [<hostnames where cred may work>]
+
+# cred-reuse spray tracking (Phase 4.5)
+cred_reuse_attempts:
+  - credential_ref: <tuoni cred ID>
+    source_host: <host cred was harvested from>
+    target_host: <same-template candidate>
+    template: <Providentia template/role name>
+    service: <ssh|smb|winrm|wmi|rdp>
+    result: <success|failed|timeout|banned>
+    timestamp: <ISO 8601>
+
+cred_reuse_summary:
+  last_run: <ISO 8601>
+  total_candidates: <N>
+  tested: <N>
+  successful: <N>
+  failed: <N>
+  skipped_lockout: <N>
 ```
 
 ### Obsidian writes (llm-wiki paths — ENFORCED)
