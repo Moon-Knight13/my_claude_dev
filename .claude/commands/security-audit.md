@@ -1,3 +1,9 @@
+---
+name: security-audit
+description: "/security-audit — Full Security Scan with ATLAS Coverage"
+modes: [platform-ops, dev, red-dev]
+---
+
 # /security-audit — Full Security Scan with ATLAS Coverage
 
 Run a comprehensive security audit of the current working tree, map findings to MITRE ATLAS techniques, and produce a prioritized remediation report.
