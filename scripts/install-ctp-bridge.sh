@@ -65,19 +65,19 @@ install -m 0644 "$SRC_GITGUARD" "$LIB_DIR/git-guard.sh"
 install -m 0644 "$SRC_STACK" "$LIB_DIR/guard-stack.sh"
 install -m 0755 "$SRC_WRAPPER" "$BIN"
 install -m 0755 "$SRC_HOOK" "$HOOK"
-host_info "wrapper -> $BIN"
-host_info "guard   -> $LIB_DIR/ctp-guard.sh"
-host_info "segment -> $LIB_DIR/cmd-segment.sh"
-host_info "safety  -> $LIB_DIR/safety-guard.sh"
-host_info "gitguard-> $LIB_DIR/git-guard.sh"
-host_info "stack   -> $LIB_DIR/guard-stack.sh"
-host_info "hook    -> $HOOK"
+host_info "wrapper    -> $BIN"
+host_info "guard      -> $LIB_DIR/ctp-guard.sh"
+host_info "segment    -> $LIB_DIR/cmd-segment.sh"
+host_info "safety     -> $LIB_DIR/safety-guard.sh"
+host_info "gitguard   -> $LIB_DIR/git-guard.sh"
+host_info "stack      -> $LIB_DIR/guard-stack.sh"
+host_info "hook       -> $HOOK"
 
 # --- 2. seed config (never overwrite an existing target) ---------------------
 if [[ -f "$CONF" ]]; then
     host_note "kept existing $CONF (your settings are preserved)"
     # Migrate: a config seeded before a key existed would silently lack it, and a
-    # missing required key (e.g. CTP_ALLOWED_TEAM) reads as "configured" while the
+    # missing required key (e.g. CTP_ALLOWED_TEAM_NR) reads as "configured" while the
     # gate is actually unset. Append any example key the config does not have, at
     # its example (fail-closed) value, so it is visible to fill in.
     _added=0
@@ -91,8 +91,8 @@ if [[ -f "$CONF" ]]; then
     [[ "$_added" == 0 ]] && host_note "config has all current keys"
 else
     install -m 0600 "$SRC_CONF_EXAMPLE" "$CONF"
-    host_info "seeded $CONF — set CTP_ALLOWED_TARGET and CTP_ALLOWED_TEAM before deploying"
-    host_note "until they are set, every deploy is refused (safe default)."
+    host_info "seeded $CONF — set CTP_ALLOWED_TEAM_NR before deploying"
+    host_note "until CTP_ALLOWED_TEAM_NR is set, every deploy is refused (safe default)."
 fi
 
 # --- 2b. seed the destructive-action gate config (never overwrite) -----------

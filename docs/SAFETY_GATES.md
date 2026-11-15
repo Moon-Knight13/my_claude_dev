@@ -29,14 +29,16 @@ The gates that matter, all in code on the parsed argv (never string-matched), an
 shared between wrapper and hook via `scripts/lib/ctp-guard.sh` so the two cannot
 drift:
 
-- **Two gates on a mutating target, both mandatory.** A **team gate** —
-  `CTP_ALLOWED_TEAM`, e.g. `t02` — requires the target to end with the authorised
-  team suffix, so a deploy cannot land on a live team by mistake; it holds even if
-  the box list is widened, and fails closed when unset. A **box allow-list** —
-  `CTP_ALLOWED_TARGET`, one named box — on top of it. A glob metacharacter in a
-  target is refused outright.
-- **Reachable verbs.** Mutating: `host deploy`, `host deploy-role` (team + box
-  gated). Read: `host list <box>` (verify a target) and `project update-inventory`
+- **Two gates on a mutating target.** A **live inventory query** —
+  `CTP_ALLOWED_TEAM_NR`, e.g. `10` — queries the target via `ansible-inventory
+  --host` on the catapult container (the same Providentia plugin actual deploys
+  use). The returned `actor_nr_str` must match the configured team number. Fails
+  closed: no team configured = refuse; host not in inventory = refuse; query
+  failure = refuse. An **explicit override** — `CTP_ALLOWED_TARGET` — bypasses
+  the query for custom-named hosts. A glob metacharacter in a target is refused
+  outright.
+- **Reachable verbs.** Mutating: `host deploy`, `host deploy-role` (inventory
+  query gated). Read: `host list <box>` (verify a target) and `project update-inventory`
   (required after making a Providentia box). `host vars`/`redeploy`/`remove` are
   not reachable (`vars` would stream box detail into the transcript); `secrets` and
   `make` are refused outright (credentials). Every reachable verb is still

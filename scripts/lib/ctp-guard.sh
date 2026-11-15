@@ -19,10 +19,12 @@
 # 1 if the file is missing (the caller decides whether that is fatal). Values are
 # taken literally; no shell expansion beyond a leading ~ in secret paths.
 CTP_ALLOWED_TARGET=""
+CTP_ALLOWED_TEAM_NR=""
 CTP_ALLOWED_TEAM=""
 CTP_ALLOWED_VERBS="deploy deploy-role"
 CTP_CONTAINER=""
 CTP_PROJECT_DIR=""
+CTP_INVENTORY_PATH=""
 CTP_SECRET_PATHS=""
 CTP_PII_PATHS=""
 CTP_REMOTE_HOST=""
@@ -39,14 +41,16 @@ ctp_load_config() {
         key="${key//[[:space:]]/}"
         # shellcheck disable=SC2034  # CTP_PROJECT_DIR is consumed cross-file by ctp-bridge.sh
         case "$key" in
-            CTP_ALLOWED_TARGET) CTP_ALLOWED_TARGET="$val" ;;
-            CTP_ALLOWED_TEAM)   CTP_ALLOWED_TEAM="$val" ;;
-            CTP_ALLOWED_VERBS)  CTP_ALLOWED_VERBS="$val" ;;
-            CTP_CONTAINER)      CTP_CONTAINER="$val" ;;
-            CTP_PROJECT_DIR)    CTP_PROJECT_DIR="$val" ;;
-            CTP_SECRET_PATHS)   CTP_SECRET_PATHS="$val" ;;
-            CTP_PII_PATHS)      CTP_PII_PATHS="$val" ;;
-            CTP_REMOTE_HOST)    CTP_REMOTE_HOST="$val" ;;
+            CTP_ALLOWED_TARGET)  CTP_ALLOWED_TARGET="$val" ;;
+            CTP_ALLOWED_TEAM_NR) CTP_ALLOWED_TEAM_NR="$val" ;;
+            CTP_ALLOWED_TEAM)    CTP_ALLOWED_TEAM="$val" ;;
+            CTP_ALLOWED_VERBS)   CTP_ALLOWED_VERBS="$val" ;;
+            CTP_CONTAINER)       CTP_CONTAINER="$val" ;;
+            CTP_PROJECT_DIR)     CTP_PROJECT_DIR="$val" ;;
+            CTP_INVENTORY_PATH)  CTP_INVENTORY_PATH="$val" ;;
+            CTP_SECRET_PATHS)    CTP_SECRET_PATHS="$val" ;;
+            CTP_PII_PATHS)       CTP_PII_PATHS="$val" ;;
+            CTP_REMOTE_HOST)     CTP_REMOTE_HOST="$val" ;;
         esac
     done < "$conf"
     return 0
@@ -70,6 +74,65 @@ ctp_container() {
     printf 'catapult-%s' "${CTP_TARGET_USER:-$(id -un)}"
 }
 
+# ctp_inventory_path — the inventory path inside the container.
+ctp_inventory_path() {
+    printf '%s' "${CTP_INVENTORY_PATH:-/srv/inventories/dcm/inventory/}"
+}
+
+# --- live team query ---------------------------------------------------------
+# ctp_query_team <target> — query ansible-inventory for the target's team number.
+# Returns the team number (actor_nr_str) on stdout. Exit codes:
+#   0 — success, team number printed
+#   1 — host not found in inventory (ansible-inventory exit 5)
+#   2 — query failed (SSH/docker/parse error)
+#
+# The query runs: ssh <CTP_REMOTE_HOST> docker exec <container>
+#   ansible-inventory -i <inventory> -e @<vault> --vault-password-file <unlock>
+#   --host <target> 2>/dev/null | jq -r '.actor_nr_str'
+#
+# Override CTP_QUERY_TEAM_FN with a function name to replace this for testing.
+ctp_query_team() {
+    if [[ -n "${CTP_QUERY_TEAM_FN:-}" ]] && declare -F "$CTP_QUERY_TEAM_FN" >/dev/null 2>&1; then
+        "$CTP_QUERY_TEAM_FN" "$@"
+        return $?
+    fi
+
+    local target="$1"
+    local container inventory_path remote_host
+    container="$(ctp_container)"
+    inventory_path="$(ctp_inventory_path)"
+    remote_host="${CTP_REMOTE_HOST:-}"
+
+    local docker_cmd
+    docker_cmd=(docker exec "$container"
+        /home/builder/catapult-venv/.venv/bin/ansible-inventory
+        -i "$inventory_path"
+        -e "@/home/builder/.vault/vlt"
+        --vault-password-file /home/builder/.vault/unlock-vault.sh
+        --host "$target")
+
+    local output rc
+    if [[ -n "$remote_host" ]]; then
+        output="$(ssh -o BatchMode=yes "$remote_host" "${docker_cmd[@]}" 2>/dev/null)" && rc=0 || rc=$?
+    else
+        output="$("${docker_cmd[@]}" 2>/dev/null)" && rc=0 || rc=$?
+    fi
+
+    if [[ "$rc" -eq 5 ]]; then
+        return 1
+    elif [[ "$rc" -ne 0 ]]; then
+        return 2
+    fi
+
+    local team_nr
+    team_nr="$(printf '%s' "$output" | jq -r '.actor_nr_str' 2>/dev/null)" || return 2
+    if [[ -z "$team_nr" || "$team_nr" == "null" ]]; then
+        return 2
+    fi
+    printf '%s' "$team_nr"
+    return 0
+}
+
 # --- glob / target -----------------------------------------------------------
 # ctp_has_glob <string> — 0 if it contains a glob metacharacter. deploy and
 # deploy '*' are different classes; one character must not separate a listing
@@ -88,24 +151,21 @@ ctp_has_glob() {
 # class is one of: mutating | read | inventory — the wrapper uses it to pick
 # preconditions. The verdict is derived from the parsed argv only.
 #
-# Two independent gates protect a mutating verb, and BOTH must pass:
-#   - team gate: the target must belong to the authorised team (CTP_ALLOWED_TEAM),
-#     i.e. end with _<team>. This is the protection against deploying to a live
-#     team by mistake; it holds even if the box allow-list is later widened.
-#   - box allow-list: the target must equal CTP_ALLOWED_TARGET (one named box).
-# Both fail closed: an unset team or target refuses every mutating verb.
+# Two gates protect a mutating verb:
+#   - explicit override: CTP_ALLOWED_TARGET (space-separated hostnames) —
+#     a target matching any entry passes immediately (custom-named hosts).
+#   - live inventory query: CTP_ALLOWED_TEAM_NR (comma-separated team numbers,
+#     e.g. "10" or "10,2"). The target is queried via ansible-inventory on
+#     the catapult container; the returned actor_nr_str must match any entry.
+# Fail closed: no team configured = refuse; host not in inventory = refuse.
 ctp_classify() {
     local a1="${1:-}" a2="${2:-}" a3="${3:-}" a4="${4:-}" verb target
     case "$a1" in
         secrets)
             printf 'refuse credential-verb-refused-outright'; return 1 ;;
         make)
-            # make start/restart/stop are host-shell lifecycle + credential entry,
-            # not ctp verbs; never run through the bridge.
             printf 'refuse lifecycle-verb-refused-outright'; return 1 ;;
         project)
-            # update-inventory is the required step after making a Providentia box
-            # (nothing else has a target; refuse any other project subverb).
             if [[ "$a2" == "update-inventory" && -z "$a3" ]]; then
                 printf 'confirm inventory update-inventory -'; return 0
             fi
@@ -118,8 +178,6 @@ ctp_classify() {
 
     case "$verb" in
         list)
-            # read-only verification. A concrete target only — no bulk dump of the
-            # whole range into the transcript.
             [[ -n "$target" ]] || { printf 'refuse list-needs-a-target-no-bulk-listing'; return 1; }
             [[ -z "$a4" ]] || { printf 'refuse unexpected-extra-args'; return 1; }
             [[ "$target" == "all" ]] && { printf 'refuse list-all-refused-no-bulk-dump'; return 1; }
@@ -135,28 +193,49 @@ ctp_classify() {
             printf 'refuse unknown-host-verb:%s' "${verb:-<empty>}"; return 1 ;;
     esac
 
-    # --- mutating verb: allow-list, glob, team gate, box gate ---
+    # --- mutating verb: allow-list, glob, team gate ---
     local allowed=" $CTP_ALLOWED_VERBS "
     [[ "$allowed" == *" $verb "* ]] || { printf 'refuse verb-not-in-config-allow-list:%s' "$verb"; return 1; }
     [[ -n "$target" ]] || { printf 'refuse mutating-verb-needs-a-target:%s' "$verb"; return 1; }
     [[ -z "$a4" ]] || { printf 'refuse unexpected-extra-args'; return 1; }
     ctp_has_glob "$target" && { printf 'refuse glob-in-target-refused:%s' "$verb"; return 1; }
-    # team gate (mandatory, fail closed; space-separated list of allowed teams)
-    [[ -n "$CTP_ALLOWED_TEAM" ]] || { printf 'refuse no-authorised-team-configured'; return 1; }
-    local _team_suffix="${target##*_}" _team_ok=false _t
-    for _t in $CTP_ALLOWED_TEAM; do
-        [[ "$_team_suffix" == "$_t" ]] && { _team_ok=true; break; }
-    done
-    [[ "$_team_ok" == true ]] || { printf 'refuse target-not-in-authorised-team:%s' "$CTP_ALLOWED_TEAM"; return 1; }
-    # box allow-list (optional; space-separated list of allowed targets)
+    # resolve effective team number (CTP_ALLOWED_TEAM is deprecated alias)
+    local _eff_team_nr="$CTP_ALLOWED_TEAM_NR"
+    if [[ -z "$_eff_team_nr" && -n "$CTP_ALLOWED_TEAM" ]]; then
+        _eff_team_nr="$CTP_ALLOWED_TEAM"
+    fi
+    [[ -n "$_eff_team_nr" ]] || { printf 'refuse no-team-configured'; return 1; }
+    # explicit target override: CTP_ALLOWED_TARGET bypasses inventory query
     if [[ -n "$CTP_ALLOWED_TARGET" ]]; then
-        local _box_ok=false _b
+        local _explicit_ok=false _b
         for _b in $CTP_ALLOWED_TARGET; do
-            [[ "$target" == "$_b" ]] && { _box_ok=true; break; }
+            [[ "$target" == "$_b" ]] && { _explicit_ok=true; break; }
         done
-        [[ "$_box_ok" == true ]] || { printf 'refuse target-not-allowed'; return 1; }
+        if [[ "$_explicit_ok" == true ]]; then
+            printf 'confirm mutating %s %s' "$verb" "$target"; return 0
+        fi
+    fi
+    # live inventory query: target must belong to the configured team
+    local _query_team_nr _query_rc
+    _query_team_nr="$(ctp_query_team "$target")" && _query_rc=0 || _query_rc=$?
+    if [[ "$_query_rc" -eq 1 ]]; then
+        printf >&2 'ctp-guard: %s not in inventory (ansible-inventory exit 5)\n' "$target"
+        printf 'refuse host-not-in-inventory:%s' "$target"; return 1
+    elif [[ "$_query_rc" -ne 0 ]]; then
+        printf >&2 'ctp-guard: inventory query failed for %s (rc=%d)\n' "$target" "$_query_rc"
+        printf 'refuse inventory-query-failed:%s' "$target"; return 1
+    fi
+    local _team_match=false _t
+    IFS=',' read -ra _team_list <<< "$_eff_team_nr"
+    for _t in "${_team_list[@]}"; do
+        [[ "$_query_team_nr" == "$_t" ]] && { _team_match=true; break; }
+    done
+    if [[ "$_team_match" != true ]]; then
+        printf >&2 'ctp-guard: %s belongs to team %s, allowed: %s\n' "$target" "$_query_team_nr" "$_eff_team_nr"
+        printf 'refuse host-belongs-to-team-%s-not-%s' "$_query_team_nr" "$_eff_team_nr"; return 1
     fi
 
+    printf >&2 'ctp-guard: %s confirmed team %s (allowed: %s)\n' "$target" "$_query_team_nr" "$_eff_team_nr"
     printf 'confirm mutating %s %s' "$verb" "$target"; return 0
 }
 

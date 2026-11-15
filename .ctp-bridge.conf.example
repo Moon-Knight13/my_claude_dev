@@ -12,16 +12,23 @@
 # Format: KEY=value, one per line. Lines starting with # are ignored. No shell
 # expansion is performed on values.
 
-# The single box this harness may deploy to, named EXACTLY (including the team
-# suffix). Any mutating verb naming anything else is refused. One name, no
-# wildcard, no list. Example shape: some-box_t02
+# Explicit hostname override: space-separated hostnames this harness may deploy
+# to WITHOUT querying the inventory. Use for custom-named hosts that do not
+# appear in any team's Providentia inventory. A glob metacharacter is refused.
+# Leave empty to rely entirely on the live inventory query (the normal case).
 CTP_ALLOWED_TARGET=
 
-# The authorised team suffix. A mutating target MUST end with _<team> — this is
-# the gate that stops a deploy landing on a live team by mistake, and it holds
-# even if the box allow-list above is ever widened. Both gates must pass. Fail
-# closed: if this is unset, every mutating verb is refused. Example: t02
-CTP_ALLOWED_TEAM=
+# Authorised team numbers: comma-separated list of team numbers this harness
+# may deploy to (e.g. "10" or "10,2"). A mutating target is queried via
+# ansible-inventory on the catapult container — the returned actor_nr_str must
+# match any entry in this list. Targets in CTP_ALLOWED_TARGET bypass the query.
+# Fail closed: if this is unset, every mutating verb is refused.
+CTP_ALLOWED_TEAM_NR=
+
+# Deprecated — kept for backward compatibility. If CTP_ALLOWED_TEAM_NR is unset
+# and this is set, its value is treated as a team number (same semantics as
+# CTP_ALLOWED_TEAM_NR). Prefer CTP_ALLOWED_TEAM_NR for new installs.
+# CTP_ALLOWED_TEAM=
 
 # The MUTATING verbs the wrapper will run. Allow-list: a verb not named here is
 # refused. Read verbs (host list <box>, project update-inventory) are reachable
@@ -38,6 +45,10 @@ CTP_CONTAINER=
 # runtime (run the wrapper from your range checkout). Set this only to pin a fixed
 # project regardless of CWD.
 CTP_PROJECT_DIR=
+
+# Inventory path inside the catapult container. Used by the live team query
+# (ansible-inventory --host). Default: /srv/inventories/dcm/inventory/
+CTP_INVENTORY_PATH=
 
 # Secret paths the hook refuses to let any tool read (Read tool or a Bash command
 # naming the path), so their contents never reach the transcript. Space-separated
