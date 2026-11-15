@@ -42,6 +42,7 @@ CONF="$TMP/.ctp-bridge.conf"
 cat > "$CONF" <<EOF
 CTP_ALLOWED_TARGET=custom-box
 CTP_ALLOWED_TEAM_NR=10
+CTP_ALLOWED_ENCLAVES=hn af
 CTP_ALLOWED_VERBS=deploy deploy-role
 CTP_CONTAINER=catapult-tester
 CTP_PROJECT_DIR=/srv/inventories/range
@@ -135,6 +136,18 @@ check "list with extra arg -> refuse"          "$(cls host list mail-hn extra)" 
   check "query failure -> refuse"               "$(cls host deploy mail-hn)"      refuse
 )
 
+# enclave gate tests (#330)
+( CTP_ALLOWED_ENCLAVES="hn"; CTP_ALLOWED_TEAM_NR="10"; CTP_ALLOWED_TARGET=""
+  check "enclave: allowed suffix passes"           "$(cls host deploy mail-hn)"    confirm
+  check "enclave: wrong suffix refused"            "$(cls host deploy mail-af)"    refuse
+)
+( CTP_ALLOWED_ENCLAVES=""; CTP_ALLOWED_TEAM_NR="10"; CTP_ALLOWED_TARGET=""
+  check "enclave: empty allowlist skips gate"      "$(cls host deploy mail-hn)"    confirm
+)
+( CTP_ALLOWED_ENCLAVES="hn af"; CTP_ALLOWED_TARGET="special-host"; CTP_ALLOWED_TEAM_NR="10"
+  check "enclave: explicit target bypasses enclave" "$(cls host deploy special-host)" confirm
+)
+
 # liveness probe (via mock override)
 ( CTP_PROBE_HOST_FN="_mock_probe_alive"
   _pa() { ctp_probe_host_alive "$1" && echo alive || echo dead; }
@@ -205,13 +218,13 @@ chmod +x "$BIN/docker"
 run_wrap() { # run_wrap <stdin> -- args...   ; prints nothing, sets RC
     local input="$1"; shift; [[ "$1" == "--" ]] && shift
     PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_BRIDGE_LOG="$TMP/count.log" \
-        CTP_QUERY_TEAM_FN="_mock_query_team" \
+        CTP_BRIDGE_STATE="$TMP/state" CTP_QUERY_TEAM_FN="_mock_query_team" \
         bash "$ROOT/scripts/ctp-bridge.sh" "$@" <<<"$input" >/dev/null 2>&1
     RC=$?
 }
 
 run_wrap "" -- host deploy mail-hn;  check "non-interactive deploy refused (no auto-yes)" "$RC" 5
-ASSUME_YES=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_QUERY_TEAM_FN="_mock_query_team" bash "$ROOT/scripts/ctp-bridge.sh" host deploy mail-hn </dev/null >/dev/null 2>&1
+ASSUME_YES=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_BRIDGE_STATE="$TMP/state" CTP_QUERY_TEAM_FN="_mock_query_team" bash "$ROOT/scripts/ctp-bridge.sh" host deploy mail-hn </dev/null >/dev/null 2>&1
 check "ASSUME_YES refused" "$?" 5
 run_wrap "" -- secrets edit;              check "refused verb exits before docker (3)" "$RC" 3
 run_wrap "" -- host deploy mail-af;   check "wrong-team deploy refused (3)" "$RC" 3
@@ -224,32 +237,57 @@ check "vault locked refuses a read too (4)" "$?" 4
 # check and refuses later at the confirm gate (no token, non-interactive) = 5
 MOCK_VAULT_LOCKED=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_QUERY_TEAM_FN="_mock_query_team" bash "$ROOT/scripts/ctp-bridge.sh" project update-inventory </dev/null >/dev/null 2>&1
 check "update-inventory skips the vault check (5, not 4)" "$?" 5
-MOCK_BUSY=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_QUERY_TEAM_FN="_mock_query_team" bash "$ROOT/scripts/ctp-bridge.sh" host deploy mail-hn </dev/null >/dev/null 2>&1
-check "busy refused (4)" "$?" 4
+# pgrep-based "busy" check replaced by flock-based conflict detection — see below
 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$TMP/nope.conf" CTP_QUERY_TEAM_FN="_mock_query_team" bash "$ROOT/scripts/ctp-bridge.sh" host deploy mail-hn </dev/null >/dev/null 2>&1
 check "missing config refused (2)" "$?" 2
 
 # --- liveness check: redeploy of a live host (#351) ---
 MOCK_HOST_ALIVE=0 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_BRIDGE_LOG="$TMP/count.log" \
-    CTP_QUERY_TEAM_FN="_mock_query_team" \
+    CTP_BRIDGE_STATE="$TMP/state" CTP_QUERY_TEAM_FN="_mock_query_team" \
     bash "$ROOT/scripts/ctp-bridge.sh" host deploy mail-hn </dev/null >/dev/null 2>&1
 check "live host without CTP_FORCE_REDEPLOY refused (7)" "$?" 7
 MOCK_HOST_ALIVE=0 CTP_FORCE_REDEPLOY=true PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" \
-    CTP_BRIDGE_LOG="$TMP/count.log" CTP_QUERY_TEAM_FN="_mock_query_team" \
+    CTP_BRIDGE_LOG="$TMP/count.log" CTP_BRIDGE_STATE="$TMP/state" CTP_QUERY_TEAM_FN="_mock_query_team" \
     bash "$ROOT/scripts/ctp-bridge.sh" host deploy mail-hn </dev/null >/dev/null 2>&1
 check "live host with CTP_FORCE_REDEPLOY -> confirm gate (5)" "$?" 5
 MOCK_HOST_ALIVE=0 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_BRIDGE_LOG="$TMP/count.log" \
-    CTP_QUERY_TEAM_FN="_mock_query_team" \
+    CTP_BRIDGE_STATE="$TMP/state" CTP_QUERY_TEAM_FN="_mock_query_team" \
     bash "$ROOT/scripts/ctp-bridge.sh" host deploy-role mail-hn </dev/null >/dev/null 2>&1
 check "live host deploy-role also refused (7)" "$?" 7
 MOCK_HOST_ALIVE=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_BRIDGE_LOG="$TMP/count.log" \
-    CTP_QUERY_TEAM_FN="_mock_query_team" \
+    CTP_BRIDGE_STATE="$TMP/state" CTP_QUERY_TEAM_FN="_mock_query_team" \
     bash "$ROOT/scripts/ctp-bridge.sh" host deploy mail-hn </dev/null >/dev/null 2>&1
 check "unreachable host skips liveness gate (5)" "$?" 5
 MOCK_HOST_ALIVE=0 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_BRIDGE_LOG="$TMP/count.log" \
-    CTP_QUERY_TEAM_FN="_mock_query_team" \
+    CTP_BRIDGE_STATE="$TMP/state" CTP_QUERY_TEAM_FN="_mock_query_team" \
     bash "$ROOT/scripts/ctp-bridge.sh" host list mail-hn </dev/null >/dev/null 2>&1
 check "read class skips liveness gate (5)" "$?" 5
+
+# --- conflict detection: flock-based per-host lock (#330) ---
+_LOCK_STATE="$TMP/state"
+mkdir -p "$_LOCK_STATE/locks"
+(
+    exec 9>>"$_LOCK_STATE/locks/mail-hn.lock"
+    flock 9
+    printf '%s\t%s\t%s\n' "$$" "$(date -u +%FT%TZ)" "deploy" > "$_LOCK_STATE/locks/mail-hn.lock"
+    sleep 30
+) &
+_LOCK_HOLDER=$!
+sleep 0.5
+PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_BRIDGE_STATE="$_LOCK_STATE" CTP_BRIDGE_LOG="$TMP/count.log" \
+    CTP_QUERY_TEAM_FN="_mock_query_team" \
+    bash "$ROOT/scripts/ctp-bridge.sh" host deploy mail-hn </dev/null >/dev/null 2>&1
+check "conflict: second deploy to same host refused (4)" "$?" 4
+PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_BRIDGE_STATE="$_LOCK_STATE" CTP_BRIDGE_LOG="$TMP/count.log" \
+    CTP_QUERY_TEAM_FN="_mock_query_team" \
+    bash "$ROOT/scripts/ctp-bridge.sh" host deploy dc-hn </dev/null >/dev/null 2>&1
+check "conflict: different host allowed (5)" "$?" 5
+kill "$_LOCK_HOLDER" 2>/dev/null; wait "$_LOCK_HOLDER" 2>/dev/null || true
+sleep 0.2
+PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_BRIDGE_STATE="$_LOCK_STATE" CTP_BRIDGE_LOG="$TMP/count.log" \
+    CTP_QUERY_TEAM_FN="_mock_query_team" \
+    bash "$ROOT/scripts/ctp-bridge.sh" host deploy mail-hn </dev/null >/dev/null 2>&1
+check "conflict: lock released after holder exits (5)" "$?" 5
 
 # --- hook-approval token: the agent path (no TTY) runs iff a valid token exists
 STATE="$TMP/state"; mkdir -p "$STATE"; APPROVAL="$STATE/approval"
@@ -312,7 +350,7 @@ fi
 # to allocate one; skip honestly if unavailable.
 if command -v script >/dev/null 2>&1; then
     rm -f "$TMP/count.log"
-    script -qec "PATH='$BIN:$PATH' CTP_BRIDGE_CONF='$CONF' CTP_BRIDGE_LOG='$TMP/count.log' CTP_QUERY_TEAM_FN='_mock_query_team' bash '$ROOT/scripts/ctp-bridge.sh' host deploy-role mail-hn" /dev/null <<<"y" >"$TMP/run.out" 2>&1
+    script -qec "PATH='$BIN:$PATH' CTP_BRIDGE_CONF='$CONF' CTP_BRIDGE_LOG='$TMP/count.log' CTP_BRIDGE_STATE='$TMP/state' CTP_QUERY_TEAM_FN='_mock_query_team' bash '$ROOT/scripts/ctp-bridge.sh' host deploy-role mail-hn" /dev/null <<<"y" >"$TMP/run.out" 2>&1
     # The mock echoes the full docker-exec argv; the ctp args must arrive as
     # trailing positional params (zsh -s -- host deploy-role mail-hn).
     # The setup script is piped to stdin (zsh -s), so only the positional args

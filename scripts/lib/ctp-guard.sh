@@ -19,6 +19,7 @@
 # 1 if the file is missing (the caller decides whether that is fatal). Values are
 # taken literally; no shell expansion beyond a leading ~ in secret paths.
 CTP_ALLOWED_TARGET=""
+CTP_ALLOWED_ENCLAVES=""
 CTP_ALLOWED_TEAM_NR=""
 CTP_ALLOWED_TEAM=""
 CTP_ALLOWED_VERBS="deploy deploy-role"
@@ -41,7 +42,8 @@ ctp_load_config() {
         key="${key//[[:space:]]/}"
         # shellcheck disable=SC2034  # CTP_PROJECT_DIR is consumed cross-file by ctp-bridge.sh
         case "$key" in
-            CTP_ALLOWED_TARGET)  CTP_ALLOWED_TARGET="$val" ;;
+            CTP_ALLOWED_TARGET)   CTP_ALLOWED_TARGET="$val" ;;
+            CTP_ALLOWED_ENCLAVES) CTP_ALLOWED_ENCLAVES="$val" ;;
             CTP_ALLOWED_TEAM_NR) CTP_ALLOWED_TEAM_NR="$val" ;;
             CTP_ALLOWED_TEAM)    CTP_ALLOWED_TEAM="$val" ;;
             CTP_ALLOWED_VERBS)   CTP_ALLOWED_VERBS="$val" ;;
@@ -213,6 +215,17 @@ ctp_classify() {
         done
         if [[ "$_explicit_ok" == true ]]; then
             printf 'confirm mutating %s %s' "$verb" "$target"; return 0
+        fi
+    fi
+    # enclave gate: target suffix must be in CTP_ALLOWED_ENCLAVES (if set)
+    if [[ -n "$CTP_ALLOWED_ENCLAVES" ]]; then
+        local _suffix="${target##*-}"
+        local _enclave_ok=false _e
+        for _e in $CTP_ALLOWED_ENCLAVES; do
+            [[ "$_suffix" == "$_e" ]] && { _enclave_ok=true; break; }
+        done
+        if [[ "$_enclave_ok" != true ]]; then
+            printf 'refuse enclave-not-allowed:%s' "$_suffix"; return 1
         fi
     fi
     # live inventory query: target must belong to the configured team

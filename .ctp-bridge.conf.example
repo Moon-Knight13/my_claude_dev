@@ -18,6 +18,13 @@
 # Leave empty to rely entirely on the live inventory query (the normal case).
 CTP_ALLOWED_TARGET=
 
+# Enclave allowlist: space-separated enclave suffixes (the last hyphen-delimited
+# segment of a hostname, e.g. "hn" matches mail-hn, dc-hn). A target whose
+# suffix is not in this list is refused before the team query runs (fail fast).
+# Targets in CTP_ALLOWED_TARGET bypass the enclave check.
+# Leave empty to skip the enclave gate (backward compatible).
+CTP_ALLOWED_ENCLAVES=
+
 # Authorised team numbers: comma-separated list of team numbers this harness
 # may deploy to (e.g. "10" or "10,2"). A mutating target is queried via
 # ansible-inventory on the catapult container — the returned actor_nr_str must

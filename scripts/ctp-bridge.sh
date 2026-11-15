@@ -133,11 +133,19 @@ if [[ "$CLASS" != "inventory" ]]; then
         exit 4
     fi
 fi
-if [[ "$CLASS" == "mutating" ]]; then
-    if _docker exec "$CONTAINER" pgrep -f 'ansible-playbook|ctp ' >/dev/null 2>&1; then
-        host_warn "a run is already in progress in '$CONTAINER' — refusing to start a second"
+if [[ "$CLASS" == "mutating" && -n "$TARGET" ]]; then
+    _LOCK_DIR="$(ctp_state_dir)/locks"
+    mkdir -p "$_LOCK_DIR"
+    _LOCK_FILE="$_LOCK_DIR/${TARGET}.lock"
+    exec 9>>"$_LOCK_FILE"
+    if ! flock --nonblock 9; then
+        _holder=""
+        IFS=$'\t' read -r _holder _ < "$_LOCK_FILE" 2>/dev/null || true
+        host_warn "deploy to '$TARGET' already in progress (PID ${_holder:-unknown})"
+        exec 9>&-
         exit 4
     fi
+    printf '%s\t%s\t%s\n' "$$" "$(date -u +%FT%TZ 2>/dev/null || echo unknown)" "$VERB" > "$_LOCK_FILE"
 fi
 
 # --- liveness check: refuse redeploy of a live host without override (#351) ---
