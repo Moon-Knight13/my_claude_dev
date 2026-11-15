@@ -239,6 +239,44 @@ ctp_classify() {
     printf 'confirm mutating %s %s' "$verb" "$target"; return 0
 }
 
+# --- liveness probe -----------------------------------------------------------
+# ctp_probe_host_alive <target> — 0 if the target responds to a network probe
+# (single ICMP ping inside the catapult container). Used by ctp-bridge.sh to
+# warn before redeploying a host that is already live.
+#
+# Exit codes:
+#   0 — host responded (reachable)
+#   1 — host did not respond or probe failed (unreachable)
+#
+# Override CTP_PROBE_HOST_FN with a function name to replace this for testing.
+ctp_probe_host_alive() {
+    if [[ -n "${CTP_PROBE_HOST_FN:-}" ]] && declare -F "$CTP_PROBE_HOST_FN" >/dev/null 2>&1; then
+        "$CTP_PROBE_HOST_FN" "$@"
+        return $?
+    fi
+
+    local target="$1"
+    local container remote_host
+    container="$(ctp_container)"
+    remote_host="${CTP_REMOTE_HOST:-}"
+
+    local docker_cmd=(docker exec "$container" ping -c 1 -W 3 "$target")
+    local rc
+
+    if [[ -n "$remote_host" ]]; then
+        ssh -o BatchMode=yes "$remote_host" "${docker_cmd[@]}" >/dev/null 2>&1 && rc=0 || rc=$?
+    else
+        "${docker_cmd[@]}" >/dev/null 2>&1 && rc=0 || rc=$?
+    fi
+
+    if [[ "$rc" -eq 0 ]]; then
+        printf >&2 'ctp-guard: %s responded to probe (host is live)\n' "$target"
+    else
+        printf >&2 'ctp-guard: %s did not respond to probe\n' "$target"
+    fi
+    return "$rc"
+}
+
 # --- secret paths ------------------------------------------------------------
 # ctp_expand_tilde <path> — leading ~ to the target user's home.
 ctp_expand_tilde() {
