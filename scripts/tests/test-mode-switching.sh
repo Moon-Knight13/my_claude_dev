@@ -114,6 +114,26 @@ else
     ok platform-ops-no-offensive-mcps
 fi
 
+# --- 8b. Base mode has only essential MCPs, no offensive servers ---------------
+base_servers="$(_get_mode_servers base)"
+if echo "$base_servers" | grep -q "obsidian-mcp" \
+   && echo "$base_servers" | grep -q "outline-readonly" \
+   && echo "$base_servers" | grep -q "range-intel" \
+   && ! echo "$base_servers" | grep -q "tuoni-mcp" \
+   && ! echo "$base_servers" | grep -q "hacktricks-mcp" \
+   && ! echo "$base_servers" | grep -q "nuclei-mcp"; then
+    ok base-has-essential-mcps-only
+else
+    bad base-has-essential-mcps-only "base should have obsidian+outline+range-intel, no offensive MCPs"
+fi
+
+# --- 8c. Default mode in setup-mcp-servers.sh is base, not all ----------------
+if grep -q 'MODE="${1:-base}"' "$MCP_SCRIPT"; then
+    ok default-mode-is-base
+else
+    bad default-mode-is-base "setup-mcp-servers.sh default should be base, not all"
+fi
+
 # --- 9. System prompt merge produces non-empty file --------------------------
 merged_claude="$(cat "$MODES_DIR/base/CLAUDE.md"; echo ""; cat "$MODES_DIR/red-team/system-prompt.md")"
 if [[ -n "$merged_claude" ]] && echo "$merged_claude" | grep -q "Workflow Contract" && echo "$merged_claude" | grep -q "red-team"; then

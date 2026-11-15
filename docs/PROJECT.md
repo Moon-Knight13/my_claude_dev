@@ -42,7 +42,7 @@ network.
 
 ### Hub-and-spoke topology
 
-- **Hub:** this repo's devcontainer, running Claude Code with 13 MCP servers.
+- **Hub:** this repo's devcontainer, running Claude Code with 13 MCP servers (3 in base mode; full set loaded per mode).
 - **Kali spoke (primary):** Tuoni C2 agent is main channel. SSH is fallback.
 - **Deploy box spoke:** catapult container, ctp-bridge gate.
 - **Range services:** Providentia (CMDB), GitLab (code), Outline wiki (docs).
