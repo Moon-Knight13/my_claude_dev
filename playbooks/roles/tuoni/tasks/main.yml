@@ -1,0 +1,48 @@
+---
+- name: Create Tuoni install directory
+  ansible.builtin.file:
+    path: "{{ tuoni_install_dir }}"
+    state: directory
+    owner: "{{ tuoni_user }}"
+    group: "{{ tuoni_group }}"
+    mode: "0755"
+
+- name: Check if Tuoni jar exists
+  ansible.builtin.stat:
+    path: "{{ tuoni_install_dir }}/{{ tuoni_jar_name }}"
+  register: tuoni_jar
+
+- name: Fail if jar not present and no source configured
+  ansible.builtin.fail:
+    msg: >
+      Tuoni jar not found at {{ tuoni_install_dir }}/{{ tuoni_jar_name }}.
+      Copy the jar manually or set tuoni_jar_source in inventory to a local path.
+  when:
+    - not tuoni_jar.stat.exists
+    - tuoni_jar_source is not defined
+
+- name: Copy Tuoni jar from local source
+  ansible.builtin.copy:
+    src: "{{ tuoni_jar_source }}"
+    dest: "{{ tuoni_install_dir }}/{{ tuoni_jar_name }}"
+    owner: "{{ tuoni_user }}"
+    group: "{{ tuoni_group }}"
+    mode: "0644"
+  when:
+    - not tuoni_jar.stat.exists
+    - tuoni_jar_source is defined
+  notify: Restart tuoni
+
+- name: Deploy Tuoni systemd unit
+  ansible.builtin.template:
+    src: tuoni.service.j2
+    dest: /etc/systemd/system/tuoni.service
+    mode: "0644"
+  notify: Restart tuoni
+
+- name: Enable and start Tuoni service
+  ansible.builtin.systemd:
+    name: tuoni
+    enabled: true
+    state: started
+    daemon_reload: true

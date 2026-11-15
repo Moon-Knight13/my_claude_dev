@@ -1,0 +1,30 @@
+---
+# Kali Bootstrap Playbook
+#
+# Brings a fresh Kali box to operational state:
+#   Java 25 + Tuoni server (systemd) + offensive tooling + SSH keys
+#
+# Usage:
+#   ansible-playbook -i inventory.ini playbooks/kali-bootstrap.yml
+#
+# All sensitive values (IPs, tokens, listener config) live in inventory
+# or vault — nothing operational enters this repository.
+
+- name: Bootstrap Kali attack box
+  hosts: kali
+  become: true
+
+  vars_files:
+    - vars/tuoni.yml
+
+  pre_tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+  roles:
+    - java
+    - offensive-tools
+    - tuoni
+    - ssh-keys
