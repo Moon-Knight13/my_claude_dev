@@ -88,14 +88,25 @@ fi
 SKILL_BLOCK=""
 FILTER_LINES=""
 if [[ -n "$MATCHED_SKILLS" ]]; then
-  FILTER_LINES="Skills: $MATCHED_SKILLS."
+  FILTER_LINES="Preferred skills: $MATCHED_SKILLS."
 fi
 if [[ -n "$MATCHED_COMMANDS" ]]; then
   [[ -n "$FILTER_LINES" ]] && FILTER_LINES="$FILTER_LINES\n"
   FILTER_LINES="${FILTER_LINES}Commands: $MATCHED_COMMANDS."
 fi
+
+# Suppress bmad in modes where it is not permitted
+BMAD_SUPPRESS=""
+if [[ -n "$MATCHED_COMMANDS" ]]; then
+  if ! printf '%s' "$MATCHED_COMMANDS" | grep -qw "bmad"; then
+    BMAD_SUPPRESS="\nDo NOT invoke bmad- prefixed skills or commands — they are not permitted in this mode."
+  fi
+else
+  BMAD_SUPPRESS="\nDo NOT invoke bmad- prefixed skills or commands — they are not permitted in this mode."
+fi
+
 if [[ -n "$FILTER_LINES" ]]; then
-  SKILL_BLOCK="$(printf '\n\n### Skill Filter for %s mode\n%b\nSkills/commands outside this list are blocked by skill-mode-gate hook.' "$MODE" "$FILTER_LINES")"
+  SKILL_BLOCK="$(printf '\n\n### Skill Filter for %s mode\n%b\nSkills/commands outside this list are blocked by skill-mode-gate hook.%b' "$MODE" "$FILTER_LINES" "$BMAD_SUPPRESS")"
 fi
 
 # Build full context string, then JSON-encode the whole thing

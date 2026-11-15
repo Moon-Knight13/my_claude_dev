@@ -106,7 +106,7 @@ fi
 header "Stale project memories (>30 days)"
 
 now_epoch=$(date +%s)
-stale_threshold=$((30 * 86400))
+stale_days=30
 stale=0
 
 for f in "$MEMORY_DIR"/*.md; do
@@ -134,7 +134,7 @@ for f in "$MEMORY_DIR"/*.md; do
     fi
 
     age_days=$(( (now_epoch - mod_epoch) / 86400 ))
-    if ((age_days > 30)); then
+    if ((age_days > stale_days)); then
         yellow "  $(basename "$f"): project memory, $age_days days old"
         ((stale++)) || true
     fi
