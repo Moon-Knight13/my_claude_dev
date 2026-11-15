@@ -7,12 +7,13 @@
 # .env vars flow consistently — no stale baked-in values.
 #
 # Usage:
-#   setup-mcp-servers.sh              # all servers → .mcp.json
+#   setup-mcp-servers.sh              # base servers → .mcp.json (default)
 #   setup-mcp-servers.sh red-team     # red-team servers → .mcp-red-team.json
+#   setup-mcp-servers.sh all          # all servers → .mcp.json (override)
 #   setup-mcp-servers.sh --list       # print catalog server names
 #
-# When a mode is specified, output goes to .mcp-<mode>.json (parallel-safe).
-# When no mode is specified (or "all"), output goes to .mcp.json.
+# "base" and "all" write to .mcp.json; other modes to .mcp-<mode>.json.
+# Default is "base" so bare claude/T3/IDE sessions load only essential servers.
 #
 # Idempotent: overwrites target file each run. All .mcp*.json are gitignored.
 set -euo pipefail
@@ -152,14 +153,20 @@ CATALOG_JSON
 # "all" is a special pseudo-mode that includes every server.
 declare -A MODE_SERVERS
 MODE_SERVERS[all]="obsidian-mcp rea-mcp hacktricks-mcp mitre-mcp lolbins-mcp cve-mcp nuclei-mcp local-ollama range-intel outline-readonly tuoni-mcp bloodhound-mcp hashcat-mcp"
+MODE_SERVERS[base]="obsidian-mcp outline-readonly range-intel"
 MODE_SERVERS[platform-ops]="local-ollama"
+MODE_SERVERS[dev]="obsidian-mcp"
+MODE_SERVERS[green-dev]="range-intel outline-readonly"
+MODE_SERVERS[homelab]="obsidian-mcp cve-mcp nuclei-mcp"
 MODE_SERVERS[red-team]="tuoni-mcp range-intel outline-readonly obsidian-mcp hacktricks-mcp mitre-mcp lolbins-mcp cve-mcp nuclei-mcp bloodhound-mcp hashcat-mcp"
 MODE_SERVERS[red-dev]="tuoni-mcp rea-mcp hacktricks-mcp mitre-mcp obsidian-mcp lolbins-mcp cve-mcp bloodhound-mcp hashcat-mcp"
-MODE_SERVERS[green-dev]="range-intel outline-readonly"
 MODE_SERVERS[purple]="tuoni-mcp range-intel outline-readonly obsidian-mcp hacktricks-mcp mitre-mcp lolbins-mcp cve-mcp nuclei-mcp bloodhound-mcp hashcat-mcp"
+MODE_SERVERS[ctf]="tuoni-mcp obsidian-mcp hacktricks-mcp mitre-mcp lolbins-mcp cve-mcp hashcat-mcp rea-mcp bloodhound-mcp"
+MODE_SERVERS[bounty]="obsidian-mcp hacktricks-mcp mitre-mcp lolbins-mcp cve-mcp nuclei-mcp hashcat-mcp"
+MODE_SERVERS[pentest]="tuoni-mcp obsidian-mcp hacktricks-mcp mitre-mcp lolbins-mcp cve-mcp nuclei-mcp bloodhound-mcp hashcat-mcp"
 
 # --- Argument handling ---
-MODE="${1:-all}"
+MODE="${1:-base}"
 
 if [[ "$MODE" == "--list" ]]; then
     echo "$CATALOG" | jq -r 'keys[]' | sort
@@ -172,8 +179,8 @@ if [[ "$MODE" != "all" && -z "${MODE_SERVERS[$MODE]+x}" ]]; then
     exit 1
 fi
 
-# Per-mode output file (parallel-safe); "all" goes to .mcp.json
-if [[ "$MODE" == "all" ]]; then
+# Per-mode output file (parallel-safe); "all" and "base" go to .mcp.json
+if [[ "$MODE" == "all" || "$MODE" == "base" ]]; then
     MCP_FILE="$PROJECT_DIR/.mcp.json"
 else
     MCP_FILE="$PROJECT_DIR/.mcp-${MODE}.json"
