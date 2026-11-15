@@ -23,6 +23,7 @@ secrets.*
 .claude/statsig/
 .claude/.active-mode
 .claude/.research-gate-active
+.claude/.remote-approval-required
 .claude/audit/
 engagements/
 .ai/

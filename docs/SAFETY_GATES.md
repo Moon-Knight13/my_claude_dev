@@ -232,6 +232,7 @@ fires only when the tool name matches (pipe-delimited for multi-tool matchers).
 | `PreToolUse` | `""` | `.claude/hooks/research-dispatch-guard.sh` | Force research MCPs to T3 threads |
 | `PreToolUse` | `Bash\|Read\|Write\|Edit` | `.claude/hooks/pretooluse-ctp.sh` | Guard stack: ctp, secrets, PII, destructive ops, git |
 | `PreToolUse` | `Bash` | `.claude/hooks/tuoni-secret-guard.sh` | Block Bash access to Tuoni secret paths |
+| `PreToolUse` | `t3_thread_launch\|create_threads\|delegate_task` | `.claude/hooks/remote-thread-approval-guard.sh` | Enforce approval-required for remote threads |
 | `PostToolUse` | `""` | `scripts/hooks/response-scanner.sh` | Warn on secrets in tool output |
 | `PostToolUse` | `mcp__tuoni-mcp__tuoni_command_get` | `.claude/hooks/auto-log-finding.sh` | Prompt `/log-finding` on actionable results |
 | `Stop` | `""` | `.claude/hooks/session-end-audit.sh` | Audit engagement YAML for gaps |
@@ -452,6 +453,56 @@ can also guard these paths via the guard stack. Both hooks fire independently
 for Bash commands. The tuoni guard is a targeted, self-contained backup that
 works even if the guard stack is not installed.
 
+#### `remote-thread-approval-guard.sh` — remote thread runtime mode enforcement
+
+**Trigger:** `mcp__t3-code__t3_thread_launch`, `mcp__t3-code__create_threads`,
+`mcp__t3-code__delegate_task` only.
+
+**Logic:** When any of three remote-origin signals is detected, the hook
+inspects the tool input for `runtimeMode`. If the mode is not
+`approval-required`, the call is denied with a message explaining what to set.
+
+**Remote-origin signals (any one triggers enforcement):**
+1. `.claude/.remote-approval-required` flag file exists (operator always-on
+   gate — analogous to `.research-gate-active`).
+2. `environmentId` present in the tool input or its `target` object
+   (cross-environment thread creation, meaning the caller targets a different
+   machine).
+3. `CLAUDE_CODE_SESSION_ATTENDED=0` AND the T3 server listens on `0.0.0.0` or
+   has T3 Connect active (`privateNetworkOnly: false` in
+   `~/.t3/userdata/server-runtime.json`). This catches automated remote-access
+   scenarios where no human is watching the session.
+
+**Verdict:** DENY if remote-originated AND `runtimeMode` is not
+`approval-required`. The denial names which signal triggered and what mode to
+set. Exit 0 with no output (no opinion) for local sessions or when the correct
+mode is already set.
+
+**Bypass conditions (any one skips enforcement):**
+- No remote-origin signal detected (local attended session, no flag file, no
+  `environmentId`).
+- `runtimeMode: "approval-required"` explicitly set in the tool call.
+- Delete `.claude/.remote-approval-required` to disable the flag gate.
+
+**For `create_threads`:** Each thread object in the `threads` array is checked.
+If ANY thread lacks `runtimeMode: "approval-required"`, the entire call is
+denied.
+
+**Mode interaction:** This hook is mode-agnostic. It fires regardless of
+active mode because the threat model is about remote privilege escalation,
+not mode-specific policy.
+
+**Edge case — child sessions:** A delegated child session
+(`CLAUDE_CODE_CHILD_SESSION=1`) that itself creates further threads is gated
+by the same signals. If the child's parent was remote-originated, the flag
+file provides persistent enforcement across the delegation chain.
+
+**Edge case — false positives on unattended sessions:** Local background
+agents (scheduled tasks, `/loop`) also have `CLAUDE_CODE_SESSION_ATTENDED=0`.
+Signal 3 alone triggers only when BOTH unattended AND remote access is
+enabled on the T3 server. Use the flag file (signal 1) for unconditional
+enforcement regardless of server configuration.
+
 ### PostToolUse hooks
 
 #### `response-scanner.sh` — tool output secret scanner
@@ -588,6 +639,7 @@ environment.
 | `response-scanner.sh` | Yes | Logs active mode to audit trail |
 | `audit-trail.sh` | Yes | Logs active mode to audit trail |
 | `session-end-audit.sh` | No | Checks engagement YAML, not mode |
+| `remote-thread-approval-guard.sh` | No | Mode-agnostic; gates by remote-origin signals |
 
 ### Known edge cases and gaps
 
