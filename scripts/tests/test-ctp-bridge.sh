@@ -120,6 +120,7 @@ check "list with extra arg -> refuse"          "$(cls host list mail-hn extra)" 
   check "unknown host -> refuse (not in inventory)" "$(cls host deploy trainbox)"  refuse
 )
 # mock returning error (query-failed path)
+# shellcheck disable=SC2329  # invoked indirectly via CTP_QUERY_TEAM_FN
 ( _mock_query_fail() { return 2; }
   CTP_QUERY_TEAM_FN="_mock_query_fail"
   CTP_ALLOWED_TEAM_NR="10"; CTP_ALLOWED_TARGET=""

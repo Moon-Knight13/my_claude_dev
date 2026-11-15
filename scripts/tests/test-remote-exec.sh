@@ -21,6 +21,7 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 # mock team query for classification tests
+# shellcheck disable=SC2329  # invoked indirectly via CTP_QUERY_TEAM_FN
 _mock_query_team() {
     local target="$1"
     case "$target" in
