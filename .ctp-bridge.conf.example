@@ -18,11 +18,11 @@
 # Leave empty to rely entirely on the live inventory query (the normal case).
 CTP_ALLOWED_TARGET=
 
-# Authorised team number: the single team number this harness may deploy to
-# (e.g. 10). A mutating target is queried via ansible-inventory on the
-# catapult container — the returned actor_nr_str must match this value. Targets
-# in CTP_ALLOWED_TARGET bypass the query. Fail closed: if this is unset, every
-# mutating verb is refused.
+# Authorised team numbers: comma-separated list of team numbers this harness
+# may deploy to (e.g. "10" or "10,2"). A mutating target is queried via
+# ansible-inventory on the catapult container — the returned actor_nr_str must
+# match any entry in this list. Targets in CTP_ALLOWED_TARGET bypass the query.
+# Fail closed: if this is unset, every mutating verb is refused.
 CTP_ALLOWED_TEAM_NR=
 
 # Deprecated — kept for backward compatibility. If CTP_ALLOWED_TEAM_NR is unset

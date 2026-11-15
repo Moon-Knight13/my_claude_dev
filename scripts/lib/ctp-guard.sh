@@ -154,9 +154,9 @@ ctp_has_glob() {
 # Two gates protect a mutating verb:
 #   - explicit override: CTP_ALLOWED_TARGET (space-separated hostnames) —
 #     a target matching any entry passes immediately (custom-named hosts).
-#   - live inventory query: CTP_ALLOWED_TEAM_NR (a single team number). The
-#     target is queried via ansible-inventory on the catapult container; the
-#     returned actor_nr_str must match this value.
+#   - live inventory query: CTP_ALLOWED_TEAM_NR (comma-separated team numbers,
+#     e.g. "10" or "10,2"). The target is queried via ansible-inventory on
+#     the catapult container; the returned actor_nr_str must match any entry.
 # Fail closed: no team configured = refuse; host not in inventory = refuse.
 ctp_classify() {
     local a1="${1:-}" a2="${2:-}" a3="${3:-}" a4="${4:-}" verb target
@@ -223,7 +223,12 @@ ctp_classify() {
     elif [[ "$_query_rc" -ne 0 ]]; then
         printf 'refuse inventory-query-failed:%s' "$target"; return 1
     fi
-    if [[ "$_query_team_nr" != "$_eff_team_nr" ]]; then
+    local _team_match=false _t
+    IFS=',' read -ra _team_list <<< "$_eff_team_nr"
+    for _t in "${_team_list[@]}"; do
+        [[ "$_query_team_nr" == "$_t" ]] && { _team_match=true; break; }
+    done
+    if [[ "$_team_match" != true ]]; then
         printf 'refuse host-belongs-to-team-%s-not-%s' "$_query_team_nr" "$_eff_team_nr"; return 1
     fi
 

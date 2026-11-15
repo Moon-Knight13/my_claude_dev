@@ -93,6 +93,16 @@ check "list with extra arg -> refuse"          "$(cls host list mail-hn extra)" 
 ( CTP_ALLOWED_TEAM_NR=""; CTP_ALLOWED_TEAM=""
   check "no team configured -> refuse"          "$(cls host deploy mail-hn)"      refuse
 )
+# multi-team support
+( CTP_ALLOWED_TEAM_NR="10,05"; CTP_ALLOWED_TEAM=""; CTP_ALLOWED_TARGET=""
+  check "multi-team: team 10 host allowed"      "$(cls host deploy dc-hn)"        confirm
+  check "multi-team: team 05 host allowed"      "$(cls host deploy mail-af)"      confirm
+  check "multi-team: unknown host refused"      "$(cls host deploy unknown-zz)"   refuse
+)
+( CTP_ALLOWED_TEAM_NR="05,20"; CTP_ALLOWED_TARGET=""
+  check "multi-team: team 10 not in list"       "$(cls host deploy dc-hn)"        refuse
+  check "multi-team: team 05 in list"           "$(cls host deploy mail-af)"      confirm
+)
 # CTP_ALLOWED_TEAM backward compat
 ( CTP_ALLOWED_TEAM_NR=""; CTP_ALLOWED_TEAM="10"; CTP_ALLOWED_TARGET=""
   check "CTP_ALLOWED_TEAM backward compat"      "$(cls host deploy mail-hn)"      confirm
