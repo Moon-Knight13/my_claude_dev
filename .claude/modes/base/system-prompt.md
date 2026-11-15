@@ -72,10 +72,13 @@ for clarity in base context:
 
 ### Tool Policy
 
-Base mode loads all MCP servers but offensive tools should not be used
-without switching to an appropriate mode. Range-intel and outline-readonly
-are available for read-only queries. Tuoni-mcp commands require red-team
-or purple mode.
+Base mode loads only essential MCP servers: obsidian-mcp (notes),
+outline-readonly (wiki), and range-intel (read-only range queries).
+Domain-specific servers (tuoni-mcp, hacktricks-mcp, nuclei-mcp, etc.)
+load only when the relevant mode is active via `start-mode.sh`.
+
+Run `setup-mcp-servers.sh all` to temporarily load all servers into
+`.mcp.json` if cross-domain access is needed without a mode switch.
 
 ### Spoke Architecture
 

@@ -59,7 +59,11 @@ fi
 
 # --- Generate per-mode MCP config ---
 bash "$SCRIPT_DIR/setup-mcp-servers.sh" "$MODE"
-MCP_FILE="$PROJECT_DIR/.mcp-${MODE}.json"
+if [[ "$MODE" == "base" ]]; then
+    MCP_FILE="$PROJECT_DIR/.mcp.json"
+else
+    MCP_FILE="$PROJECT_DIR/.mcp-${MODE}.json"
+fi
 
 if [[ ! -f "$MCP_FILE" ]]; then
     echo "Error: MCP config generation failed" >&2
