@@ -1,0 +1,18 @@
+FROM kalilinux/kali-rolling:latest
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openjdk-25-jre-headless \
+    nmap \
+    responder \
+    bloodhound \
+    pipx \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pipx install netexec && pipx install impacket
+
+WORKDIR /app
+COPY files/TuoniServerApplication.jar /app/TuoniServerApplication.jar
+
+ENV TUONI_HEAP_SIZE=2G
+
+ENTRYPOINT ["sh", "-c", "java -Xmx${TUONI_HEAP_SIZE} -jar /app/TuoniServerApplication.jar"]

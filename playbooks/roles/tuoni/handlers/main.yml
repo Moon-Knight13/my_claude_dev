@@ -1,0 +1,6 @@
+---
+- name: Restart tuoni
+  ansible.builtin.systemd:
+    name: tuoni
+    state: restarted
+    daemon_reload: true

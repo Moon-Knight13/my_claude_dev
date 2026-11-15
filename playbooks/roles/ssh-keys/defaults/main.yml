@@ -1,0 +1,3 @@
+---
+ssh_authorized_keys_file: ""
+ssh_target_user: "root"

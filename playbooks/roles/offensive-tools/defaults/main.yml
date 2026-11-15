@@ -1,0 +1,9 @@
+---
+offensive_apt_packages:
+  - nmap
+  - responder
+  - bloodhound
+
+offensive_pip_packages:
+  - netexec
+  - impacket

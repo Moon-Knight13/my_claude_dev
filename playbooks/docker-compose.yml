@@ -1,0 +1,28 @@
+---
+# Local dev/testing alternative to the full Ansible playbook.
+# Runs Tuoni server in a Kali-based container with offensive tools.
+#
+# Usage:
+#   docker compose up -d
+#   docker compose exec kali bash
+#
+# The Tuoni jar must be placed at ./files/TuoniServerApplication.jar
+# before building (not committed to the repo).
+
+services:
+  kali:
+    build:
+      context: .
+      dockerfile: Dockerfile.kali
+    container_name: kali-dev
+    hostname: kali-dev
+    ports:
+      - "${TUONI_PORT:-443}:443"
+    volumes:
+      - tuoni-data:/app/data
+    environment:
+      - TUONI_HEAP_SIZE=${TUONI_HEAP_SIZE:-2G}
+    restart: unless-stopped
+
+volumes:
+  tuoni-data:

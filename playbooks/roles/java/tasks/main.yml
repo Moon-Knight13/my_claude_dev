@@ -1,0 +1,11 @@
+---
+- name: Install Java
+  ansible.builtin.apt:
+    name: "{{ java_package }}"
+    state: present
+
+- name: Verify java binary
+  ansible.builtin.command: java -version
+  register: java_check
+  changed_when: false
+  failed_when: java_check.rc != 0

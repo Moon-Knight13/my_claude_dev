@@ -1,0 +1,13 @@
+---
+- name: Skip if no authorized keys file configured
+  ansible.builtin.debug:
+    msg: "ssh_authorized_keys_file not set — skipping key deployment"
+  when: ssh_authorized_keys_file | length == 0
+
+- name: Deploy authorized keys
+  ansible.builtin.authorized_key:
+    user: "{{ ssh_target_user }}"
+    key: "{{ lookup('file', ssh_authorized_keys_file) }}"
+    state: present
+    exclusive: false
+  when: ssh_authorized_keys_file | length > 0

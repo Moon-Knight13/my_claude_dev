@@ -94,3 +94,7 @@ git-guard.conf
 # orchestrator on-box config (mode + model registry, not secrets) and its log
 orchestrator.conf
 orchestrator-log.jsonl
+
+# Kali bootstrap — real inventory and jar artifacts
+playbooks/inventory.ini
+playbooks/files/*.jar
