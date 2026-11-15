@@ -140,6 +140,18 @@ if [[ "$CLASS" == "mutating" ]]; then
     fi
 fi
 
+# --- liveness check: refuse redeploy of a live host without override (#351) ---
+if [[ "$CLASS" == "mutating" && -n "$TARGET" ]]; then
+    if ctp_probe_host_alive "$TARGET"; then
+        host_warn "$TARGET is already reachable — host appears live"
+        if [[ "${CTP_FORCE_REDEPLOY:-}" != "true" ]]; then
+            host_warn "set CTP_FORCE_REDEPLOY=true to confirm redeployment of a live host"
+            exit 7
+        fi
+        host_warn "CTP_FORCE_REDEPLOY=true — proceeding with redeploy of live host"
+    fi
+fi
+
 # --- confirm gate ------------------------------------------------------------
 # Every class is confirmed by a human, per owner policy. Two paths:
 #   - agent path: the Bash tool has no TTY, so the human already confirmed at the

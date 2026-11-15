@@ -30,6 +30,14 @@ _mock_query_team() {
 }
 export -f _mock_query_team
 
+_mock_probe_alive() {
+    case "$1" in
+        mail-hn|dc-hn|ws-hn) return 0 ;;
+        *)                   return 1 ;;
+    esac
+}
+export -f _mock_probe_alive
+
 CONF="$TMP/.ctp-bridge.conf"
 cat > "$CONF" <<EOF
 CTP_ALLOWED_TARGET=custom-box
@@ -127,6 +135,13 @@ check "list with extra arg -> refuse"          "$(cls host list mail-hn extra)" 
   check "query failure -> refuse"               "$(cls host deploy mail-hn)"      refuse
 )
 
+# liveness probe (via mock override)
+( CTP_PROBE_HOST_FN="_mock_probe_alive"
+  _pa() { ctp_probe_host_alive "$1" && echo alive || echo dead; }
+  check "probe: live host detected"        "$(_pa mail-hn)"    alive
+  check "probe: unreachable host detected" "$(_pa trainbox)"   dead
+)
+
 sec() { ctp_is_secret_path "$1" && echo secret || echo ok; }
 check "vault file is secret"        "$(sec /var/tmp/vlt_pf)"            secret
 check "ssh key is secret"           "$(sec /home/tester/.ssh/id_ed25519)" secret
@@ -176,6 +191,9 @@ if [[ "$1" == "exec" ]]; then
   if [[ "$1" == "pgrep" || "$*" == *pgrep* ]]; then
     [[ "${MOCK_BUSY:-0}" == "1" ]] && exit 0 || exit 1
   fi
+  if [[ "$1" == "ping" ]]; then
+    exit "${MOCK_HOST_ALIVE:-1}"
+  fi
   echo "WDIR: $WDIR"
   echo "RAN: $*"
   exit "${MOCK_RUN_RC:-0}"
@@ -210,6 +228,28 @@ MOCK_BUSY=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_QUERY_TEAM_FN="_mock_q
 check "busy refused (4)" "$?" 4
 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$TMP/nope.conf" CTP_QUERY_TEAM_FN="_mock_query_team" bash "$ROOT/scripts/ctp-bridge.sh" host deploy mail-hn </dev/null >/dev/null 2>&1
 check "missing config refused (2)" "$?" 2
+
+# --- liveness check: redeploy of a live host (#351) ---
+MOCK_HOST_ALIVE=0 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_BRIDGE_LOG="$TMP/count.log" \
+    CTP_QUERY_TEAM_FN="_mock_query_team" \
+    bash "$ROOT/scripts/ctp-bridge.sh" host deploy mail-hn </dev/null >/dev/null 2>&1
+check "live host without CTP_FORCE_REDEPLOY refused (7)" "$?" 7
+MOCK_HOST_ALIVE=0 CTP_FORCE_REDEPLOY=true PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" \
+    CTP_BRIDGE_LOG="$TMP/count.log" CTP_QUERY_TEAM_FN="_mock_query_team" \
+    bash "$ROOT/scripts/ctp-bridge.sh" host deploy mail-hn </dev/null >/dev/null 2>&1
+check "live host with CTP_FORCE_REDEPLOY -> confirm gate (5)" "$?" 5
+MOCK_HOST_ALIVE=0 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_BRIDGE_LOG="$TMP/count.log" \
+    CTP_QUERY_TEAM_FN="_mock_query_team" \
+    bash "$ROOT/scripts/ctp-bridge.sh" host deploy-role mail-hn </dev/null >/dev/null 2>&1
+check "live host deploy-role also refused (7)" "$?" 7
+MOCK_HOST_ALIVE=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_BRIDGE_LOG="$TMP/count.log" \
+    CTP_QUERY_TEAM_FN="_mock_query_team" \
+    bash "$ROOT/scripts/ctp-bridge.sh" host deploy mail-hn </dev/null >/dev/null 2>&1
+check "unreachable host skips liveness gate (5)" "$?" 5
+MOCK_HOST_ALIVE=0 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_BRIDGE_LOG="$TMP/count.log" \
+    CTP_QUERY_TEAM_FN="_mock_query_team" \
+    bash "$ROOT/scripts/ctp-bridge.sh" host list mail-hn </dev/null >/dev/null 2>&1
+check "read class skips liveness gate (5)" "$?" 5
 
 # --- hook-approval token: the agent path (no TTY) runs iff a valid token exists
 STATE="$TMP/state"; mkdir -p "$STATE"; APPROVAL="$STATE/approval"
