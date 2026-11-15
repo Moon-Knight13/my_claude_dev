@@ -128,6 +128,20 @@ Compare `tuoni_hosts_list` against `range_targets` for this host's network segme
 - **Hosts Providentia lists but Tuoni hasn't reached** = remaining attack surface
 - Document discrepancies in engagement YAML `discovery.reconciliation`
 
+### Step 1.8: Zone Sweep Documentation
+
+After host and network enumeration, create per-segment zone sweep page in
+Obsidian using template `docs/templates/zone-sweep.md`:
+
+1. Create `llm-wiki/wiki/zone-sweeps/<segment_name>-<date>.md` from template
+2. Fill host discovery table (IP, hostname, OS, Providentia match, status)
+3. Fill open ports and services table from scan results
+4. Fill Providentia reconciliation sections (missing hosts, rogue hosts, service deltas)
+5. Tag: `#zone-sweep`, `#engagement/<id>`, `#phase/discovery`, `#target/<foothold>`
+6. Link from engagement page `## Reachability` section
+
+One zone-sweep page per network segment per scan. Rescan = new page (append date).
+
 ### Step 2: Compare Against Providentia
 
 Query range-intel MCP for expected host state:
@@ -169,6 +183,22 @@ Identify paths to other hosts:
 
 Cross-reference with Providentia network topology to identify
 high-value targets now reachable.
+
+### Step 4.5: Update Reachability Matrix
+
+After lateral movement paths are mapped, update engagement reachability
+matrix using template `docs/templates/reachability-matrix.md`:
+
+1. If no matrix exists for this engagement, create
+   `llm-wiki/wiki/engagements/<engagement_id>-reachability.md` from template
+2. Add or update rows in reachability table for this foothold:
+   - Each reachable destination with port, protocol, status, test method
+3. Update SOCKS proxies section if proxy chains established
+4. Update network segments summary (which segments reachable from which footholds)
+5. Append change log entry with date and source of update
+6. Tag: `#reachability-matrix`, `#engagement/<id>`, `#phase/discovery`
+
+Matrix is cumulative — one per engagement, updated as pivots expand reach.
 
 ### Step 5: Document and Update State
 

@@ -10,6 +10,15 @@ Cache critical range intel into Obsidian vault so engagement threads are
 self-sufficient. Run when range-intel and outline-readonly MCPs are connected
 (any mode — red-team, green-dev, or purple).
 
+## Black-Box Engagement (No-Op)
+
+When engagement YAML has `type: black-box`, this skill is a no-op:
+- Log: `"black-box engagement — authoritative cache skipped (no Providentia/GitLab/Outline)"`
+- Set `cache_timestamp` in engagement YAML to current time
+- Set `cache_mode: black-box` in engagement YAML
+- Return immediately. No MCP queries, no Obsidian cache writes.
+- Downstream skills use live enumeration instead of cached data.
+
 ## Prerequisites
 
 - range-intel + outline-readonly MCPs connected (any mode)

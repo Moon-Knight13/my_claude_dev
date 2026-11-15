@@ -103,6 +103,19 @@ if ((lat_count > 0 && cred_count > 0)); then
   done
 fi
 
+# Optional: type (engagement type — controls source priority)
+eng_type="$(_yq '.type // ""' "$FILE")"
+if [[ -n "$eng_type" ]]; then
+  VALID_TYPES="black-box"
+  type_valid=false
+  for vt in $VALID_TYPES; do [[ "$eng_type" == "$vt" ]] && { type_valid=true; break; }; done
+  if $type_valid; then
+    echo "INFO: type: $eng_type"
+  else
+    err "invalid type: $eng_type (valid: $VALID_TYPES)"
+  fi
+fi
+
 # Optional: kali_agent_id (Tuoni self-agent on Kali)
 kali_id="$(_yq '.kali_agent_id // ""' "$FILE")"
 if [[ -n "$kali_id" ]]; then

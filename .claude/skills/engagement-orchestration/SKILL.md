@@ -21,8 +21,33 @@ T3 threads: execution (one phase per thread, short prompts)
 Kali spoke: ALL offensive network traffic (never from hub)
 Obsidian llm-wiki: shared state bus between all threads
 Tuoni cred store: credentials (never plaintext in Obsidian)
-Engagement YAML: thin gate file only (ID, mode, exclusions, wiki pointer)
+Engagement YAML: thin gate file only (ID, mode, type, exclusions, wiki pointer)
 ```
+
+## Engagement Types
+
+Engagement YAML supports a `type` field that controls source priority:
+
+```yaml
+id: example-001
+mode: red-team
+type: black-box  # optional — omit for standard (full authoritative sources)
+```
+
+| Type | Behavior |
+|------|----------|
+| *(omitted)* | Standard flow — query all authoritative sources (Providentia, GitLab, Outline) |
+| `black-box` | Skip ALL authoritative sources. Go straight to live enumeration + reference MCPs. |
+
+When `type: black-box`:
+1. **engagement-orchestration**: Phase 0 skips `pre-engagement-cache` (nothing to cache)
+2. **recon**: skips Tier 1 authoritative sources entirely, starts at blind recon pipeline
+3. **initial-access**: research gate skips GitLab README and wiki vulns-docs checks
+4. **pre-engagement-cache**: no-op, logs `"black-box engagement — authoritative cache skipped"`
+
+Graceful degradation rule: when any authoritative source returns empty (regardless
+of type), skills fall through to next tier. `type: black-box` makes this explicit
+and skips the queries entirely rather than waiting for empty responses.
 
 ## Intel Source Priority (with failover)
 
@@ -50,9 +75,10 @@ Run these sequentially. No threads needed — master calls skills/MCPs inline.
 1. `/spoke-health` — verify all MCPs + SSH spokes green (includes Obsidian app check — WARN if not running, operator won't see llm-wiki artifacts)
 2. `engagement-state` skill — create thin YAML gate + Obsidian engagement page
 3. `pre-engagement-cache` skill — cache Providentia + wiki + READMEs to Obsidian
+   - **If `type: black-box`:** skip this step. Log: "black-box engagement — authoritative cache skipped". No Providentia/GitLab/Outline queries.
 4. `kali-bootstrap` skill — verify Tuoni + self-agent + plugins + tools on Kali
 
-**Gate:** All 4 must pass before Phase 1. Failures block engagement start.
+**Gate:** Steps 1, 2, 4 must pass before Phase 1. Step 3 is skipped for black-box. Failures block engagement start.
 
 ## Phase 1: Reachability + Enumeration (one thread)
 
