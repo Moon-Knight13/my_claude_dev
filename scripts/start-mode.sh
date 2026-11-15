@@ -73,6 +73,9 @@ fi
 # --- Write active mode marker (for statusline and scripts) ---
 echo "$MODE" > "$PROJECT_DIR/.claude/.active-mode"
 
+# --- Register session for provenance verification ---
+bash "$SCRIPT_DIR/hooks/register-session.sh" 2>/dev/null || true
+
 # --- Report ---
 echo ""
 echo "  Mode:  $MODE"

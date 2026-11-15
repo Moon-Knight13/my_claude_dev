@@ -1,0 +1,77 @@
+# Provenance-based tool-call verification policy.
+#
+# Tools listed here require verified provenance before execution.
+# Provenance = session identity + mode + origin, checked against
+# requirements per tool class.
+#
+# Classes:
+#   critical   — destructive or credential-bearing; require registered
+#                session + correct mode + operator origin (not rogue delegate)
+#   sensitive  — operational tools; require registered session + correct mode
+#   monitored  — logged with full provenance but not gated beyond mode check
+
+# Session registration directory. Each active session writes a file here
+# at startup; the hook checks for its existence.
+session_dir: ".claude/sessions"
+
+# Maximum session age in seconds before provenance is stale (24h).
+max_session_age: 86400
+
+# --- Tool classifications ---------------------------------------------------
+
+critical:
+  # tuoni C2 command execution — highest risk
+  - "mcp__tuoni-mcp__tuoni_command_*"
+  - "mcp__tuoni-mcp__tuoni_agent_*"
+  - "mcp__tuoni-mcp__tuoni_listener_*"
+  # catapult deploy bridge
+  - "mcp__tuoni-mcp__tuoni_plugin_*"
+  # destructive Bash patterns are caught separately by the hook
+
+sensitive:
+  # tuoni read operations
+  - "mcp__tuoni-mcp__tuoni_discovery_*"
+  - "mcp__tuoni-mcp__tuoni_cred_*"
+  # range intel queries
+  - "mcp__range-intel__*"
+  - "mcp__range_intel__*"
+  # obsidian writes
+  - "mcp__obsidian-mcp__create_*"
+  - "mcp__obsidian-mcp__update_*"
+  - "mcp__obsidian-mcp__delete_*"
+
+monitored:
+  # research MCPs — log provenance for audit, no gate
+  - "mcp__hacktricks-mcp__*"
+  - "mcp__mitre-mcp__*"
+  - "mcp__mitre-attack-mcp__*"
+  - "mcp__gtfobins-mcp__*"
+  - "mcp__eip-mcp__*"
+  - "mcp__rea-mcp__*"
+  - "mcp__ghidra-mcp__*"
+
+# Modes allowed for critical tools. Others are denied even with valid session.
+critical_modes:
+  - "red-team"
+  - "purple"
+  - "red-dev"
+  - "pentest"
+  - "ctf"
+  - "bounty"
+
+# Modes allowed for sensitive tools.
+sensitive_modes:
+  - "red-team"
+  - "purple"
+  - "red-dev"
+  - "pentest"
+  - "ctf"
+  - "bounty"
+  - "green-dev"
+  - "platform-ops"
+
+# Destructive Bash detection is handled by the ctp guard stack (pretooluse-ctp.sh)
+# and tuoni-secret-guard.sh. Provenance focuses on MCP tool identity verification.
+# If Bash-level provenance is needed later, add patterns here — but note that
+# regex on the full command string will false-positive on strings inside arguments
+# (e.g. python -c 'code mentioning rm'). Use guard-stack.sh for Bash gating.
