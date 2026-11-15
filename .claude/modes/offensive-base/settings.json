@@ -1,0 +1,4 @@
+{
+  "_mode": "offensive-base",
+  "_description": "Shared offensive rules — not selectable directly. Inherited by red-team, red-dev, purple."
+}

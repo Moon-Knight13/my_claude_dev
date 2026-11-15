@@ -34,6 +34,18 @@ PROMPT_FILE="$MODES_DIR/$MODE/system-prompt.md"
 CONTENT="$(cat "$PROMPT_FILE")"
 [[ -n "$CONTENT" ]] || exit 0
 
+# Prepend offensive-base shared rules for modes with _offensive_base: true
+SETTINGS_FILE="$MODES_DIR/$MODE/settings.json"
+if [[ -f "$SETTINGS_FILE" ]] \
+   && python3 -I -c "import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get('_offensive_base') else 1)" "$SETTINGS_FILE" 2>/dev/null; then
+  SHARED_RULES="$MODES_DIR/offensive-base/shared-rules.md"
+  if [[ -f "$SHARED_RULES" ]]; then
+    CONTENT="$(cat "$SHARED_RULES")
+
+$CONTENT"
+  fi
+fi
+
 # Scan skills and commands for mode-matching frontmatter
 MATCHED_SKILLS=""
 MATCHED_COMMANDS=""
