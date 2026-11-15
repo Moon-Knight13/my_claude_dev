@@ -19,6 +19,7 @@ lockout can compromise the entire engagement.
 - Testing harvested credentials against multiple hosts
 - Any bulk authentication attempt (even 2+ targets)
 - Mention of hydra, crackmapexec, spray, brute in offensive context
+- **cred-harvest Phase 4.5** (automated cred-reuse spray against same-template hosts)
 
 ## Procedure
 
@@ -72,11 +73,13 @@ If lockout policy UNKNOWN:
 ### Step 4: Select passwords
 
 Order by likelihood:
-1. Harvested credentials from other hosts (password reuse)
-2. Seasonal patterns: `Season+Year!` (`Autumn2026!`)
-3. Company name patterns: `CompanyName+123!`
-4. Common defaults for the specific platform (from README/wiki)
-5. Single common password only if nothing else available
+1. **Harvested credentials from same-template hosts** (cred-reuse Phase 4.5 —
+   highest confidence, same build = same default/deployed creds)
+2. Harvested credentials from other hosts (general password reuse)
+3. Seasonal patterns: `Season+Year!` (`Autumn2026!`)
+4. Company name patterns: `CompanyName+123!`
+5. Common defaults for the specific platform (from README/wiki)
+6. Single common password only if nothing else available
 
 ### Step 5: Execute spray
 
