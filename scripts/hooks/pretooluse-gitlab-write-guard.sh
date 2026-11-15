@@ -26,6 +26,10 @@ except Exception: print("")' 2>/dev/null || true)"
 
 [[ -z "$cmd" ]] && exit 0
 
+# Strip heredoc bodies and multi-line string content to avoid matching
+# on example text in gh pr create, commit messages, etc.
+cmd_check="$(printf '%s' "$cmd" | sed "/<<[[:space:]]*['\"]\\{0,1\\}EOF/,/^EOF/d")"
+
 # Helper: emit deny decision
 deny() {
     printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"GitLab write guard: %s"}}\n' "$1"
@@ -33,18 +37,15 @@ deny() {
 }
 
 # --- git push to GitLab ---
-if printf '%s' "$cmd" | grep -qiE 'git\s+((-[Cc]\s+\S+\s+)*)push\b' &&
-   printf '%s' "$cmd" | grep -qiF "$GITLAB_HOST"; then
+if printf '%s' "$cmd_check" | grep -qiE 'git\s+((-[Cc]\s+\S+\s+)*)push\b' &&
+   printf '%s' "$cmd_check" | grep -qiF "$GITLAB_HOST"; then
 
-    # Extract refspecs / branch names after "push"
-    push_args="$(printf '%s' "$cmd" | sed -E 's/.*git\s+((-[Cc]\s+\S+\s+)*)push\s*//')"
+    push_args="$(printf '%s' "$cmd_check" | sed -E 's/.*git\s+((-[Cc]\s+\S+\s+)*)push\s*//')"
 
-    # Allow if pushing to devops-064/* or feat/devops-064-*
     if printf '%s' "$push_args" | grep -qE '(^|\s|:)(devops-064/|feat/devops-064-)'; then
         exit 0
     fi
 
-    # Allow if "origin devops-064/" or "origin feat/devops-064-" pattern
     if printf '%s' "$push_args" | grep -qE 'origin\s+(devops-064/|feat/devops-064-)'; then
         exit 0
     fi
@@ -53,46 +54,46 @@ if printf '%s' "$cmd" | grep -qiE 'git\s+((-[Cc]\s+\S+\s+)*)push\b' &&
 fi
 
 # --- curl to GitLab API ---
-if printf '%s' "$cmd" | grep -qiF "$GITLAB_HOST" &&
-   printf '%s' "$cmd" | grep -qi 'curl\b'; then
+if printf '%s' "$cmd_check" | grep -qiF "$GITLAB_HOST" &&
+   printf '%s' "$cmd_check" | grep -qi 'curl\b'; then
 
     # GET requests always pass
-    if printf '%s' "$cmd" | grep -qiE '\bcurl\b' &&
-       ! printf '%s' "$cmd" | grep -qiE -- '-X\s*(POST|PUT|PATCH|DELETE)|--request\s*(POST|PUT|PATCH|DELETE)|-d\s|--data\b|--data-raw\b|--data-binary\b|--data-urlencode\b|-F\s|--form\b'; then
+    if printf '%s' "$cmd_check" | grep -qiE '\bcurl\b' &&
+       ! printf '%s' "$cmd_check" | grep -qiE -- '-X\s*(POST|PUT|PATCH|DELETE)|--request\s*(POST|PUT|PATCH|DELETE)|-d\s|--data\b|--data-raw\b|--data-binary\b|--data-urlencode\b|-F\s|--form\b'; then
         exit 0
     fi
 
     # MR notes/comments: always allowed (low risk)
-    if printf '%s' "$cmd" | grep -qiE '/merge_requests/[0-9]+/notes'; then
+    if printf '%s' "$cmd_check" | grep -qiE '/merge_requests/[0-9]+/notes'; then
         exit 0
     fi
 
-    # MR creation: only in core/dcm-catapult (project path encoded or ID)
-    if printf '%s' "$cmd" | grep -qiE '/merge_requests(\s|$|[?"])'; then
-        if printf '%s' "$cmd" | grep -qiE '(core(%2F|/)dcm-catapult|projects/core%2Fdcm-catapult)'; then
+    # MR creation: only in core/dcm-catapult
+    if printf '%s' "$cmd_check" | grep -qiE '/merge_requests(\s|$|[?"])'; then
+        if printf '%s' "$cmd_check" | grep -qiE '(core(%2F|/)dcm-catapult|projects/core%2Fdcm-catapult)'; then
             exit 0
         fi
         deny "MR creation blocked — only allowed in core/dcm-catapult project."
     fi
 
     # Issue/board writes: POST (create) allowed, PUT/DELETE blocked
-    if printf '%s' "$cmd" | grep -qiE '/(issues|boards|board_lists)'; then
-        if printf '%s' "$cmd" | grep -qiE -- '-X\s*(PUT|PATCH|DELETE)|--request\s*(PUT|PATCH|DELETE)'; then
+    if printf '%s' "$cmd_check" | grep -qiE '/(issues|boards|board_lists)'; then
+        if printf '%s' "$cmd_check" | grep -qiE -- '-X\s*(PUT|PATCH|DELETE)|--request\s*(PUT|PATCH|DELETE)'; then
             deny "Issue/board modification blocked — only POST (create) allowed."
         fi
         exit 0
     fi
 
     # Wiki writes: only vulns-docs namespace
-    if printf '%s' "$cmd" | grep -qiE '/wikis'; then
-        if printf '%s' "$cmd" | grep -qiE '(vulns-docs|vulns_docs)'; then
+    if printf '%s' "$cmd_check" | grep -qiE '/wikis'; then
+        if printf '%s' "$cmd_check" | grep -qiE '(vulns-docs|vulns_docs)'; then
             exit 0
         fi
         deny "Wiki write blocked — only vulns-docs namespace allowed."
     fi
 
-    # Any other write method to GitLab API
-    if printf '%s' "$cmd" | grep -qiE -- '-X\s*(POST|PUT|PATCH|DELETE)|--request\s*(POST|PUT|PATCH|DELETE)|-d\s|--data\b|--data-raw\b|--data-binary\b|--data-urlencode\b|-F\s|--form\b'; then
+    # Catch-all: block unrecognized write endpoints
+    if printf '%s' "$cmd_check" | grep -qiE -- '-X\s*(POST|PUT|PATCH|DELETE)|--request\s*(POST|PUT|PATCH|DELETE)|-d\s|--data\b|--data-raw\b|--data-binary\b|--data-urlencode\b|-F\s|--form\b'; then
         deny "Unrecognized GitLab API write blocked. Allowed: MR in core/dcm-catapult, MR comments, issue creation, vulns-docs wiki."
     fi
 fi

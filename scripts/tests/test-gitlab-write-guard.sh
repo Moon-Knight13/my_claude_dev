@@ -72,6 +72,9 @@ echo "== catch-all write block =="
 check "random POST blocked"           deny  "curl -X POST https://git.crp.cr14.net/api/v4/projects/123/labels -d 'name=test'"
 check "random DELETE blocked"         deny  "curl -X DELETE https://git.crp.cr14.net/api/v4/projects/123/labels/5"
 
+echo "== heredoc false-positive prevention =="
+check "gh pr with gitlab URLs in body" allow "$(printf 'gh pr create --title \"test\" --body \"$(cat <<'"'"'EOF'"'"'\ncurl -X POST https://git.crp.cr14.net/api/v4/projects/123/labels\nEOF\n)\"')"
+
 echo "== non-gitlab commands (pass through) =="
 check "local git commit"              allow "git commit -m 'test'"
 check "curl to other host"            allow "curl -X POST https://example.com/api -d 'data=1'"
