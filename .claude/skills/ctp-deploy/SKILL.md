@@ -61,7 +61,7 @@ body to a file first; there is nothing unsafe about the command itself.
 1. Make the box on Providentia (outside ctp).
 2. `project update-inventory` — so ctp learns the new box. Without this, the next
    step finds nothing.
-3. `host list <box>` — confirm it resolves and appears in the team cache.
+3. `host list <box>` — confirm it resolves in the inventory.
 4. Write/adjust the playbooks and role content as ordinary files (no bridge
    needed — this is where most of the work is).
 5. First stand-up: `host deploy <box>`.
