@@ -219,8 +219,10 @@ ctp_classify() {
     local _query_team_nr _query_rc
     _query_team_nr="$(ctp_query_team "$target")" && _query_rc=0 || _query_rc=$?
     if [[ "$_query_rc" -eq 1 ]]; then
+        printf >&2 'ctp-guard: %s not in inventory (ansible-inventory exit 5)\n' "$target"
         printf 'refuse host-not-in-inventory:%s' "$target"; return 1
     elif [[ "$_query_rc" -ne 0 ]]; then
+        printf >&2 'ctp-guard: inventory query failed for %s (rc=%d)\n' "$target" "$_query_rc"
         printf 'refuse inventory-query-failed:%s' "$target"; return 1
     fi
     local _team_match=false _t
@@ -229,9 +231,11 @@ ctp_classify() {
         [[ "$_query_team_nr" == "$_t" ]] && { _team_match=true; break; }
     done
     if [[ "$_team_match" != true ]]; then
+        printf >&2 'ctp-guard: %s belongs to team %s, allowed: %s\n' "$target" "$_query_team_nr" "$_eff_team_nr"
         printf 'refuse host-belongs-to-team-%s-not-%s' "$_query_team_nr" "$_eff_team_nr"; return 1
     fi
 
+    printf >&2 'ctp-guard: %s confirmed team %s (allowed: %s)\n' "$target" "$_query_team_nr" "$_eff_team_nr"
     printf 'confirm mutating %s %s' "$verb" "$target"; return 0
 }
 
