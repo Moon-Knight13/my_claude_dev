@@ -90,6 +90,7 @@ set an env var in the same call could otherwise rewrite its own limits.
 | **B · Commit guard** | staged secrets/PII on every commit | **warn + log** (never blocks) | global `core.hooksPath` |
 | **2b · Destructive-git gate** | `git push --force`, `reset --hard`, `clean -f`, `branch -D`, `checkout --force` | `ask` (→ `deny` with no human) | `~/.config/git-guard.conf` (`GITGUARD_ALLOWLIST`) |
 | **Killswitch** | credentials left on the box after the last session | shred | PAM + systemd timer |
+| **Remote thread approval** | `t3_thread_launch` / `create_threads` / `delegate_task` from remote origin | `deny` (set `approval-required` to pass) | `.claude/.remote-approval-required` flag file |
 
 ### Guard stack
 
@@ -186,6 +187,31 @@ Ask Claude to do the risky thing and watch the harness respond:
 - *"Deploy to trainbox_t02"* → the wrapper call surfaces a **confirm build-tooling
   run** prompt bound to that exact argv; a bare `ctp …` is refused with a pointer
   to the bridge.
+
+### Remote thread approval guard — deterministic
+
+```bash
+HOOK=.claude/hooks/remote-thread-approval-guard.sh
+
+# Ensure gate is active
+touch .claude/.remote-approval-required
+
+# 1. Thread launch without approval-required mode  →  deny
+echo '{"tool_name":"mcp__t3-code__t3_thread_launch","tool_input":{"title":"test","runtimeMode":"full-access"}}' | "$HOOK"
+#   → …"deny"… "runtimeMode \"full-access\" is too permissive"
+
+# 2. Thread launch with approval-required  →  no opinion (allow)
+echo '{"tool_name":"mcp__t3-code__t3_thread_launch","tool_input":{"title":"test","runtimeMode":"approval-required"}}' | "$HOOK"; echo "exit=$?"
+#   → (no line)  exit=0
+
+# 3. delegate_task with cross-environment target  →  deny
+echo '{"tool_name":"mcp__t3-code__delegate_task","tool_input":{"task":"do work","target":{"environmentId":"abc-123"}}}' | "$HOOK"
+#   → …"deny"… "cross-environment thread creation"
+
+# 4. Non-gated tool  →  no opinion
+echo '{"tool_name":"Bash","tool_input":{"command":"ls"}}' | "$HOOK"; echo "exit=$?"
+#   → (no line)  exit=0
+```
 
 ### Commit guard — warn, don't block
 
