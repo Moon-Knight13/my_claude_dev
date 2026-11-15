@@ -1,4 +1,5 @@
 {
   "_mode": "ctf",
-  "_description": "CTF platform challenges. No OPSEC constraints, flag-oriented."
+  "_description": "CTF platform challenges. No OPSEC constraints, flag-oriented.",
+  "_offensive_base": true
 }

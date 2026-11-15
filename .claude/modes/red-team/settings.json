@@ -1,6 +1,7 @@
 {
   "_mode": "red-team",
   "_description": "Offensive operations against authorized targets. Full OPSEC rules active.",
+  "_offensive_base": true,
   "hooks": {
     "PreToolUse": [
       {

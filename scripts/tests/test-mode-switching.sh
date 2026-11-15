@@ -15,6 +15,20 @@ fails=0
 ok()   { echo "PASS $1"; }
 bad()  { echo "FAIL $1: $2"; fails=$((fails + 1)); }
 
+# Check if a mode inherits offensive-base shared rules
+_has_offensive_base() {
+  local mode="$1"
+  local sf="$MODES_DIR/$mode/settings.json"
+  [[ -f "$sf" ]] && python3 -I -c "import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get('_offensive_base') else 1)" "$sf" 2>/dev/null
+}
+
+# Grep pattern in mode's own prompt OR offensive-base/shared-rules.md
+_grep_with_shared() {
+  local pattern="$1" mode="$2"
+  grep -q "$pattern" "$MODES_DIR/$mode/system-prompt.md" 2>/dev/null \
+    || { _has_offensive_base "$mode" && grep -q "$pattern" "$MODES_DIR/offensive-base/shared-rules.md" 2>/dev/null; }
+}
+
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
@@ -145,12 +159,12 @@ fi
 # --- 10. Red-team system-prompt contains OPSEC rules ------------------------
 # Rules may be inline (RT-TGT-001 etc.) or referenced via dedup pattern
 # ("All RT-TGT, RT-SIG, RT-DEP rules from CLAUDE.md apply").
-if grep -q "RT-TGT" "$MODES_DIR/red-team/system-prompt.md" \
-   && grep -q "RT-SIG" "$MODES_DIR/red-team/system-prompt.md" \
-   && grep -q "RT-DEP" "$MODES_DIR/red-team/system-prompt.md"; then
+if _grep_with_shared "RT-TGT" red-team \
+   && _grep_with_shared "RT-SIG" red-team \
+   && _grep_with_shared "RT-DEP" red-team; then
     ok red-team-has-opsec-rules
 else
-    bad red-team-has-opsec-rules "missing OPSEC rules in red-team system-prompt.md"
+    bad red-team-has-opsec-rules "missing OPSEC rules in red-team (prompt or shared-rules)"
 fi
 
 # --- 11. Platform-ops system-prompt has NO OPSEC rules ----------------------
@@ -170,11 +184,11 @@ else
 fi
 
 # --- 13. Red-dev system-prompt has exploit hygiene rules --------------------
-if grep -q "Exploit Hygiene" "$MODES_DIR/red-dev/system-prompt.md" \
-   && grep -q "RT-TGT-001" "$MODES_DIR/red-dev/system-prompt.md"; then
+if _grep_with_shared "Exploit Hygiene" red-dev \
+   && _grep_with_shared "RT-TGT-001" red-dev; then
     ok red-dev-has-opsec
 else
-    bad red-dev-has-opsec "missing exploit hygiene or RT-TGT-001 in red-dev system-prompt.md"
+    bad red-dev-has-opsec "missing exploit hygiene or RT-TGT-001 in red-dev (prompt or shared-rules)"
 fi
 
 # --- 14. Green-dev has range-intel but no offensive MCPs -------------------
@@ -206,18 +220,18 @@ else
 fi
 
 # --- 17. Purple system-prompt has detection scoring -------------------------
-if grep -q "Detection Scoring" "$MODES_DIR/purple/system-prompt.md" \
-   && grep -q "RT-TGT" "$MODES_DIR/purple/system-prompt.md" \
-   && grep -qi "time.to.detect" "$MODES_DIR/purple/system-prompt.md"; then
+if _grep_with_shared "Detection Scoring" purple \
+   && _grep_with_shared "RT-TGT" purple \
+   && _grep_with_shared "Time to detect" purple; then
     ok purple-has-detection-scoring
 else
-    bad purple-has-detection-scoring "missing detection scoring or OPSEC in purple system-prompt.md"
+    bad purple-has-detection-scoring "missing detection scoring or OPSEC in purple (prompt or shared-rules)"
 fi
 
 # --- 18. Purple system-prompt has OPSEC inherited from red-team ------------
 # Rules may be inline or referenced via dedup pattern
-if grep -q "RT-SIG" "$MODES_DIR/purple/system-prompt.md" \
-   && grep -q "RT-DEP" "$MODES_DIR/purple/system-prompt.md"; then
+if _grep_with_shared "RT-SIG" purple \
+   && _grep_with_shared "RT-DEP" purple; then
     ok purple-inherits-opsec
 else
     bad purple-inherits-opsec "purple missing inherited OPSEC rules"

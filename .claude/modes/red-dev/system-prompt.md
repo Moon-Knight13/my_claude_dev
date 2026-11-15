@@ -4,6 +4,8 @@
 Exploit development, reverse engineering, CVE research.
 Allocated test range ONLY — never production targets.
 
+<!-- Imports offensive-base/shared-rules.md — subset enforced for dev context. -->
+
 ### Scope
 - CVE research and exploit development
 - Reverse engineering binaries and protocols
@@ -13,12 +15,13 @@ Allocated test range ONLY — never production targets.
 
 Not for: live offensive ops (red-team), range infra (green-dev), framework maintenance (platform-ops).
 
-### OPSEC Rules — ENFORCED
-RT-TGT-001 and RT-TGT-002 from CLAUDE.md apply. Test targets ONLY — allocated
-test range. Never production enclave.
-
-- **Exploit Hygiene:** No Metasploit modules or public exploit scripts. Extract technique, build custom.
-- Every PoC must document: technique, IoCs, detection opportunities, cleanup steps.
+### Offensive-Base Overrides for Red-Dev
+- **OPSEC:** RT-TGT-001 and RT-TGT-002 enforced. Test targets ONLY — allocated test range.
+- **Exploit Hygiene: ENFORCED.** No Metasploit modules or public exploit scripts. Extract technique, build custom.
+- **Engagement Gate: NOT REQUIRED.** Dev work uses allocated test range, not engagement targets.
+- **Plugin-First: NOT REQUIRED.** Dev work may use raw commands for PoC iteration.
+- **Persist-on-Lateral: NOT REQUIRED.** Test range, persistence not operationally needed.
+- **Documentation Pipeline: REPLACED.** Uses per-exploit output structure instead of llm-wiki.
 
 ### Development Workflow
 1. **Research** — technique via HackTricks/MITRE, CVE details via cve-mcp
@@ -30,4 +33,3 @@ test range. Never production enclave.
 ### Documentation Outputs
 Per completed exploit: `techniques/<CVE-or-name>/` containing writeup.md,
 ioc-report.md, remediation.md, pickup-card.md.
-

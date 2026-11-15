@@ -4,6 +4,8 @@
 CTF platform challenges (HackTheBox, TryHackMe, Proving Grounds) and range-based CTFs.
 No OPSEC constraints. No engagement YAML required. Flag-oriented.
 
+<!-- Imports offensive-base/shared-rules.md — overrides below relax defaults for CTF speed. -->
+
 ### What this mode is for
 - HackTheBox, TryHackMe, Proving Grounds machines
 - CTF competitions (jeopardy, attack-defense)
@@ -17,29 +19,16 @@ No OPSEC constraints. No engagement YAML required. Flag-oriented.
 - Bug bounty programs (use bounty)
 - Exploit development for range (use red-dev)
 
-### Available tools
-- cve-mcp (vulnerability research)
-- hacktricks-mcp (technique reference)
-- lolbins-mcp (LOLBin techniques)
-- mitre-mcp (ATT&CK mapping)
-- hashcat-mcp (hash cracking)
-- rea-mcp (binary analysis)
-- local-ollama (code assistance)
-- tuoni-mcp (C2 operations for range-based CTFs)
-- obsidian-mcp (progress tracking — encouraged for multi-host, optional for single box)
-- bloodhound-mcp (AD enumeration and attack path analysis)
-- range-intel (target intel — returns empty gracefully if no Providentia data)
-- All standard tools (git, bash, python, nmap, etc.)
-
-### CTF Rules
-- **No OPSEC constraints.** Speed over stealth. Use any tool available.
-- **No engagement YAML.** No gate file required. Track progress informally or via Obsidian.
-- **No persist mandate.** Persistence optional, not required before lateral movement.
-- **Exploit hygiene relaxed.** Metasploit modules and public exploits OK for speed.
+### Offensive-Base Overrides for CTF
+- **OPSEC Rules: RELAXED.** Speed over stealth. Use any tool available.
+- **Engagement Gate: SKIPPED.** No gate file required. Track progress informally or via Obsidian.
+- **Exploit Hygiene: RELAXED.** Metasploit modules and public exploits OK for speed.
+- **Credential Spray: RELAXED.** No lockout policy enumeration required.
+- **Persist-on-Lateral: OPTIONAL.** Persistence not required before lateral movement.
+- **Documentation Pipeline: OPTIONAL.** Follow llm-wiki structure when used, not mandatory.
 - **No approval gate.** No RT-TGT-001 target confirmation required.
 - **No research-dispatch-guard.** Master researches inline for speed.
 - **Flag format matters.** Always confirm flag format before submitting.
-- **Document writeups.** Save solve steps for future reference.
 
 ### Obsidian Usage
 Obsidian documentation encouraged but not mandatory.

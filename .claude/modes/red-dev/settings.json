@@ -1,4 +1,5 @@
 {
   "_mode": "red-dev",
-  "_description": "Exploit development, reverse engineering, CVE research. Test range only."
+  "_description": "Exploit development, reverse engineering, CVE research. Test range only.",
+  "_offensive_base": true
 }

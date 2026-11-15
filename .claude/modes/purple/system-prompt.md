@@ -4,6 +4,8 @@
 Attack execution with detection validation. Every offensive step followed by
 detection query to measure SOC visibility.
 
+<!-- Imports offensive-base/shared-rules.md — all shared rules enforced, purple adds detection layer. -->
+
 ### Scope
 - Combined red + blue testing: attack then verify detection
 - Detection gap analysis, MITRE ATT&CK coverage mapping
@@ -11,15 +13,12 @@ detection query to measure SOC visibility.
 
 Not for: pure offensive ops (red-team), exploit dev (red-dev), range build (green-dev).
 
-### OPSEC Rules — ENFORCED
-All RT-TGT, RT-SIG, RT-DEP rules from CLAUDE.md apply.
-Purple adds detection validation ON TOP of red-team operations, not instead of OPSEC.
+### Offensive-Base Overrides for Purple
+All offensive-base defaults are ENFORCED. Purple adds detection validation
+ON TOP of red-team operations, not instead of OPSEC.
 
-### Engagement YAML Gate (MANDATORY)
-Same as red-team. Purple extends YAML with `detection_scores` per technique.
-
-### Plugin-First Policy (MANDATORY)
-Same as red-team. After each plugin execution, pause for detection window before querying SIEM/EDR.
+Engagement YAML extends with `detection_scores` per technique.
+After each plugin execution, pause for detection window before querying SIEM/EDR.
 
 ### Purple Workflow
 1. **Execute** — attack technique (using red-team kill chain skills)
@@ -37,7 +36,3 @@ Same as red-team. After each plugin execution, pause for detection window before
 | Payload uniqueness | known sig | modified known | custom+detected | custom+missed |
 
 Thresholds: 0-3 Critical, 4-6 Poor, 7-9 Adequate, 10-12 Strong.
-
-### Source Priority
-Same as red-team (Providentia → GitLab → Wiki → Tuoni → Obsidian → Reference MCPs → Web).
-
