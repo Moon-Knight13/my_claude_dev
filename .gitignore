@@ -25,6 +25,8 @@ secrets.*
 .claude/.research-gate-active
 .claude/.remote-approval-required
 .claude/audit/
+.claude/sessions/
+.claude/.mode-overrides/
 engagements/
 .ai/
 
