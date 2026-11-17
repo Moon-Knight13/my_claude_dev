@@ -233,6 +233,7 @@ fires only when the tool name matches (pipe-delimited for multi-tool matchers).
 | `PreToolUse` | `Bash\|Read\|Write\|Edit` | `.claude/hooks/pretooluse-ctp.sh` | Guard stack: ctp, secrets, PII, destructive ops, git |
 | `PreToolUse` | `Bash` | `.claude/hooks/tuoni-secret-guard.sh` | Block Bash access to Tuoni secret paths |
 | `PreToolUse` | `t3_thread_launch\|create_threads\|delegate_task` | `.claude/hooks/remote-thread-approval-guard.sh` | Enforce approval-required for remote threads |
+| `PreToolUse` | `Agent` | `.claude/hooks/master-dispatch-guard.sh` | Enforce T3 thread dispatch over Agent subagents |
 | `PostToolUse` | `""` | `scripts/hooks/response-scanner.sh` | Warn on secrets in tool output |
 | `PostToolUse` | `mcp__tuoni-mcp__tuoni_command_get` | `.claude/hooks/auto-log-finding.sh` | Prompt `/log-finding` on actionable results |
 | `Stop` | `""` | `.claude/hooks/session-end-audit.sh` | Audit engagement YAML for gaps |
@@ -503,6 +504,53 @@ Signal 3 alone triggers only when BOTH unattended AND remote access is
 enabled on the T3 server. Use the flag file (signal 1) for unconditional
 enforcement regardless of server configuration.
 
+#### `master-dispatch-guard.sh` — master session Agent tool gate
+
+**Trigger:** `Agent` tool only.
+
+**Logic:**
+1. Check if `.claude/.active-mode` exists. Absent = gate inactive.
+2. Check if session has a mode-override file (T3 child threads get one).
+   Override present = this IS a dispatched thread, allow everything.
+3. Parse `tool_input.subagent_type` from stdin JSON.
+4. Allow if `subagent_type` is `"fork"` (same-session context sharing).
+5. Allow if `subagent_type` starts with `"caveman:cavecrew-"` (compressed
+   output helpers).
+6. Deny everything else.
+
+**Bypass conditions (any one skips the gate):**
+1. `.active-mode` absent (no mode active, vanilla session).
+2. Session has a mode-override file (T3 child threads).
+3. `subagent_type` is `"fork"`.
+4. `subagent_type` starts with `"caveman:cavecrew-"`.
+
+**Activation:** Automatic when any mode is active. No separate flag file —
+the presence of `.claude/.active-mode` is the trigger. This means the guard
+is always on during normal operation (modes are set at session start by
+`start-mode.sh`).
+
+**Override:** Delete `.claude/.active-mode` or add a mode-override file for
+the session.
+
+**Rationale:** Master sessions should route work to T3 threads
+(`t3_thread_launch` with `workspaceStrategy: worktree`) for isolation.
+Agent subagents share the master's checkout and context, causing branch
+conflicts and stalls when multiple parallel tasks run. Forks are exempt
+because they share the caller's context by design (read-only delegation).
+Cavecrew subagents are exempt because they are compressed-output helpers
+that return small, structured results to the master context.
+
+**Edge case — mode-override file as bypass.** Same as
+`research-dispatch-guard.sh`: any session with a
+`.claude/.mode-overrides/$SESSION_ID` file is treated as a dispatched
+thread. A manually created override file bypasses the gate.
+
+**Edge case — missing subagent_type.** When `subagent_type` is absent from
+the tool input, the hook reads an empty string, which matches none of the
+bypass patterns and results in a deny. This is correct: a default Agent
+call without a type is a general-purpose subagent that should be a T3
+thread.
+
 ### PostToolUse hooks
 
 #### `response-scanner.sh` — tool output secret scanner
@@ -640,6 +688,7 @@ environment.
 | `audit-trail.sh` | Yes | Logs active mode to audit trail |
 | `session-end-audit.sh` | No | Checks engagement YAML, not mode |
 | `remote-thread-approval-guard.sh` | No | Mode-agnostic; gates by remote-origin signals |
+| `master-dispatch-guard.sh` | Indirect | Checks `.active-mode` existence (not mode name) and mode-override file presence |
 
 ### Known edge cases and gaps
 
