@@ -152,6 +152,50 @@ async def test_list_collections_shows_only_allowed():
     assert data["collections"][0]["name"] == "vulns-docs"
 
 
+async def test_update_document_in_blocked_collection_rejected():
+    """Doc authored by us but in non-allowed collection must be rejected."""
+    blocked_doc = {
+        "id": "doc-blocked-003",
+        "title": "My Doc In Wrong Collection",
+        "text": "content",
+        "collectionId": "col-ccc-333",
+        "createdBy": {"id": "user-me-123", "name": "Test Bot"},
+        "createdAt": "2026-01-01T00:00:00Z",
+        "updatedAt": "2026-01-02T00:00:00Z",
+    }
+    srv._client.documents["doc-blocked-003"] = blocked_doc
+    result = await srv._handle_update_document(
+        document_id="doc-blocked-003",
+        text="should fail",
+        dry_run=False,
+    )
+    data = json.loads(result)
+    assert data["error"] is True
+    assert "not in allowlist" in data["message"]
+
+
+async def test_append_to_document_in_blocked_collection_rejected():
+    """Append to own doc in non-allowed collection must be rejected."""
+    blocked_doc = {
+        "id": "doc-blocked-004",
+        "title": "My Doc In Wrong Collection",
+        "text": "content",
+        "collectionId": "col-ccc-333",
+        "createdBy": {"id": "user-me-123", "name": "Test Bot"},
+        "createdAt": "2026-01-01T00:00:00Z",
+        "updatedAt": "2026-01-02T00:00:00Z",
+    }
+    srv._client.documents["doc-blocked-004"] = blocked_doc
+    result = await srv._handle_append_to_document(
+        document_id="doc-blocked-004",
+        content="\nshould fail",
+        dry_run=False,
+    )
+    data = json.loads(result)
+    assert data["error"] is True
+    assert "not in allowlist" in data["message"]
+
+
 async def test_document_info_returns_metadata():
     result = await srv._handle_document_info(document_id="doc-own-001")
     data = json.loads(result)

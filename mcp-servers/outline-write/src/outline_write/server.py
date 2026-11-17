@@ -160,11 +160,16 @@ async def _handle_update_document(
 ) -> str:
     assert _client is not None and _guard is not None
     try:
-        is_mine = await check_authorship(_client, document_id, _user_id)
+        doc = await _client.get_document(document_id)
     except Exception as exc:
         return _error_response(str(exc))
 
-    if not is_mine:
+    try:
+        _guard.enforce(doc["collectionId"])
+    except ValueError as exc:
+        return _error_response(str(exc))
+
+    if doc["createdBy"]["id"] != _user_id:
         return _error_response(
             f"Document {document_id} not authored by you. "
             "Only documents you created can be updated."
@@ -198,13 +203,18 @@ async def _handle_append_to_document(
     content: str,
     dry_run: bool = True,
 ) -> str:
-    assert _client is not None
+    assert _client is not None and _guard is not None
     try:
-        is_mine = await check_authorship(_client, document_id, _user_id)
+        doc = await _client.get_document(document_id)
     except Exception as exc:
         return _error_response(str(exc))
 
-    if not is_mine:
+    try:
+        _guard.enforce(doc["collectionId"])
+    except ValueError as exc:
+        return _error_response(str(exc))
+
+    if doc["createdBy"]["id"] != _user_id:
         return _error_response(
             f"Document {document_id} not authored by you. "
             "Only documents you created can be appended to."
@@ -348,6 +358,9 @@ def main() -> None:
 
     import asyncio
     asyncio.run(_init_clients())
+    if _client is not None and hasattr(_client, '_http') and _client._http is not None:
+        asyncio.run(_client.close())
+        _client._http = None
     mcp.run(transport="stdio")
 
 
