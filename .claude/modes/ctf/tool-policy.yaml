@@ -6,3 +6,4 @@
 # Deny: outline (range wiki, not relevant to CTF).
 deny:
   - "mcp__outline-readonly__*"
+  - "mcp__outline-write__*"

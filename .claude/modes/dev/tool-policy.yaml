@@ -4,6 +4,7 @@ deny:
   - "mcp__tuoni-mcp__*"
   - "mcp__range-intel__*"
   - "mcp__outline-readonly__*"
+  - "mcp__outline-write__*"
   - "mcp__obsidian-mcp__*"
   - "mcp__hacktricks-mcp__*"
   - "mcp__mitre-mcp__*"
