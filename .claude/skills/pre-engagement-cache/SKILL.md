@@ -227,6 +227,15 @@ Set cache timestamp:
 cache_timestamp: <ISO-8601 timestamp>
 ```
 
+### Step 7.3: Providentia Accuracy Check
+
+Cross-reference cached Providentia data against known accuracy findings.
+Invoke `providentia-tracker` skill "Pre-Engagement Accuracy Check" operation
+with the cached target list and their listed vulnerabilities.
+
+Report any flagged vulns to operator before engagement proceeds. Accuracy
+pages persist across engagements, so prior broken-vuln findings carry forward.
+
 ### Step 7.5: Generate Context Summaries (Lite Mode)
 
 **Only when** `--lite` is active.
