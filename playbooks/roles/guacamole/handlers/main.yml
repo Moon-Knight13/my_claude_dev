@@ -1,0 +1,5 @@
+---
+- name: Restart guacamole
+  community.docker.docker_compose_v2:
+    project_src: "{{ guacamole_install_dir }}"
+    state: restarted

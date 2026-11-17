@@ -16,6 +16,7 @@
 
   vars_files:
     - vars/tuoni.yml
+    - vars/guacamole.yml
 
   pre_tasks:
     - name: Update apt cache
@@ -27,4 +28,5 @@
     - java
     - offensive-tools
     - tuoni
+    - guacamole
     - ssh-keys

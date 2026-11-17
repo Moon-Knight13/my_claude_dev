@@ -1,0 +1,10 @@
+---
+guacamole_version: "1.5.5"
+guacamole_port: 8080
+guacamole_install_dir: /opt/guacamole
+guacamole_recording_enabled: true
+guacamole_postgres_version: "16-alpine"
+
+# Secrets — override via Ansible vault or inventory
+# guacamole_db_password: (required, vault)
+# guacamole_admin_password: (required, vault — replaces default guacadmin)

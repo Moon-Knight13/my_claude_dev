@@ -1,0 +1,61 @@
+---
+services:
+  guacd:
+    image: "guacamole/guacd:{{ guacamole_version }}"
+    container_name: guacd
+    restart: unless-stopped
+    networks:
+      - guac-net
+{% if guacamole_recording_enabled %}
+    volumes:
+      - recordings:/recordings
+{% endif %}
+
+  postgres:
+    image: "postgres:{{ guacamole_postgres_version }}"
+    container_name: guac-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: guacamole_db
+      POSTGRES_USER: guacamole_user
+      POSTGRES_PASSWORD: "{{ guacamole_db_password }}"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - "{{ guacamole_install_dir }}/initdb.sql:/docker-entrypoint-initdb.d/initdb.sql:ro"
+    networks:
+      - guac-net
+
+  guacamole:
+    image: "guacamole/guacamole:{{ guacamole_version }}"
+    container_name: guacamole
+    restart: unless-stopped
+    depends_on:
+      - guacd
+      - postgres
+    environment:
+      GUACD_HOSTNAME: guacd
+      POSTGRESQL_HOSTNAME: postgres
+      POSTGRESQL_DATABASE: guacamole_db
+      POSTGRESQL_USER: guacamole_user
+      POSTGRESQL_PASSWORD: "{{ guacamole_db_password }}"
+{% if guacamole_recording_enabled %}
+      RECORDING_SEARCH_PATH: /recordings
+{% endif %}
+    ports:
+      - "{{ guacamole_port }}:8080"
+    networks:
+      - guac-net
+{% if guacamole_recording_enabled %}
+    volumes:
+      - recordings:/recordings
+{% endif %}
+
+volumes:
+  db-data:
+{% if guacamole_recording_enabled %}
+  recordings:
+{% endif %}
+
+networks:
+  guac-net:
+    driver: bridge
