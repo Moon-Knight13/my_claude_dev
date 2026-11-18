@@ -49,7 +49,7 @@ cd "$ORIG_PWD" || exit
 MAIN="$TMP/main-repo"
 WT="$TMP/worktree"
 mkdir -p "$MAIN"
-( cd "$MAIN" && git init -q && git commit --allow-empty -m "init" -q && touch .ctp-bridge.conf && git worktree add -q "$WT" -b test-wt HEAD ) >/dev/null 2>&1
+( cd "$MAIN" && git init -q && git config user.email "test@test" && git config user.name "test" && git commit --allow-empty -m "init" -q && touch .ctp-bridge.conf && git worktree add -q "$WT" -b test-wt HEAD ) >/dev/null 2>&1
 unset CTP_BRIDGE_CONF
 cd "$WT" || exit
 check "git-common-dir fallback (worktree)" "$(ctp_resolve_conf)" "$MAIN/.ctp-bridge.conf"
