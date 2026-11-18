@@ -233,10 +233,10 @@ after lateral-move landing, or operator says "reclassify", "mark target as",
 |--------------------|--------|
 | `confirmed` | Target eligible for Phase 1+ recon and initial-access. |
 | `unreachable` | Log reason. Skip in attack planning. Re-check after pivot. |
-| `different-than-expected` | Alert operator. Log Providentia discrepancy. Await guidance. |
+| `different-than-expected` | Alert operator. Log Providentia discrepancy via `providentia-tracker` skill. Await guidance. |
 | `compromised` | Trigger persist-swarm if not already deployed. Update agent list. |
 | `hardened` | Log exhausted vectors. Deprioritize unless new intel arrives. |
-| `patched` | Log specific patch evidence. Flag for Providentia accuracy feedback. |
+| `patched` | Log specific patch evidence. Log accuracy finding via `providentia-tracker` skill. |
 
 **Bulk reclassification** (after Phase 0 sweep): reclassify all scanned targets
 in one pass. Group by new classification and report summary:
