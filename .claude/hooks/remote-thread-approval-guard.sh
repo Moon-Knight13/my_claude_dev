@@ -108,10 +108,12 @@ if [[ "${HAS_ENV_ID:-0}" == "1" ]]; then
     is_remote=1
 fi
 
-# Signal 3: T3 Connect active + unattended session
+# Signal 3: T3 Connect active + unattended session + cross-environment
 # CLAUDE_CODE_SESSION_ATTENDED=0 means no human watching this session.
-# Combined with T3 Connect being enabled, this indicates remote automation.
-if [[ "${CLAUDE_CODE_SESSION_ATTENDED:-1}" == "0" ]]; then
+# Combined with T3 Connect being enabled AND cross-environment dispatch,
+# this indicates remote automation. Local-dispatch threads (no environmentId)
+# from the master session are NOT gated — operator dispatched them intentionally.
+if [[ "${CLAUDE_CODE_SESSION_ATTENDED:-1}" == "0" && "${HAS_ENV_ID:-0}" == "1" ]]; then
     # Check if T3 Connect is active (server accepts non-local connections)
     T3_RUNTIME="${HOME}/.t3/userdata/server-runtime.json"
     if [[ -f "$T3_RUNTIME" ]]; then
