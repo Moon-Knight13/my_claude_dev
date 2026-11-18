@@ -25,7 +25,7 @@
 #   5. $CLAUDE_PROJECT_DIR (Claude Code project dir env var, set by the harness)
 #   6. $HOME/.ctp-bridge.conf (user-scope installed copy)
 ctp_resolve_conf() {
-    local c _toplevel _common
+    local _toplevel _common _common_raw
     # Env override always wins (even if file is missing — let the caller decide).
     if [[ -n "${CTP_BRIDGE_CONF:-}" ]]; then
         printf '%s' "$CTP_BRIDGE_CONF"; return 0
@@ -36,10 +36,12 @@ ctp_resolve_conf() {
     _toplevel="$(git rev-parse --show-toplevel 2>/dev/null)" || true
     [[ -n "$_toplevel" && -f "$_toplevel/.ctp-bridge.conf" ]] && { printf '%s' "$_toplevel/.ctp-bridge.conf"; return 0; }
     # Git common dir (root checkout for linked worktrees)
-    _common="$(git rev-parse --git-common-dir 2>/dev/null)" || true
-    if [[ -n "$_common" && "$_common" != ".git" ]]; then
+    _common_raw="$(git rev-parse --git-common-dir 2>/dev/null)" || true
+    if [[ -n "$_common_raw" && "$_common_raw" != ".git" ]]; then
+        # resolve to absolute (git may return relative path in worktrees)
+        _common="$(cd "$_common_raw" 2>/dev/null && pwd)" || true
         _common="${_common%/.git}"
-        [[ -f "$_common/.ctp-bridge.conf" ]] && { printf '%s' "$_common/.ctp-bridge.conf"; return 0; }
+        [[ -n "$_common" && -f "$_common/.ctp-bridge.conf" ]] && { printf '%s' "$_common/.ctp-bridge.conf"; return 0; }
     fi
     # Claude Code project dir
     [[ -n "${CLAUDE_PROJECT_DIR:-}" && -f "$CLAUDE_PROJECT_DIR/.ctp-bridge.conf" ]] \

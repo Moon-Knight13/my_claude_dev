@@ -32,18 +32,18 @@ check "env override returns CTP_BRIDGE_CONF" \
 mkdir -p "$TMP/pwd-test"
 touch "$TMP/pwd-test/.ctp-bridge.conf"
 unset CTP_BRIDGE_CONF
-cd "$TMP/pwd-test"
+cd "$TMP/pwd-test" || exit
 check "PWD fallback" "$(ctp_resolve_conf)" "$TMP/pwd-test/.ctp-bridge.conf"
-cd "$ORIG_PWD"
+cd "$ORIG_PWD" || exit
 
 # --- git toplevel fallback ---------------------------------------------------
 REPO="$TMP/repo-toplevel"
 mkdir -p "$REPO/sub"
 ( cd "$REPO" && git init -q && touch .ctp-bridge.conf ) >/dev/null 2>&1
 unset CTP_BRIDGE_CONF
-cd "$REPO/sub"
+cd "$REPO/sub" || exit
 check "git toplevel fallback" "$(ctp_resolve_conf)" "$REPO/.ctp-bridge.conf"
-cd "$ORIG_PWD"
+cd "$ORIG_PWD" || exit
 
 # --- git-common-dir fallback (worktree simulation) ---------------------------
 MAIN="$TMP/main-repo"
@@ -51,19 +51,19 @@ WT="$TMP/worktree"
 mkdir -p "$MAIN"
 ( cd "$MAIN" && git init -q && git commit --allow-empty -m "init" -q && touch .ctp-bridge.conf && git worktree add -q "$WT" -b test-wt HEAD ) >/dev/null 2>&1
 unset CTP_BRIDGE_CONF
-cd "$WT"
+cd "$WT" || exit
 check "git-common-dir fallback (worktree)" "$(ctp_resolve_conf)" "$MAIN/.ctp-bridge.conf"
-cd "$ORIG_PWD"
+cd "$ORIG_PWD" || exit
 
 # --- CLAUDE_PROJECT_DIR fallback ---------------------------------------------
 PROJECT="$TMP/claude-project"
 mkdir -p "$PROJECT"
 touch "$PROJECT/.ctp-bridge.conf"
 unset CTP_BRIDGE_CONF
-cd "$TMP"  # no config, no git
+cd "$TMP" || exit  # no config, no git
 check "CLAUDE_PROJECT_DIR fallback" \
     "$(CLAUDE_PROJECT_DIR="$PROJECT" ctp_resolve_conf)" "$PROJECT/.ctp-bridge.conf"
-cd "$ORIG_PWD"
+cd "$ORIG_PWD" || exit
 
 # --- HOME fallback -----------------------------------------------------------
 FAKE_HOME="$TMP/fake-home"
@@ -72,28 +72,28 @@ touch "$FAKE_HOME/.ctp-bridge.conf"
 unset CTP_BRIDGE_CONF
 unset CLAUDE_PROJECT_DIR 2>/dev/null || true
 export HOME="$FAKE_HOME"
-cd "$TMP"  # no config, no git
+cd "$TMP" || exit  # no config, no git
 check "HOME fallback" "$(ctp_resolve_conf)" "$FAKE_HOME/.ctp-bridge.conf"
 export HOME="$ORIG_HOME"
-cd "$ORIG_PWD"
+cd "$ORIG_PWD" || exit
 
 # --- none found → returns 1 -------------------------------------------------
 unset CTP_BRIDGE_CONF
 unset CLAUDE_PROJECT_DIR 2>/dev/null || true
 export HOME="$TMP/no-home"
-cd "$TMP"
-ctp_resolve_conf >/dev/null 2>&1 && bad "no config should fail" || ok "no config returns 1"
+cd "$TMP" || exit
+if ctp_resolve_conf >/dev/null 2>&1; then bad "no config should fail"; else ok "no config returns 1"; fi
 export HOME="$ORIG_HOME"
-cd "$ORIG_PWD"
+cd "$ORIG_PWD" || exit
 
 # --- priority: PWD over git toplevel -----------------------------------------
 PRIO="$TMP/prio-repo"
 mkdir -p "$PRIO/sub"
 ( cd "$PRIO" && git init -q && echo "# root" > .ctp-bridge.conf && echo "# sub" > sub/.ctp-bridge.conf ) >/dev/null 2>&1
 unset CTP_BRIDGE_CONF
-cd "$PRIO/sub"
+cd "$PRIO/sub" || exit
 check "PWD wins over git toplevel" "$(ctp_resolve_conf)" "$PRIO/sub/.ctp-bridge.conf"
-cd "$ORIG_PWD"
+cd "$ORIG_PWD" || exit
 
 # ============================================================================
 echo
