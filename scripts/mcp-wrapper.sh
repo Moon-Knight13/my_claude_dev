@@ -40,6 +40,7 @@ _detect_mcp_name() {
             *hashcat*)                  echo "hashcat-mcp"; return ;;
             *nuclei-mcp*|*nuclei_mcp*)  echo "nuclei-mcp"; return ;;
             *ghidra-mcp*|*ghidra_mcp*) echo "ghidra-mcp"; return ;;
+            *@runpod*|*runpod-mcp*)   echo "runpod"; return ;;
         esac
     done
     echo "unknown"
@@ -132,7 +133,8 @@ print(",".join(secrets) + "|" + ",".join(mcp_allowed))
 else
     # No config file — fail closed: unset all known secrets
     for _var in TUONI_USERNAME TUONI_PASSWORD PROVIDENTIA_TOKEN \
-                GITLAB_TOKEN GITLAB_PROJECT OUTLINE_API_KEY OUTLINE_TOKEN; do
+                GITLAB_TOKEN GITLAB_PROJECT OUTLINE_API_KEY OUTLINE_TOKEN \
+                RUNPOD_API_KEY; do
         unset "$_var" 2>/dev/null || true
     done
 fi
