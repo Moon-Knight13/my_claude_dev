@@ -39,6 +39,8 @@ sensitive:
   - "mcp__obsidian-mcp__create_*"
   - "mcp__obsidian-mcp__update_*"
   - "mcp__obsidian-mcp__delete_*"
+  # outline wiki writes
+  - "mcp__outline-write__*"
 
 monitored:
   # research MCPs — log provenance for audit, no gate

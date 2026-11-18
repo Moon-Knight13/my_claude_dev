@@ -4,4 +4,5 @@
 deny:
   - "mcp__range-intel__*"
   - "mcp__outline-readonly__*"
+  - "mcp__outline-write__*"
   - "mcp__local-ollama__*"
