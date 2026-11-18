@@ -168,5 +168,26 @@ else
 fi
 
 echo ""
+echo "--- per-thread mode override changes tool policy ---"
+# Project mode is platform-ops (denies tuoni), but thread override is red-team (allows tuoni)
+_OVERRIDE_DIR="$PROJECT_DIR/.claude/.mode-overrides"
+mkdir -p "$_OVERRIDE_DIR" 2>/dev/null || true
+_TEST_SESSION="test-gate-override-$$"
+echo "red-team" > "$_OVERRIDE_DIR/$_TEST_SESSION"
+echo "platform-ops" > "$PROJECT_DIR/.claude/.active-mode"
+
+result="$(printf '{"tool_name":"mcp__tuoni-mcp__tuoni_send_command","tool_input":{}}' | \
+    CLAUDE_PROJECT_DIR="$PROJECT_DIR" CLAUDE_CODE_SESSION_ID="$_TEST_SESSION" bash "$HOOK" 2>/dev/null || true)"
+if _is_allowed "$result"; then
+    ok "thread-override allows tuoni in red-team despite platform-ops project mode"
+else
+    fail "thread-override should allow tuoni when override is red-team"
+fi
+
+# Cleanup override
+rm -f "$_OVERRIDE_DIR/$_TEST_SESSION"
+rmdir "$_OVERRIDE_DIR" 2>/dev/null || true
+
+echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
 [[ $FAIL -eq 0 ]]

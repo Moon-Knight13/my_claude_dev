@@ -73,6 +73,14 @@ Two mechanisms, complementary:
 - **No restart needed** for rule changes
 - MCP availability is soft (all loaded, guidance-enforced)
 
+### Thread-based (dispatched workers)
+- Master dispatches T3 thread with `MODE: <name>` at start of prompt
+- `mode-inject.sh` hook auto-detects directive, writes `.claude/.mode-overrides/$SESSION_ID`
+- Thread gets the override mode's system prompt, skill filter, and tool policy
+- Master stays in its own mode — thread has independent mode enforcement
+- Override persists for thread lifetime, no re-parsing on subsequent prompts
+- Validated: mode must exist in `.claude/modes/`, meta-modes (base, offensive-base) rejected
+
 ### Script-based (hard isolation, parallel sessions)
 - Operator runs `scripts/start-mode.sh red-dev` before starting Claude
 - CLI flags set system prompt, settings, and MCP config per-session

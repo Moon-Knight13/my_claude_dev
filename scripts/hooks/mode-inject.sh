@@ -8,6 +8,13 @@
 # positive guidance so Claude picks the right skills without evaluating all 60+.
 # Hard enforcement is in .claude/hooks/skill-mode-gate.sh (PreToolUse on Skill).
 #
+# Per-thread mode override: when a dispatched thread's prompt contains
+# "MODE: <name>" (at line start), this hook validates the mode exists in
+# .claude/modes/ and writes .claude/.mode-overrides/$SESSION_ID. Subsequent
+# prompts in the same session use the override without re-parsing. The
+# PreToolUse gate hooks (mode-tool-gate.sh, skill-mode-gate.sh) already read
+# these override files, so tool enforcement and prompt injection stay in sync.
+#
 # Mode switching: the /mode skill writes .claude/.active-mode. This hook picks
 # it up on the next prompt. No restart needed for mode rules — only for MCP
 # server changes (those are startup-only).
@@ -21,11 +28,40 @@ MODE_FILE="$PROJECT_DIR/.claude/.active-mode"
 MODES_DIR="$PROJECT_DIR/.claude/modes"
 SKILLS_DIR="$PROJECT_DIR/.claude/skills"
 COMMANDS_DIR="$PROJECT_DIR/.claude/commands"
+OVERRIDE_DIR="$PROJECT_DIR/.claude/.mode-overrides"
+SESSION_ID="${CLAUDE_CODE_SESSION_ID:-}"
 
 # No active mode — skip silently
 [[ -f "$MODE_FILE" ]] || exit 0
 
-MODE="$(tr -d '[:space:]' < "$MODE_FILE" 2>/dev/null)"
+# ── Per-thread mode override registration ────────────────────────────────────
+# On first prompt of a dispatched thread, detect "MODE: <name>" directive and
+# register a per-session override. Only runs when no override file exists yet.
+if [[ -n "$SESSION_ID" && ! -f "$OVERRIDE_DIR/$SESSION_ID" ]]; then
+    HOOK_INPUT="$(cat)"
+    PROMPT="$(printf '%s' "$HOOK_INPUT" | jq -r '.prompt // empty' 2>/dev/null)" || true
+    if [[ -n "$PROMPT" ]]; then
+        REQUESTED_MODE="$(printf '%s' "$PROMPT" | sed -n 's/^MODE:[[:space:]]*\([a-z][a-z0-9_-]*\).*/\1/p' | head -1)"
+        if [[ -n "$REQUESTED_MODE" ]]; then
+            # Validate: mode directory must exist and not be a meta-mode
+            if [[ -d "$MODES_DIR/$REQUESTED_MODE" \
+                  && -f "$MODES_DIR/$REQUESTED_MODE/system-prompt.md" \
+                  && "$REQUESTED_MODE" != "base" \
+                  && "$REQUESTED_MODE" != "offensive-base" ]]; then
+                mkdir -p "$OVERRIDE_DIR" 2>/dev/null || true
+                printf '%s' "$REQUESTED_MODE" > "$OVERRIDE_DIR/$SESSION_ID"
+            fi
+        fi
+    fi
+fi
+
+# ── Resolve effective mode ───────────────────────────────────────────────────
+# Per-thread override takes priority over project-level .active-mode
+if [[ -n "$SESSION_ID" && -f "$OVERRIDE_DIR/$SESSION_ID" ]]; then
+    MODE="$(cat "$OVERRIDE_DIR/$SESSION_ID" 2>/dev/null)"
+else
+    MODE="$(tr -d '[:space:]' < "$MODE_FILE" 2>/dev/null)"
+fi
 [[ -n "$MODE" ]] || exit 0
 
 PROMPT_FILE="$MODES_DIR/$MODE/system-prompt.md"
