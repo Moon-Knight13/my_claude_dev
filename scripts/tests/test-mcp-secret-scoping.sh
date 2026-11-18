@@ -22,6 +22,7 @@ GITLAB_TOKEN=test-gitlab-token
 GITLAB_PROJECT=test-project
 OUTLINE_API_KEY=test-outline-key
 OUTLINE_TOKEN=test-outline-token
+RUNPOD_API_KEY=test-runpod-key
 SPOKE_KALI_HOST=10.0.0.1
 PROVIDENTIA_HOST=10.0.0.2
 OUTLINE_HOST=10.0.0.3
@@ -42,8 +43,8 @@ _run_as_mcp() {
         cd "$TMPDIR_TEST"
         # Clear secrets + loader guard from parent
         unset TUONI_USERNAME TUONI_PASSWORD PROVIDENTIA_TOKEN GITLAB_TOKEN \
-              GITLAB_PROJECT OUTLINE_API_KEY OUTLINE_TOKEN _CLAUDE_ENV_LOADED \
-              2>/dev/null || true
+              GITLAB_PROJECT OUTLINE_API_KEY OUTLINE_TOKEN RUNPOD_API_KEY \
+              _CLAUDE_ENV_LOADED 2>/dev/null || true
         MCP_SERVER_NAME="$mcp_name" bash scripts/mcp-wrapper.sh env 2>/dev/null
     )
 }
@@ -149,16 +150,35 @@ fi
 echo ""
 echo "--- obsidian-mcp gets zero secrets ---"
 env_out="$(_run_as_mcp obsidian-mcp)"
-if echo "$env_out" | grep -qE "(TUONI_PASSWORD|PROVIDENTIA_TOKEN|GITLAB_TOKEN|OUTLINE_API_KEY)=test-"; then
+if echo "$env_out" | grep -qE "(TUONI_PASSWORD|PROVIDENTIA_TOKEN|GITLAB_TOKEN|OUTLINE_API_KEY|RUNPOD_API_KEY)=test-"; then
     fail "obsidian-mcp should get zero secrets"
 else
     ok "obsidian-mcp gets zero secrets"
 fi
 
 echo ""
+echo "--- runpod gets only RUNPOD_API_KEY ---"
+env_out="$(_run_as_mcp runpod)"
+if echo "$env_out" | grep -q "RUNPOD_API_KEY=test-runpod-key"; then
+    ok "runpod sees RUNPOD_API_KEY"
+else
+    fail "runpod should see RUNPOD_API_KEY"
+fi
+if echo "$env_out" | grep -q "TUONI_PASSWORD=test-tuoni-pass"; then
+    fail "runpod should NOT see TUONI_PASSWORD"
+else
+    ok "runpod does not see TUONI_PASSWORD"
+fi
+if echo "$env_out" | grep -q "PROVIDENTIA_TOKEN=test-prov-token"; then
+    fail "runpod should NOT see PROVIDENTIA_TOKEN"
+else
+    ok "runpod does not see PROVIDENTIA_TOKEN"
+fi
+
+echo ""
 echo "--- unknown MCP gets zero secrets (fail-closed) ---"
 env_out="$(_run_as_mcp unknown)"
-if echo "$env_out" | grep -qE "(TUONI_PASSWORD|PROVIDENTIA_TOKEN|GITLAB_TOKEN|OUTLINE_API_KEY)=test-"; then
+if echo "$env_out" | grep -qE "(TUONI_PASSWORD|PROVIDENTIA_TOKEN|GITLAB_TOKEN|OUTLINE_API_KEY|RUNPOD_API_KEY)=test-"; then
     fail "unknown MCP should get zero secrets"
 else
     ok "unknown MCP gets zero secrets (fail-closed)"
@@ -171,8 +191,8 @@ echo "--- auto-detection from args ---"
 env_out="$(
     cd "$TMPDIR_TEST"
     unset TUONI_USERNAME TUONI_PASSWORD PROVIDENTIA_TOKEN GITLAB_TOKEN \
-          GITLAB_PROJECT OUTLINE_API_KEY OUTLINE_TOKEN _CLAUDE_ENV_LOADED \
-          MCP_SERVER_NAME 2>/dev/null || true
+          GITLAB_PROJECT OUTLINE_API_KEY OUTLINE_TOKEN RUNPOD_API_KEY \
+          _CLAUDE_ENV_LOADED MCP_SERVER_NAME 2>/dev/null || true
     bash scripts/mcp-wrapper.sh env _MCP_DETECT=tuoni_mcp 2>/dev/null
 )"
 if echo "$env_out" | grep -q "TUONI_USERNAME=test-tuoni-user"; then

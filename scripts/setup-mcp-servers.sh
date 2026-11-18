@@ -144,6 +144,10 @@ read -r -d '' CATALOG << CATALOG_JSON || true
       "HASHCAT_MODES_CSV": "$PROJECT_DIR/mcp-servers/.venv/share/hashcat-mcp/hashcat_modes.csv",
       "HASHCAT_PATH": "$PROJECT_DIR/scripts/hashcat-ssh-wrapper.sh"
     }
+  },
+  "runpod": {
+    "command": "$WRAPPER",
+    "args": ["npx", "-y", "@runpod/mcp-server@4.12.0"]
   }
 }
 CATALOG_JSON
@@ -153,9 +157,9 @@ CATALOG_JSON
 # are silently skipped (forward-compatible with planned servers like eip-mcp).
 # "all" is a special pseudo-mode that includes every server.
 declare -A MODE_SERVERS
-MODE_SERVERS[all]="obsidian-mcp rea-mcp hacktricks-mcp mitre-mcp lolbins-mcp cve-mcp nuclei-mcp local-ollama range-intel outline-readonly tuoni-mcp bloodhound-mcp hashcat-mcp"
+MODE_SERVERS[all]="obsidian-mcp rea-mcp hacktricks-mcp mitre-mcp lolbins-mcp cve-mcp nuclei-mcp local-ollama range-intel outline-readonly tuoni-mcp bloodhound-mcp hashcat-mcp runpod"
 MODE_SERVERS[base]="obsidian-mcp outline-readonly range-intel"
-MODE_SERVERS[platform-ops]="local-ollama"
+MODE_SERVERS[platform-ops]="local-ollama runpod"
 MODE_SERVERS[dev]="obsidian-mcp"
 MODE_SERVERS[green-dev]="range-intel outline-readonly"
 MODE_SERVERS[homelab]="obsidian-mcp cve-mcp nuclei-mcp"
