@@ -127,5 +127,39 @@
       }
     ]
   },
-  "_mode_note": "Active mode is set at launch by scripts/start-mode.sh. See /mode for info."
+  "_mode_note": "Active mode is set at launch by scripts/start-mode.sh. See /mode for info.",
+  "permissions": {
+    "allow": [
+      "Read",
+      "ToolSearch",
+      "Bash(ls:*)",
+      "Bash(git log:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git branch:*)",
+      "Bash(git show:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(wc:*)",
+      "Bash(which:*)",
+      "Bash(echo:*)",
+      "Bash(pwd)",
+      "Bash(cat:*)",
+      "Bash(file:*)",
+      "Bash(stat:*)",
+      "Bash(realpath:*)",
+      "Bash(basename:*)",
+      "Bash(dirname:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh issue view:*)",
+      "Bash(gh issue list:*)",
+      "Bash(gh repo view:*)",
+      "Bash(gh search:*)"
+    ]
+  }
 }

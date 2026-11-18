@@ -37,7 +37,7 @@ Work is tracked on a per-repo GitHub Project board (see `docs/KANBAN_WORKFLOW.md
   architecture, routing, security gates, or component set change, update the explainer in
   the same PR. It is self-contained — no external requests, works offline and via Pages.
 
-## Thread Delegation
+## Thread Delegation (master/orchestration modes only)
 When spawning T3 threads or subagents that write code:
 - **Always use `workspaceStrategy: worktree`** for threads that edit files.
   Parallel threads sharing root checkout cause branch conflicts and stalls.
@@ -48,7 +48,7 @@ When spawning T3 threads or subagents that write code:
 - PR consolidation: batch related changes into single PRs where possible to
   reduce operator review burden. One PR per logical feature, not per file.
 
-## PR Review Bot
+## PR Review Bot (scheduled task, not loaded in base mode)
 Automated reviewer runs every 4h via T3 scheduled task. Separate session = objective.
 - **LOW RISK** (dependabot, docs-only, gitignore): auto-merge if CI green + no breaking changes.
 - **FEATURE**: posts review findings as PR comment, tags for manual merge. Never auto-merges.
