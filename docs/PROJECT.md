@@ -50,6 +50,16 @@ network.
 
 SSH reaches spokes through a proxy chain: container → host → deploybox/kali.
 
+#### RDP fronting (via Guacamole)
+
+T3 preview tools can interact with Windows RDP sessions through an Apache
+Guacamole gateway on the Kali spoke. Guacamole runs as a Docker Compose stack;
+the hub reaches it via SSH port forward. Agent input is key-by-key through the
+HTML5 canvas; visual feedback is via `preview_snapshot` (PNG). No native T3
+device support for Windows exists — this is the proven workaround.
+See [`docs/drafts/rdp-fronting-feasibility.md`](drafts/rdp-fronting-feasibility.md)
+for full findings and production prerequisites.
+
 ### Truth hierarchy
 
 When sources conflict: **Providentia > deploy box > Kali state** (authoritative).
