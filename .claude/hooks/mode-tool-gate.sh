@@ -69,25 +69,25 @@ for line in content.splitlines():
 ' "$POLICY_FILE" 2>/dev/null
 )
 
-# Match tool_name against deny patterns (glob/fnmatch)
-for pattern in "${deny_patterns[@]}"; do
-    [[ -z "$pattern" ]] && continue
-    # Convert glob pattern to bash extended glob for matching
-    # Simple case: pattern ends with * (prefix match)
-    if [[ "$pattern" == *'*' ]]; then
-        prefix="${pattern%\*}"
-        if [[ "$tool_name" == "$prefix"* ]]; then
-            printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked by mode policy: tool %s is not available in %s mode. Switch mode with /mode or start-mode.sh to access this tool."}}\n' "$tool_name" "$MODE"
-            exit 0
-        fi
-    else
-        # Exact match
-        if [[ "$tool_name" == "$pattern" ]]; then
-            printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Blocked by mode policy: tool %s is not available in %s mode. Switch mode with /mode or start-mode.sh to access this tool."}}\n' "$tool_name" "$MODE"
-            exit 0
-        fi
-    fi
-done
+# Match tool_name against deny patterns using python fnmatch (supports all glob patterns)
+_matched="$(python3 -I -c '
+import sys, fnmatch, json
+tool_name = sys.argv[1]
+mode = sys.argv[2]
+patterns = sys.argv[3:]
+for p in patterns:
+    if not p:
+        continue
+    if fnmatch.fnmatch(tool_name, p):
+        reason = "Blocked by mode policy: tool %s is not available in %s mode. Switch mode with /mode or start-mode.sh to access this tool." % (tool_name, mode)
+        out = {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": reason}}
+        print(json.dumps(out, separators=(",", ":"), ensure_ascii=False))
+        break
+' "$tool_name" "$MODE" "${deny_patterns[@]}" 2>/dev/null || true)"
+if [[ -n "$_matched" ]]; then
+    printf '%s\n' "$_matched"
+    exit 0
+fi
 
 # No deny match — no opinion
 exit 0

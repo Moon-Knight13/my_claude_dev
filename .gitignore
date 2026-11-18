@@ -9,6 +9,20 @@ secrets.*
 *.key
 *.p12
 *.pfx
+*.jks
+*.keystore
+*.kdbx
+*.ppk
+*.ovpn
+*.tfstate
+*.tfstate.backup
+.netrc
+.npmrc
+.pypirc
+id_rsa
+id_ed25519
+id_ecdsa
+id_dsa
 
 # Agent and local tool state
 # Ignore Claude runtime state and machine-local settings, but NOT template

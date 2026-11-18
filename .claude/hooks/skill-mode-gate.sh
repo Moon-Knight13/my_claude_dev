@@ -66,11 +66,17 @@ modes_line="$(sed -n '/^---$/,/^---$/{/^modes:/p}' "$SKILL_FILE" 2>/dev/null)"
 # No modes: field — allowed in all modes
 [[ -n "$modes_line" ]] || exit 0
 
-# Check if active mode appears in modes list
-if printf '%s' "$modes_line" | grep -qw "$MODE"; then
+# Check if active mode appears in modes list (fixed-string match, not regex)
+if printf '%s' "$modes_line" | grep -qFw "$MODE"; then
     exit 0
 fi
 
-printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Skill \"%s\" is not available in %s mode. Its modes: %s. Switch mode with /mode to access it."}}\n' \
-    "$skill_name" "$MODE" "$(printf '%s' "$modes_line" | sed 's/^modes: *//')"
+# JSON-safe output via python to handle special chars in skill_name/MODE/modes_line
+python3 -I -c '
+import json, sys
+skill, mode, modes = sys.argv[1], sys.argv[2], sys.argv[3]
+reason = "Skill \"%s\" is not available in %s mode. Its modes: %s. Switch mode with /mode to access it." % (skill, mode, modes)
+out = {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": reason}}
+print(json.dumps(out))
+' "$skill_name" "$MODE" "$(printf '%s' "$modes_line" | sed 's/^modes: *//')"
 exit 0

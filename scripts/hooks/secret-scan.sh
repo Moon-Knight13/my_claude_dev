@@ -19,15 +19,21 @@
 #
 # Env: CLAUDE_PROJECT_DIR (set by Claude Code), PROMPT via stdin JSON.
 set -euo pipefail
+trap 'exit 2' ERR
 
 HOOK_INPUT="$(cat)"
-PROMPT="$(printf '%s' "$HOOK_INPUT" | jq -r '.prompt // empty' 2>/dev/null)"
+PROMPT="$(printf '%s' "$HOOK_INPUT" | jq -r '.prompt // empty' 2>/dev/null)" || true
 
 [[ -n "$PROMPT" ]] || exit 0
 
 # ── Bypass ──────────────────────────────────────────────────────────────────
 if [[ "$PROMPT" == NOSECRET:* ]]; then
     echo "secret-scan: bypass requested — scanning skipped" >&2
+    # Log bypass to audit trail for review
+    _AUDIT_DIR="${CLAUDE_PROJECT_DIR:-.}/.claude/audit"
+    mkdir -p "$_AUDIT_DIR" 2>/dev/null || true
+    printf '{"timestamp":"%s","event":"secret_scan_bypass","source":"NOSECRET_prefix"}\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$_AUDIT_DIR/secret-detections.jsonl" 2>/dev/null || true
     STRIPPED="${PROMPT#NOSECRET:}"
     STRIPPED="${STRIPPED#"${STRIPPED%%[![:space:]]*}"}"
     printf '{"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","modifiedPrompt":"%s"}}\n' \
@@ -127,9 +133,12 @@ _check_api_tokens() {
     if [[ "$PROMPT" =~ sk-proj-[A-Za-z0-9_-]{40,} ]]; then
         FINDINGS+=("OpenAI project key (sk-proj-*)")
     fi
-    # AWS
+    # AWS (permanent and temporary/STS keys)
     if [[ "$PROMPT" =~ AKIA[0-9A-Z]{16} ]]; then
         FINDINGS+=("AWS access key ID (AKIA*)")
+    fi
+    if [[ "$PROMPT" =~ ASIA[0-9A-Z]{16} ]]; then
+        FINDINGS+=("AWS STS temporary key (ASIA*)")
     fi
     # Slack
     if [[ "$PROMPT" =~ xoxb-[0-9]{10,}-[A-Za-z0-9]+ ]]; then
@@ -144,6 +153,10 @@ _check_api_tokens() {
     # Stripe
     if [[ "$PROMPT" =~ sk_live_[A-Za-z0-9]{24,} ]]; then
         FINDINGS+=("Stripe live secret key (sk_live_*)")
+    fi
+    # GitLab PAT
+    if [[ "$PROMPT" =~ glpat-[A-Za-z0-9_-]{20,} ]]; then
+        FINDINGS+=("GitLab personal access token (glpat-*)")
     fi
     # Generic long bearer token (40+ hex/base64 chars after "Bearer ")
     if [[ "$PROMPT" =~ Bearer[[:space:]]+[A-Za-z0-9+/._=-]{40,} ]]; then

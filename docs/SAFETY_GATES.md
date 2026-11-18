@@ -238,12 +238,11 @@ fires only when the tool name matches (pipe-delimited for multi-tool matchers).
 | `PostToolUse` | `mcp__tuoni-mcp__tuoni_command_get` | `.claude/hooks/auto-log-finding.sh` | Prompt `/log-finding` on actionable results |
 | `Stop` | `""` | `.claude/hooks/session-end-audit.sh` | Audit engagement YAML for gaps |
 
-**Note:** `scripts/hooks/pretooluse-source-priority.sh` exists on disk but is
-**not registered** in `settings.json`. It was an experimental source-priority
-warning for red-team mode (warn when Tier 3 reference MCPs are queried before
-Tier 1 authoritative sources). It reads `CLAUDE_TOOL_NAME` from the
-environment, which is not how PreToolUse hooks receive the tool name (they read
-JSON from stdin) — so it would not function if registered. Treat it as dormant.
+**Note:** `scripts/hooks/pretooluse-source-priority.sh` was removed in audit
+batch 2 (#370). It was an experimental source-priority warning that was never
+registered in `settings.json` and used the wrong interface (`CLAUDE_TOOL_NAME`
+env var instead of stdin JSON). Its intent (Tier 1 before Tier 3) is enforced
+by `.claude/hooks/research-dispatch-guard.sh` via flag-gated dispatch.
 
 ### Exit protocol
 
@@ -709,10 +708,8 @@ environment.
    result is already returned when PostToolUse fires. Prevention relies
    entirely on PreToolUse hooks blocking the read.
 
-4. **`pretooluse-source-priority.sh` is dormant.** Exists on disk but not
-   registered in `settings.json`. Uses `CLAUDE_TOOL_NAME` env var instead of
-   stdin JSON — would not function correctly if registered. Also reads mode
-   from the wrong location (`settings.json._mode` instead of `.active-mode`).
+4. **`pretooluse-source-priority.sh` removed.** Was dormant and used the
+   wrong interface. Removed in audit batch 2 (#370).
 
 5. **Mode-override file as bypass.** `research-dispatch-guard.sh` treats any
    session with a `.claude/.mode-overrides/$SESSION_ID` file as a dispatched

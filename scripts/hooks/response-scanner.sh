@@ -56,11 +56,17 @@ fi
 # ── API token formats ─────────────────────────────────────────────────────
 [[ "$TOOL_OUTPUT" =~ ghp_[A-Za-z0-9]{36,} ]] && FINDINGS+=("GitHub PAT")
 [[ "$TOOL_OUTPUT" =~ github_pat_[A-Za-z0-9_]{22,} ]] && FINDINGS+=("GitHub fine-grained PAT")
+[[ "$TOOL_OUTPUT" =~ gho_[A-Za-z0-9]{36,} ]] && FINDINGS+=("GitHub OAuth token")
+[[ "$TOOL_OUTPUT" =~ ghu_[A-Za-z0-9]{36,} ]] && FINDINGS+=("GitHub user-to-server token")
+[[ "$TOOL_OUTPUT" =~ ghs_[A-Za-z0-9]{36,} ]] && FINDINGS+=("GitHub server-to-server token")
 [[ "$TOOL_OUTPUT" =~ sk-ant-api[0-9]{2}-[A-Za-z0-9_-]{40,} ]] && FINDINGS+=("Anthropic API key")
 [[ "$TOOL_OUTPUT" =~ sk-proj-[A-Za-z0-9_-]{40,} ]] && FINDINGS+=("OpenAI project key")
 [[ "$TOOL_OUTPUT" =~ AKIA[0-9A-Z]{16} ]] && FINDINGS+=("AWS access key")
+[[ "$TOOL_OUTPUT" =~ ASIA[0-9A-Z]{16} ]] && FINDINGS+=("AWS STS temporary key")
 [[ "$TOOL_OUTPUT" =~ xoxb-[0-9]{10,}-[A-Za-z0-9]+ ]] && FINDINGS+=("Slack bot token")
+[[ "$TOOL_OUTPUT" =~ xoxp-[0-9]{10,}-[A-Za-z0-9]+ ]] && FINDINGS+=("Slack user token")
 [[ "$TOOL_OUTPUT" =~ sk_live_[A-Za-z0-9]{24,} ]] && FINDINGS+=("Stripe live key")
+[[ "$TOOL_OUTPUT" =~ glpat-[A-Za-z0-9_-]{20,} ]] && FINDINGS+=("GitLab PAT")
 [[ "$TOOL_OUTPUT" =~ hvs\.[A-Za-z0-9_-]{24,} ]] && FINDINGS+=("Vault token")
 
 # ── Key-value secret patterns ─────────────────────────────────────────────
@@ -115,16 +121,18 @@ MODE="$(cat "${CLAUDE_PROJECT_DIR:-.}/.claude/.active-mode" 2>/dev/null || echo 
 # Append detection to audit log (never log the actual secret value)
 python3 -I -c '
 import json, sys, datetime
-findings = sys.argv[1:]
+tool_name = sys.argv[1]
+mode = sys.argv[2]
+findings = sys.argv[3:]
 entry = {
     "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
     "event": "secret_detected_in_response",
-    "tool": "'"$TOOL_NAME"'",
-    "mode": "'"$MODE"'",
+    "tool": tool_name,
+    "mode": mode,
     "findings": findings,
 }
 print(json.dumps(entry))
-' "${unique[@]}" >> "$AUDIT_FILE" 2>/dev/null || true
+' "$TOOL_NAME" "$MODE" "${unique[@]}" >> "$AUDIT_FILE" 2>/dev/null || true
 
 # Warn the operator (PostToolUse notification — cannot block)
 warning="SECRET DETECTED in $TOOL_NAME response: ${unique[*]}. Review output before proceeding. This detection is logged to .claude/audit/secret-detections.jsonl"

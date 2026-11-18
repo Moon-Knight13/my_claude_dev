@@ -167,16 +167,14 @@ ssh kali "sudo cp -a ${REMOTE_SCRIPTS_DIR} ${backup_dir} 2>/dev/null || true"
 
 # ── SCP scripts to Kali ───────────────────────────────────────────────
 # SCP to tmp first (rt user), then sudo mv into place
-tmp_deploy="/tmp/tuoni-plugin-deploy-$$"
-# shellcheck disable=SC2029  # intentional client-side expansion
-ssh kali "mkdir -p $tmp_deploy"
-scp -q "$DIST_DIR"/tuoni_*.py "kali:$tmp_deploy/"
+tmp_deploy="$(ssh kali 'mktemp -d /tmp/tuoni-plugin-deploy.XXXXXX')"
+scp -q "$DIST_DIR"/tuoni_*.py "kali:${tmp_deploy}/"
 
 # shellcheck disable=SC2029  # intentional client-side expansion
-ssh kali "sudo cp ${tmp_deploy}/tuoni_*.py ${REMOTE_SCRIPTS_DIR}/ && \
-          sudo chown root:root ${REMOTE_SCRIPTS_DIR}/tuoni_*.py && \
-          sudo chmod 644 ${REMOTE_SCRIPTS_DIR}/tuoni_*.py && \
-          rm -rf ${tmp_deploy}"
+ssh kali "sudo cp '${tmp_deploy}'/tuoni_*.py '${REMOTE_SCRIPTS_DIR}/' && \
+          sudo chown root:root '${REMOTE_SCRIPTS_DIR}'/tuoni_*.py && \
+          sudo chmod 644 '${REMOTE_SCRIPTS_DIR}'/tuoni_*.py && \
+          rm -rf '${tmp_deploy}'"
 
 echo "Deployed $deploy_count scripts to ${REMOTE_SCRIPTS_DIR}"
 
