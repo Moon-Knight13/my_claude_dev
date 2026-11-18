@@ -30,9 +30,14 @@ except Exception: print("")' 2>/dev/null || true)"
 # on example text in gh pr create, commit messages, etc.
 cmd_check="$(printf '%s' "$cmd" | sed "/<<[[:space:]]*['\"]\\{0,1\\}EOF/,/^EOF/d")"
 
-# Helper: emit deny decision
+# Helper: emit deny decision (JSON-safe via python)
 deny() {
-    printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"GitLab write guard: %s"}}\n' "$1"
+    python3 -I -c '
+import json, sys
+reason = "GitLab write guard: " + sys.argv[1]
+out = {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": reason}}
+print(json.dumps(out))
+' "$1"
     exit 0
 }
 

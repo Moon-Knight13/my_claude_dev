@@ -163,6 +163,10 @@ else
     mode_msg="no runtimeMode specified (would inherit parent mode)"
 fi
 
-printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"Remote thread guard: %s — %s. Set runtimeMode: \"approval-required\" for remote-originated threads. Override: delete .claude/.remote-approval-required or set the mode explicitly."}}\n' \
-    "$reason" "$mode_msg"
+python3 -I -c '
+import json, sys
+reason_text = "Remote thread guard: %s — %s. Set runtimeMode: \"approval-required\" for remote-originated threads. Override: delete .claude/.remote-approval-required or set the mode explicitly." % (sys.argv[1], sys.argv[2])
+out = {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": reason_text}}
+print(json.dumps(out))
+' "$reason" "$mode_msg"
 exit 0

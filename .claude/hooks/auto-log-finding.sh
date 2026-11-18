@@ -112,10 +112,12 @@ for line in str(text).splitlines():
         break
 ' 2>/dev/null || true)"
 
-# Escape for JSON output
-FINDING_LIST_ESC="$(printf '%s' "$FINDING_LIST" | sed 's/"/\\"/g')"
-SUMMARY_ESC="$(printf '%s' "$SUMMARY" | sed 's/"/\\"/g')"
-
-cat <<EOF
-{"hookSpecificOutput":{"hookEventName":"PostToolUse","notification":"FINDING DETECTED [${FINDING_LIST_ESC}] in tuoni_command_get result. Summary: ${SUMMARY_ESC}. Invoke /log-finding with the technique, target, and outcome to capture this before context is lost."}}
-EOF
+# Build JSON-safe notification via python (sed mishandles backslashes like NT AUTHORITY\SYSTEM)
+python3 -I -c '
+import json, sys
+finding_list = sys.argv[1]
+summary = sys.argv[2]
+msg = "FINDING DETECTED [%s] in tuoni_command_get result. Summary: %s. Invoke /log-finding with the technique, target, and outcome to capture this before context is lost." % (finding_list, summary)
+out = {"hookSpecificOutput": {"hookEventName": "PostToolUse", "notification": msg}}
+print(json.dumps(out))
+' "$FINDING_LIST" "$SUMMARY"

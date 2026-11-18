@@ -67,8 +67,12 @@ guard_stack_load hook \
     || _deny_unavailable "ctp guard stack is incomplete (a required layer failed to load), so this call is denied (fail closed). Reinstall with: bash scripts/install-ctp-bridge.sh"
 
 emit() { # emit <allow|deny|ask> <reason>
-    printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"%s","permissionDecisionReason":"%s"}}\n' \
-        "$1" "$2"
+    python3 -I -c '
+import json, sys
+decision, reason = sys.argv[1], sys.argv[2]
+out = {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": decision, "permissionDecisionReason": reason}}
+print(json.dumps(out))
+' "$1" "$2"
     exit 0
 }
 pass() { exit 0; }  # no opinion
