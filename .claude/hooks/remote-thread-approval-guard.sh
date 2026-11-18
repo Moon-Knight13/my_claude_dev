@@ -28,13 +28,14 @@ FLAG_FILE="$PROJECT_DIR/.claude/.remote-approval-required"
 
 input="$(cat)"
 
-# Parse tool input with Python — extract fields needed for decision
-eval "$(printf '%s' "$input" | python3 -I -c '
+# Parse tool input with Python — output JSON, no eval
+parsed="$(printf '%s' "$input" | python3 -I -c '
 import sys, json
 
 try:
     data = json.load(sys.stdin)
 except Exception:
+    json.dump({"gated": False}, sys.stdout)
     sys.exit(0)
 
 tool_name = data.get("tool_name", "")
@@ -45,28 +46,20 @@ if isinstance(tool_input, str):
     except Exception:
         tool_input = {}
 
-# Only gate thread-creation tools
 GATED_TOOLS = {
     "mcp__t3-code__t3_thread_launch",
     "mcp__t3-code__create_threads",
     "mcp__t3-code__delegate_task",
 }
 if tool_name not in GATED_TOOLS:
-    print("GATED=0")
+    json.dump({"gated": False}, sys.stdout)
     sys.exit(0)
 
-print("GATED=1")
-print(f"TOOL_NAME={tool_name}")
-
-# Check for environmentId (cross-environment signal)
-has_env_id = "1" if tool_input.get("environmentId") else "0"
-# Also check inside target object for delegate_task
+has_env_id = bool(tool_input.get("environmentId"))
 target = tool_input.get("target", {})
 if isinstance(target, dict) and target.get("environmentId"):
-    has_env_id = "1"
-print(f"HAS_ENV_ID={has_env_id}")
+    has_env_id = True
 
-# Extract runtimeMode — for create_threads, check each thread object
 runtime_mode = tool_input.get("runtimeMode", "")
 
 if tool_name == "mcp__t3-code__create_threads":
@@ -77,7 +70,6 @@ if tool_name == "mcp__t3-code__create_threads":
             if isinstance(t, dict):
                 m = t.get("runtimeMode", "")
                 modes.add(m if m else "")
-        # If ANY thread lacks approval-required, flag it
         if modes and all(m == "approval-required" for m in modes if m):
             if all(m for m in modes):
                 runtime_mode = "approval-required"
@@ -87,13 +79,21 @@ if tool_name == "mcp__t3-code__create_threads":
             non_approved = [m for m in modes if m and m != "approval-required"]
             runtime_mode = non_approved[0] if non_approved else ""
 
-# Shell-safe output
-import shlex
-print(f"RUNTIME_MODE={shlex.quote(runtime_mode)}")
-' 2>/dev/null || echo "GATED=0")"
+json.dump({
+    "gated": True,
+    "tool_name": tool_name,
+    "has_env_id": has_env_id,
+    "runtime_mode": runtime_mode,
+}, sys.stdout)
+' 2>/dev/null || echo '{"gated":false}')"
 
-# Not a gated tool — no opinion
-[[ "${GATED:-0}" == "1" ]] || exit 0
+# Extract fields from JSON — no eval, no shell metacharacter risk
+GATED="$(printf '%s' "$parsed" | python3 -I -c 'import sys,json; print(json.load(sys.stdin).get("gated",False))' 2>/dev/null || echo "False")"
+[[ "$GATED" == "True" ]] || exit 0
+
+TOOL_NAME="$(printf '%s' "$parsed" | python3 -I -c 'import sys,json; print(json.load(sys.stdin).get("tool_name",""))' 2>/dev/null || true)"
+HAS_ENV_ID="$(printf '%s' "$parsed" | python3 -I -c 'import sys,json; d=json.load(sys.stdin); print("1" if d.get("has_env_id") else "0")' 2>/dev/null || echo "0")"
+RUNTIME_MODE="$(printf '%s' "$parsed" | python3 -I -c 'import sys,json; print(json.load(sys.stdin).get("runtime_mode",""))' 2>/dev/null || true)"
 
 # --- Detect remote origin ---
 is_remote=0
@@ -142,10 +142,7 @@ fi
 [[ "$is_remote" == "1" ]] || exit 0
 
 # --- Enforce approval-required ---
-# Strip quotes from RUNTIME_MODE (shlex.quote adds them)
-mode_clean="${RUNTIME_MODE//\'/}"
-
-if [[ "$mode_clean" == "approval-required" ]]; then
+if [[ "$RUNTIME_MODE" == "approval-required" ]]; then
     # Correct mode set — allow
     exit 0
 fi
@@ -160,8 +157,8 @@ else
     reason="unattended session with remote access enabled"
 fi
 
-if [[ -n "$mode_clean" ]]; then
-    mode_msg="runtimeMode \"$mode_clean\" is too permissive"
+if [[ -n "$RUNTIME_MODE" ]]; then
+    mode_msg="runtimeMode \"$RUNTIME_MODE\" is too permissive"
 else
     mode_msg="no runtimeMode specified (would inherit parent mode)"
 fi

@@ -35,9 +35,9 @@ Report each hop: OK or FAIL with error.
 ### Step 2: HTTPS Services
 
 ```bash
-curl -so /dev/null -w "%{http_code}" --connect-timeout 5 https://providentia.crp.cr14.net
-curl -so /dev/null -w "%{http_code}" --connect-timeout 5 https://wiki.crp.cr14.net
-curl -so /dev/null -w "%{http_code}" --connect-timeout 5 https://git.crp.cr14.net
+curl -so /dev/null -w "%{http_code}" --connect-timeout 5 "${SPOKE_PROVIDENTIA_URL}"
+curl -so /dev/null -w "%{http_code}" --connect-timeout 5 "${SPOKE_WIKI_URL}"
+curl -so /dev/null -w "%{http_code}" --connect-timeout 5 "${SPOKE_GIT_URL}"
 curl -sk -o /dev/null -w "%{http_code}" --connect-timeout 5 "https://${SPOKE_KALI_HOST}:${SPOKE_KALI_C2_WEB_PORT:-8443}/"
 ```
 
