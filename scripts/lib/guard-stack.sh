@@ -91,7 +91,8 @@ guard_stack_load() { # guard_stack_load [hook|executor]
     guard="$(_guard_stack_find ctp-guard.sh "${CTP_GUARD_LIB:-}")" || return 1
     # shellcheck source=scripts/lib/ctp-guard.sh disable=SC1091
     source "$guard"
-    ctp_load_config "${CTP_BRIDGE_CONF:-$HOME/.ctp-bridge.conf}" || true
+    local _conf
+    _conf="$(ctp_resolve_conf)" && ctp_load_config "$_conf" || true
 
     seg="$(_guard_stack_find cmd-segment.sh "${CMD_SEGMENT_LIB:-}")" || return 1
     # shellcheck source=scripts/lib/cmd-segment.sh disable=SC1091

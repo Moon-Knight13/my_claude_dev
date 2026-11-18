@@ -15,6 +15,40 @@
 # failure shape docs/PROJECT.md warns about.
 
 # --- config ------------------------------------------------------------------
+# ctp_resolve_conf — find .ctp-bridge.conf across worktrees and install layouts.
+# Prints the first existing path and returns 0, or returns 1 if none found.
+# Search order:
+#   1. $CTP_BRIDGE_CONF (explicit env override)
+#   2. $PWD/.ctp-bridge.conf (current directory — works for root checkout)
+#   3. git rev-parse --show-toplevel (git root of current repo, may be worktree)
+#   4. git rev-parse --git-common-dir (common .git dir = root checkout for worktrees)
+#   5. $CLAUDE_PROJECT_DIR (Claude Code project dir env var, set by the harness)
+#   6. $HOME/.ctp-bridge.conf (user-scope installed copy)
+ctp_resolve_conf() {
+    local c _toplevel _common
+    # Env override always wins (even if file is missing — let the caller decide).
+    if [[ -n "${CTP_BRIDGE_CONF:-}" ]]; then
+        printf '%s' "$CTP_BRIDGE_CONF"; return 0
+    fi
+    # PWD
+    [[ -f "$PWD/.ctp-bridge.conf" ]] && { printf '%s' "$PWD/.ctp-bridge.conf"; return 0; }
+    # Git toplevel (may be the worktree root itself)
+    _toplevel="$(git rev-parse --show-toplevel 2>/dev/null)" || true
+    [[ -n "$_toplevel" && -f "$_toplevel/.ctp-bridge.conf" ]] && { printf '%s' "$_toplevel/.ctp-bridge.conf"; return 0; }
+    # Git common dir (root checkout for linked worktrees)
+    _common="$(git rev-parse --git-common-dir 2>/dev/null)" || true
+    if [[ -n "$_common" && "$_common" != ".git" ]]; then
+        _common="${_common%/.git}"
+        [[ -f "$_common/.ctp-bridge.conf" ]] && { printf '%s' "$_common/.ctp-bridge.conf"; return 0; }
+    fi
+    # Claude Code project dir
+    [[ -n "${CLAUDE_PROJECT_DIR:-}" && -f "$CLAUDE_PROJECT_DIR/.ctp-bridge.conf" ]] \
+        && { printf '%s' "$CLAUDE_PROJECT_DIR/.ctp-bridge.conf"; return 0; }
+    # User-scope installed copy
+    [[ -f "$HOME/.ctp-bridge.conf" ]] && { printf '%s' "$HOME/.ctp-bridge.conf"; return 0; }
+    return 1
+}
+
 # ctp_load_config <conf_path> — populate the guard globals from the file. Returns
 # 1 if the file is missing (the caller decides whether that is fatal). Values are
 # taken literally; no shell expansion beyond a leading ~ in secret paths.
