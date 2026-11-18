@@ -52,14 +52,14 @@ except Exception:
 # Research MCP prefixes — tools that fetch external threat intel, CVE data,
 # or detailed target reconnaissance. Keep sorted for easy scanning.
 RESEARCH_PREFIXES=(
-    "mcp__ghidra-mcp__"
-    "mcp__gtfobins-mcp__"
     "mcp__hacktricks-mcp__"
     "mcp__mitre-mcp__"
-    "mcp__range-intel-mcp__providentia_"
-    "mcp__range-intel-mcp__readme_"
-    "mcp__velociraptor-mcp__"
-    "mcp__wazuh-mcp__"
+    "mcp__range-intel__range_"
+    # Re-add when installed:
+    # "mcp__ghidra-mcp__"
+    # "mcp__gtfobins-mcp__"
+    # "mcp__velociraptor-mcp__"
+    # "mcp__wazuh-mcp__"
 )
 
 for prefix in "${RESEARCH_PREFIXES[@]}"; do

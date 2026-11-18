@@ -1,18 +1,5 @@
 {
   "_mode": "red-team",
   "_description": "Offensive operations against authorized targets. Full OPSEC rules active.",
-  "_offensive_base": true,
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/scripts/hooks/pretooluse-source-priority.sh"
-          }
-        ]
-      }
-    ]
-  }
+  "_offensive_base": true
 }

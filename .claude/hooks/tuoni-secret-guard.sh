@@ -10,6 +10,7 @@
 # Read state through the tuoni MCP (redacted). Edit config by hand in your own
 # terminal, not through Claude.
 set -euo pipefail
+trap 'exit 2' ERR
 
 input="$(cat)"
 cmd="$(printf '%s' "$input" | python3 -I -c 'import sys,json
