@@ -26,9 +26,13 @@ ssh kali hashcat "${args[@]}"
 rc=$?
 
 # Cleanup remote temp files and temp dir
+# printf '%q' quotes the path on the client before it reaches the remote shell;
+# the client-side expansion SC2029 warns about is intentional here.
 for f in "${files_to_cleanup[@]}"; do
+    # shellcheck disable=SC2029
     ssh kali "rm -f $(printf '%q' "$f")" 2>/dev/null || true
 done
+# shellcheck disable=SC2029
 ssh kali "rm -rf $(printf '%q' "$KALI_TMP")" 2>/dev/null || true
 
 exit $rc

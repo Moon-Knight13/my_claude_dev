@@ -81,7 +81,7 @@ for p in patterns:
     if fnmatch.fnmatch(tool_name, p):
         reason = "Blocked by mode policy: tool %s is not available in %s mode. Switch mode with /mode or start-mode.sh to access this tool." % (tool_name, mode)
         out = {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": reason}}
-        print(json.dumps(out))
+        print(json.dumps(out, separators=(",", ":"), ensure_ascii=False))
         break
 ' "$tool_name" "$MODE" "${deny_patterns[@]}" 2>/dev/null || true)"
 if [[ -n "$_matched" ]]; then

@@ -167,6 +167,6 @@ python3 -I -c '
 import json, sys
 reason_text = "Remote thread guard: %s — %s. Set runtimeMode: \"approval-required\" for remote-originated threads. Override: delete .claude/.remote-approval-required or set the mode explicitly." % (sys.argv[1], sys.argv[2])
 out = {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": reason_text}}
-print(json.dumps(out))
+print(json.dumps(out, separators=(",", ":"), ensure_ascii=False))
 ' "$reason" "$mode_msg"
 exit 0
