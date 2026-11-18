@@ -246,6 +246,84 @@ else
     bad hook-green-dev-skill-count "expected 2-6 skills, got $gd_count"
 fi
 
+# ── 19. Per-thread mode override: MODE directive creates override file ───────
+_OVERRIDE_DIR="$TMP/.claude/.mode-overrides"
+rm -rf "$_OVERRIDE_DIR" 2>/dev/null
+_FAKE_SESSION="test-session-$$"
+echo "green-dev" > "$TMP/.claude/.active-mode"
+output="$(printf '{"prompt":"MODE: red-team. Do offensive work."}' | \
+    CLAUDE_PROJECT_DIR="$TMP" CLAUDE_CODE_SESSION_ID="$_FAKE_SESSION" bash "$HOOK" 2>/dev/null)"
+if [[ -f "$_OVERRIDE_DIR/$_FAKE_SESSION" ]]; then
+    override_mode="$(cat "$_OVERRIDE_DIR/$_FAKE_SESSION")"
+    if [[ "$override_mode" == "red-team" ]]; then
+        ok thread-override-created
+    else
+        bad thread-override-created "override file contains '$override_mode', expected 'red-team'"
+    fi
+else
+    bad thread-override-created "override file not created"
+fi
+
+# ── 20. Per-thread override injects the OVERRIDE mode, not project mode ─────
+if echo "$output" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null | grep -q "MODE ACTIVE: red-team"; then
+    ok thread-override-injects-correct-mode
+else
+    bad thread-override-injects-correct-mode "expected red-team injection, got project mode"
+fi
+
+# ── 21. Subsequent prompts use existing override without MODE directive ──────
+output2="$(printf '{"prompt":"Continue the work."}' | \
+    CLAUDE_PROJECT_DIR="$TMP" CLAUDE_CODE_SESSION_ID="$_FAKE_SESSION" bash "$HOOK" 2>/dev/null)"
+if echo "$output2" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null | grep -q "MODE ACTIVE: red-team"; then
+    ok thread-override-persists
+else
+    bad thread-override-persists "override should persist across prompts"
+fi
+
+# ── 22. Invalid mode in MODE directive is rejected ──────────────────────────
+_FAKE_SESSION2="test-session-invalid-$$"
+printf '{"prompt":"MODE: nonexistent. Do work."}' | \
+    CLAUDE_PROJECT_DIR="$TMP" CLAUDE_CODE_SESSION_ID="$_FAKE_SESSION2" bash "$HOOK" 2>/dev/null
+if [[ ! -f "$_OVERRIDE_DIR/$_FAKE_SESSION2" ]]; then
+    ok thread-override-rejects-invalid-mode
+else
+    bad thread-override-rejects-invalid-mode "override created for nonexistent mode"
+fi
+
+# ── 23. Meta-modes (base, offensive-base) are rejected in MODE directive ────
+_FAKE_SESSION3="test-session-base-$$"
+printf '{"prompt":"MODE: base. Do work."}' | \
+    CLAUDE_PROJECT_DIR="$TMP" CLAUDE_CODE_SESSION_ID="$_FAKE_SESSION3" bash "$HOOK" 2>/dev/null
+if [[ ! -f "$_OVERRIDE_DIR/$_FAKE_SESSION3" ]]; then
+    ok thread-override-rejects-meta-mode
+else
+    bad thread-override-rejects-meta-mode "override created for meta-mode 'base'"
+fi
+
+# ── 24. No SESSION_ID = no override created ─────────────────────────────────
+_before_count="$(find "$_OVERRIDE_DIR" -type f 2>/dev/null | wc -l)"
+printf '{"prompt":"MODE: red-team. No session."}' | \
+    CLAUDE_PROJECT_DIR="$TMP" CLAUDE_CODE_SESSION_ID="" bash "$HOOK" 2>/dev/null
+_after_count="$(find "$_OVERRIDE_DIR" -type f 2>/dev/null | wc -l)"
+if [[ "$_before_count" -eq "$_after_count" ]]; then
+    ok thread-override-needs-session-id
+else
+    bad thread-override-needs-session-id "override created without session ID"
+fi
+
+# ── 25. MODE directive only matches at line start ───────────────────────────
+_FAKE_SESSION4="test-session-inline-$$"
+printf '{"prompt":"Please use MODE: red-team for this."}' | \
+    CLAUDE_PROJECT_DIR="$TMP" CLAUDE_CODE_SESSION_ID="$_FAKE_SESSION4" bash "$HOOK" 2>/dev/null
+if [[ ! -f "$_OVERRIDE_DIR/$_FAKE_SESSION4" ]]; then
+    ok thread-override-only-line-start
+else
+    bad thread-override-only-line-start "override created from non-line-start MODE directive"
+fi
+
+# Cleanup
+rm -rf "$_OVERRIDE_DIR" 2>/dev/null
+
 echo ""
 if [[ "$fails" -eq 0 ]]; then
     echo "ALL PASS"
