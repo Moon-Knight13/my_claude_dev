@@ -4,13 +4,9 @@
 # then runs hashcat remotely with the Kali-local path.
 set -euo pipefail
 
-KALI_TMP="/tmp/hashcat-mcp"
+KALI_TMP="$(ssh kali 'mktemp -d /tmp/hashcat-mcp.XXXXXX')"
 args=()
 files_to_cleanup=()
-
-# Ensure remote temp dir exists (client-side expansion intentional)
-# shellcheck disable=SC2029
-ssh kali "mkdir -p $KALI_TMP" 2>/dev/null
 
 for arg in "$@"; do
     if [[ -f "$arg" && "$arg" == /tmp/* ]]; then
@@ -29,10 +25,10 @@ done
 ssh kali hashcat "${args[@]}"
 rc=$?
 
-# Cleanup remote temp files
+# Cleanup remote temp files and temp dir
 for f in "${files_to_cleanup[@]}"; do
-    # shellcheck disable=SC2029
-    ssh kali "rm -f '$f'" 2>/dev/null || true
+    ssh kali "rm -f $(printf '%q' "$f")" 2>/dev/null || true
 done
+ssh kali "rm -rf $(printf '%q' "$KALI_TMP")" 2>/dev/null || true
 
 exit $rc

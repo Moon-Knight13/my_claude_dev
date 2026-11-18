@@ -116,10 +116,13 @@ if [[ "$_http_code" == "200" ]]; then
     _auth_endpoint="v1"
 else
     # Try v2.
+    _v2_body="$(printf '{"username":%s,"password":%s}' \
+        "$(printf '%s' "$TUONI_USERNAME" | python3 -I -c 'import sys,json; print(json.dumps(sys.stdin.read()))')" \
+        "$(printf '%s' "$TUONI_PASSWORD" | python3 -I -c 'import sys,json; print(json.dumps(sys.stdin.read()))')")"
     _auth_response=$(curl -s -w "\n%{http_code}" $TLS_FLAG \
         -X POST "${TUONI_URL}/api/v2/auth/login" \
         -H "Content-Type: application/json" \
-        -d "{\"username\":\"${TUONI_USERNAME}\",\"password\":\"${TUONI_PASSWORD}\"}" 2>/dev/null) || true
+        -d "$_v2_body" 2>/dev/null) || true
     _http_code="${_auth_response##*$'\n'}"
     _body="${_auth_response%$'\n'*}"
     if [[ "$_http_code" == "200" ]]; then
