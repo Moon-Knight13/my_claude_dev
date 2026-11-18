@@ -1,0 +1,91 @@
+---
+- name: Validate vault secrets are defined
+  ansible.builtin.assert:
+    that:
+      - guacamole_db_password is defined
+      - guacamole_db_password | length > 0
+      - guacamole_admin_password is defined
+      - guacamole_admin_password | length > 0
+    fail_msg: >
+      guacamole_db_password and guacamole_admin_password must be set
+      via Ansible vault or inventory. No secrets in repo files.
+
+- name: Create Guacamole install directory
+  ansible.builtin.file:
+    path: "{{ guacamole_install_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Check if init SQL exists
+  ansible.builtin.stat:
+    path: "{{ guacamole_install_dir }}/initdb.sql"
+  register: guac_initdb
+
+- name: Generate Guacamole init SQL
+  ansible.builtin.shell:
+    cmd: >
+      docker run --rm
+      guacamole/guacamole:{{ guacamole_version }}
+      /opt/guacamole/bin/initdb.sh --postgresql
+      > {{ guacamole_install_dir }}/initdb.sql
+    creates: "{{ guacamole_install_dir }}/initdb.sql"
+  when: not guac_initdb.stat.exists
+
+- name: Deploy docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ guacamole_install_dir }}/docker-compose.yml"
+    owner: root
+    group: root
+    mode: "0640"
+  notify: Restart guacamole
+
+- name: Start Guacamole stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ guacamole_install_dir }}"
+    state: present
+    pull: missing
+  register: guac_compose
+
+- name: Wait for Guacamole API
+  ansible.builtin.uri:
+    url: "http://localhost:{{ guacamole_port }}/guacamole/api/tokens"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      username: guacadmin
+      password: guacadmin
+    status_code: [200, 403]
+  register: guac_health
+  retries: 12
+  delay: 5
+  until: guac_health.status in [200, 403]
+
+- name: Get auth token for password change
+  ansible.builtin.uri:
+    url: "http://localhost:{{ guacamole_port }}/guacamole/api/tokens"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      username: guacadmin
+      password: guacadmin
+    status_code: [200]
+  register: guac_token
+  failed_when: false
+
+- name: Change default guacadmin password
+  ansible.builtin.uri:
+    url: >-
+      http://localhost:{{ guacamole_port }}/guacamole/api/session/data/postgresql/users/guacadmin/password?token={{ guac_token.json.authToken }}
+    method: PUT
+    body_format: json
+    body:
+      oldPassword: guacadmin
+      newPassword: "{{ guacamole_admin_password }}"
+    status_code: [204]
+  when:
+    - guac_token.status == 200
+    - guac_token.json.authToken is defined
+  no_log: true
