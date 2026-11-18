@@ -91,6 +91,8 @@ json.dump({
 GATED="$(printf '%s' "$parsed" | python3 -I -c 'import sys,json; print(json.load(sys.stdin).get("gated",False))' 2>/dev/null || echo "False")"
 [[ "$GATED" == "True" ]] || exit 0
 
+# TOOL_NAME extracted but unused after refactor — kept for debug logging if needed
+# shellcheck disable=SC2034
 TOOL_NAME="$(printf '%s' "$parsed" | python3 -I -c 'import sys,json; print(json.load(sys.stdin).get("tool_name",""))' 2>/dev/null || true)"
 HAS_ENV_ID="$(printf '%s' "$parsed" | python3 -I -c 'import sys,json; d=json.load(sys.stdin); print("1" if d.get("has_env_id") else "0")' 2>/dev/null || echo "0")"
 RUNTIME_MODE="$(printf '%s' "$parsed" | python3 -I -c 'import sys,json; print(json.load(sys.stdin).get("runtime_mode",""))' 2>/dev/null || true)"

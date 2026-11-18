@@ -97,8 +97,12 @@ run_test "non-gated tool (Read)" \
 echo ""
 
 # --- Flag file removed ---
+# Force attended-session env so Signal 3 (unattended + T3 Connect) cannot fire
+# from the real test environment (e.g. T3 worktrees with ATTENDED=0).
 echo "--- Without flag file (no remote signals, attended session) ---"
 rm -f "$FLAG_FILE"
+_ORIG_ATTENDED="${CLAUDE_CODE_SESSION_ATTENDED:-}"
+export CLAUDE_CODE_SESSION_ATTENDED=1
 
 run_test "t3_thread_launch without flag (local attended)" \
     '{"tool_name":"mcp__t3-code__t3_thread_launch","tool_input":{"title":"test","runtimeMode":"full-access"}}' \
@@ -107,6 +111,12 @@ run_test "t3_thread_launch without flag (local attended)" \
 run_test "delegate_task without flag (local attended)" \
     '{"tool_name":"mcp__t3-code__delegate_task","tool_input":{"task":"do work","runtimeMode":"auto"}}' \
     "allow"
+
+if [[ -n "$_ORIG_ATTENDED" ]]; then
+    export CLAUDE_CODE_SESSION_ATTENDED="$_ORIG_ATTENDED"
+else
+    unset CLAUDE_CODE_SESSION_ATTENDED
+fi
 
 echo ""
 
