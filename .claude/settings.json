@@ -133,6 +133,16 @@
   },
   "_mode_note": "Active mode is set at launch by scripts/start-mode.sh. See /mode for info.",
   "permissions": {
+    "deny": [
+      "Write(~/tuoni-live/config/**)",
+      "Write(~/tuoni-live/ssl/**)",
+      "Write(/srv/tuoni/config/**)",
+      "Write(/srv/tuoni/ssl/**)",
+      "Edit(~/tuoni-live/config/**)",
+      "Edit(~/tuoni-live/ssl/**)",
+      "Edit(/srv/tuoni/config/**)",
+      "Edit(/srv/tuoni/ssl/**)"
+    ],
     "allow": [
       "Read",
       "ToolSearch",

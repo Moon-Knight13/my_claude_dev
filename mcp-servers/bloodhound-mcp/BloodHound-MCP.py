@@ -9,9 +9,15 @@ logger = logging.getLogger(__name__)
 
 load_dotenv()
 
-BLOODHOUND_URI = os.getenv("BLOODHOUND_URI", "bolt://localhost:7687")
-BLOODHOUND_USERNAME = os.getenv("BLOODHOUND_USERNAME", "neo4j")
-BLOODHOUND_PASSWORD = os.getenv("BLOODHOUND_PASSWORD", "bloodhound")
+def _require_env(name):
+    val = os.environ.get(name)
+    if not val:
+        raise EnvironmentError(f"{name} environment variable is required but not set")
+    return val
+
+BLOODHOUND_URI = _require_env("BLOODHOUND_URI")
+BLOODHOUND_USERNAME = _require_env("BLOODHOUND_USERNAME")
+BLOODHOUND_PASSWORD = _require_env("BLOODHOUND_PASSWORD")
 
 _driver = None
 _driver_error = None
