@@ -44,11 +44,14 @@ _GUARD="$(_find_guard)" || { host_warn "cannot locate ctp-guard.sh"; exit 2; }
 # shellcheck source=scripts/lib/ctp-guard.sh disable=SC1091
 source "$_GUARD"
 
-CONF="${CTP_BRIDGE_CONF:-$HOME/.ctp-bridge.conf}"
+CONF="$(ctp_resolve_conf)" || {
+    host_warn "no .ctp-bridge.conf found — copy .ctp-bridge.conf.example and set CTP_ALLOWED_TARGET"
+    exit 2
+}
 COUNT_LOG="${CTP_BRIDGE_LOG:-$HOME/.local/state/ctp-bridge/count.log}"
 
 if ! ctp_load_config "$CONF"; then
-    host_warn "no config at $CONF — copy .ctp-bridge.conf.example and set CTP_ALLOWED_TARGET"
+    host_warn "config at $CONF is unreadable — check permissions"
     exit 2
 fi
 

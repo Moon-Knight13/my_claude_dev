@@ -37,10 +37,12 @@ cp -r "$REPO_ROOT/.claude/modes" "$TMP/modes"
 MODES_DIR="$TMP/modes"
 
 # --- 1. Base directory exists with required files ----------------------------
-if [[ -f "$MODES_DIR/base/CLAUDE.md" ]] && [[ -f "$MODES_DIR/base/settings.json" ]]; then
+# base/CLAUDE.md removed (deduplication — root CLAUDE.md is authoritative).
+# base/settings.json must still exist for hook configuration.
+if [[ -f "$MODES_DIR/base/settings.json" ]]; then
     ok base-files-exist
 else
-    bad base-files-exist "missing base/CLAUDE.md or base/settings.json"
+    bad base-files-exist "missing base/settings.json"
 fi
 
 # --- 2. Base settings.json is valid JSON ------------------------------------
@@ -149,7 +151,7 @@ else
 fi
 
 # --- 9. System prompt merge produces non-empty file --------------------------
-merged_claude="$(cat "$MODES_DIR/base/CLAUDE.md"; echo ""; cat "$MODES_DIR/red-team/system-prompt.md")"
+merged_claude="$(cat "$REPO_ROOT/CLAUDE.md"; echo ""; cat "$MODES_DIR/red-team/system-prompt.md")"
 if [[ -n "$merged_claude" ]] && echo "$merged_claude" | grep -q "Workflow Contract" && echo "$merged_claude" | grep -q "red-team"; then
     ok claude-merge-has-base-and-mode
 else
