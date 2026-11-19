@@ -50,7 +50,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/pretooluse-ctp.sh"
+            "command": "CTP_AUTO_APPROVE_READONLY=1 $CLAUDE_PROJECT_DIR/.claude/hooks/pretooluse-ctp.sh"
           }
         ]
       },
@@ -163,7 +163,10 @@
       "Bash(gh issue view:*)",
       "Bash(gh issue list:*)",
       "Bash(gh repo view:*)",
-      "Bash(gh search:*)"
+      "Bash(gh search:*)",
+      "Bash(bash scripts/ctp-bridge.sh host list:*)",
+      "Bash(bash scripts/ctp-bridge.sh host vars:*)",
+      "Bash(bash scripts/ctp-bridge.sh project update-inventory:*)"
     ]
   }
 }

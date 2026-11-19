@@ -149,7 +149,7 @@ _is_readonly_ctp() {
     return 1
 }
 
-if [[ "$GUARD_STACK_VERDICT" == ask:* && "$_HOOK_AUTO_APPROVE_READONLY" == "1" ]]; then
+if [[ "$GUARD_STACK_VERDICT" == ask:* && ( "$_HOOK_AUTO_APPROVE_READONLY" == "1" || "$_HOOK_AUTO_APPROVE_READONLY" == "true" ) ]]; then
     if _is_readonly_ctp; then
         emit allow "auto-approved read-only ctp command (CTP_AUTO_APPROVE_READONLY=1)"
     fi
