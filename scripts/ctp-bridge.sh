@@ -23,8 +23,8 @@
 set -euo pipefail
 
 # self-contained logging (no repo-relative dependency, so it runs when installed)
-host_note() { echo "  --  $*"; }
-host_warn() { echo "  !!  $*" >&2; }
+host_note() { printf '  --  %s\n' "$*"; }
+host_warn() { printf '  !!  %s\n' "$*" >&2; }
 
 _HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Find ctp-guard.sh across dev (repo) and installed (box) layouts. First hit wins.
