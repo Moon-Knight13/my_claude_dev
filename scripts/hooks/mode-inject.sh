@@ -63,6 +63,9 @@ else
     MODE="$(tr -d '[:space:]' < "$MODE_FILE" 2>/dev/null)"
 fi
 [[ -n "$MODE" ]] || exit 0
+if [[ ! "$MODE" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    exit 0
+fi
 
 PROMPT_FILE="$MODES_DIR/$MODE/system-prompt.md"
 [[ -f "$PROMPT_FILE" ]] || exit 0
@@ -106,7 +109,7 @@ if [[ -d "$SKILLS_DIR" ]]; then
     modes_line="$(sed -n '/^---$/,/^---$/{/^modes:/p}' "$skill_file" 2>/dev/null)"
     [[ -n "$modes_line" ]] || continue
 
-    if printf '%s' "$modes_line" | grep -qw "$MODE"; then
+    if printf '%s' "$modes_line" | grep -qwF "$MODE"; then
       _append MATCHED_SKILLS "$skill_name"
     fi
   done
@@ -126,7 +129,7 @@ if [[ -d "$COMMANDS_DIR" ]]; then
       continue
     fi
 
-    if printf '%s' "$modes_line" | grep -qw "$MODE"; then
+    if printf '%s' "$modes_line" | grep -qwF "$MODE"; then
       _append MATCHED_COMMANDS "$cmd_name"
     fi
   done
@@ -146,7 +149,7 @@ fi
 # Suppress bmad in modes where it is not permitted
 BMAD_SUPPRESS=""
 if [[ -n "$MATCHED_COMMANDS" ]]; then
-  if ! printf '%s' "$MATCHED_COMMANDS" | grep -qw "bmad"; then
+  if ! printf '%s' "$MATCHED_COMMANDS" | grep -qwF "bmad"; then
     BMAD_SUPPRESS="\nDo NOT invoke bmad- prefixed skills or commands — they are not permitted in this mode."
   fi
 else

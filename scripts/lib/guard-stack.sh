@@ -149,6 +149,7 @@ guard_stack_classify_path() { # guard_stack_classify_path <path>
     local fp="$1"
     GUARD_STACK_VERDICT=""
     [[ -n "$fp" ]] || return 0
+    fp="$(realpath -m -- "$fp" 2>/dev/null || readlink -f -- "$fp" 2>/dev/null || printf '%s' "$fp")"
     if _gs_is_guarded_path "$fp"; then
         GUARD_STACK_VERDICT="deny:a guarded path (secret or approval token) is off-limits to tools: $fp"; return 0
     fi

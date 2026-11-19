@@ -135,8 +135,13 @@ print(json.dumps(entry))
 ' "$TOOL_NAME" "$MODE" "${unique[@]}" >> "$AUDIT_FILE" 2>/dev/null || true
 
 # Warn the operator (PostToolUse notification — cannot block)
-warning="SECRET DETECTED in $TOOL_NAME response: ${unique[*]}. Review output before proceeding. This detection is logged to .claude/audit/secret-detections.jsonl"
+notification="$(python3 -I -c '
+import sys, json
+tool = sys.argv[1]
+findings = sys.argv[2:]
+msg = "SECRET DETECTED in " + tool + " response: " + ", ".join(findings) + ". Review output before proceeding. This detection is logged to .claude/audit/secret-detections.jsonl"
+print(json.dumps(msg)[1:-1])
+' "$TOOL_NAME" "${unique[@]}")"
 
-printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","notification":"%s"}}\n' \
-    "$(printf '%s' "$warning" | python3 -I -c 'import sys,json; print(json.dumps(sys.stdin.read())[1:-1])')"
+printf '{"hookSpecificOutput":{"hookEventName":"PostToolUse","notification":"%s"}}\n' "$notification"
 exit 0
