@@ -38,10 +38,22 @@ CTP_ALLOWED_TEAM_NR=
 # CTP_ALLOWED_TEAM=
 
 # The MUTATING verbs the wrapper will run. Allow-list: a verb not named here is
-# refused. Read verbs (host list <box>, project update-inventory) are reachable
-# separately and always confirmed; host vars, redeploy and remove are not
-# reachable, and secrets/make are refused outright regardless of this line.
+# refused. Read verbs (host list <box>, host vars <box>, host connect <box>,
+# project update-inventory) are reachable separately and confirmed by default;
+# host redeploy and remove are not reachable, and secrets/make are refused
+# outright regardless of this line.
 CTP_ALLOWED_VERBS=deploy deploy-role
+
+# Auto-approve read-only verbs (list, vars, connect, update-inventory) without a
+# human confirmation prompt. Set to "true" to enable. Mutating verbs (deploy,
+# deploy-role) are NEVER auto-approved regardless of this setting.
+#
+# Two enforcement points read this independently:
+#   - The config file (.ctp-bridge.conf) gates the wrapper (ctp-bridge.sh).
+#   - The CTP_AUTO_APPROVE_READONLY=1 env var gates the PreToolUse hook — set it
+#     in the thread/session environment when dispatching full-access agent threads.
+# Both must agree for auto-approval to take effect on the agent path.
+CTP_AUTO_APPROVE_READONLY=
 
 # Container override. Leave blank to derive catapult-<current-user> at runtime.
 CTP_CONTAINER=

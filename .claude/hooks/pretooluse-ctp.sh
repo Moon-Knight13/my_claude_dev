@@ -59,6 +59,11 @@ _STACK_DIR="$(dirname "$_STACK")"
 # shellcheck source=scripts/lib/load-env.sh disable=SC1091
 source "$_STACK_DIR/load-env.sh" 2>/dev/null || true
 
+# Capture the harness-set env var BEFORE guard_stack_load, because ctp_load_config
+# inside it replaces CTP_AUTO_APPROVE_READONLY with the config file value. The hook
+# env is harness-set and not agent-modifiable, so reading it here is safe.
+_HOOK_AUTO_APPROVE_READONLY="${CTP_AUTO_APPROVE_READONLY:-}"
+
 # shellcheck source=scripts/lib/guard-stack.sh disable=SC1091
 source "$_STACK"
 # Required layers missing ⇒ we cannot classify anything, so deny rather than let
@@ -123,6 +128,33 @@ guard_stack_classify_command "$CMD"
 if [[ ${#GUARD_STACK_APPROVAL_ARGV[@]} -gt 0 ]]; then
     _write_approval "${GUARD_STACK_APPROVAL_ARGV[*]:-}"
 fi
+
+# Auto-approve read-only ctp commands when CTP_AUTO_APPROVE_READONLY=1.
+# This env var is read from the hook's own environment (harness-set, not agent-
+# modifiable) — the hook runs OUTSIDE the agent's command. The wrapper's config
+# file provides the second gate.
+_is_readonly_ctp() {
+    [[ ${#GUARD_STACK_APPROVAL_ARGV[@]} -gt 0 ]] || return 1
+    local a0="${GUARD_STACK_APPROVAL_ARGV[0]:-}" a1="${GUARD_STACK_APPROVAL_ARGV[1]:-}"
+    case "$a0" in
+        host)
+            case "$a1" in
+                list|vars|connect) return 0 ;;
+            esac ;;
+        project)
+            case "$a1" in
+                update-inventory) return 0 ;;
+            esac ;;
+    esac
+    return 1
+}
+
+if [[ "$GUARD_STACK_VERDICT" == ask:* && "$_HOOK_AUTO_APPROVE_READONLY" == "1" ]]; then
+    if _is_readonly_ctp; then
+        emit allow "auto-approved read-only ctp command (CTP_AUTO_APPROVE_READONLY=1)"
+    fi
+fi
+
 _render
 
 pass

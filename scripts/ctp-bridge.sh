@@ -187,7 +187,13 @@ if [[ "${ASSUME_YES:-0}" == "1" ]]; then
     host_warn "refusing: ASSUME_YES must not reach the ctp gate"
     exit 5
 fi
-if _consume_token "$@"; then
+# Auto-approve read-only verbs when configured. CTP_AUTO_APPROVE_READONLY is
+# read from the config file (.ctp-bridge.conf), never from the caller's
+# environment — an agent that can set an env var in the same call must not widen
+# its own limits. Mutating verbs are NEVER auto-approved.
+if [[ "$CTP_AUTO_APPROVE_READONLY" == "true" && "$CLASS" != "mutating" ]]; then
+    host_note "auto-approved (read-only, config): ctp $*"
+elif _consume_token "$@"; then
     host_note "approved at the hook prompt: ctp $*"
 elif [[ -t 0 ]]; then
     printf '  ??  run: ctp %s   [y/N] ' "$*"
