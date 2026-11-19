@@ -80,7 +80,15 @@ check "list glob -> refuse"                    "$(cls host list 'mail*')"       
 check "update-inventory -> confirm"            "$(cls project update-inventory)"  confirm
 check "  ...class is inventory"                "$(clsc project update-inventory)" inventory
 check "project other subverb -> refuse"        "$(cls project nuke)"              refuse
-check "vars -> refuse (streams detail)"        "$(cls host vars mail-hn)"         refuse
+check "vars <box> -> confirm (read)"            "$(cls host vars mail-hn)"         confirm
+check "  ...vars class is read"                "$(clsc host vars mail-hn)"        read
+check "vars no target -> refuse"               "$(cls host vars)"                 refuse
+check "vars glob -> refuse"                    "$(cls host vars 'mail*')"         refuse
+check "vars with extra arg -> refuse"          "$(cls host vars mail-hn extra)"   refuse
+check "connect <box> -> confirm (read)"        "$(cls host connect mail-hn)"      confirm
+check "  ...connect class is read"             "$(clsc host connect mail-hn)"     read
+check "connect no target -> refuse"            "$(cls host connect)"              refuse
+check "connect glob -> refuse"                 "$(cls host connect 'mail*')"      refuse
 check "redeploy -> refuse"                     "$(cls host redeploy mail-hn)"     refuse
 check "remove -> refuse"                       "$(cls host remove mail-hn)"       refuse
 check "secrets -> refuse"                      "$(cls secrets edit)"              refuse
@@ -289,6 +297,50 @@ PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF" CTP_BRIDGE_STATE="$_LOCK_STATE" CTP_BR
     bash "$ROOT/scripts/ctp-bridge.sh" host deploy mail-hn </dev/null >/dev/null 2>&1
 check "conflict: lock released after holder exits (5)" "$?" 5
 
+# --- auto-approve: read-only verbs with CTP_AUTO_APPROVE_READONLY=true in config
+CONF_AA="$TMP/auto-approve.conf"
+cat > "$CONF_AA" <<EOF
+CTP_ALLOWED_TARGET=custom-box
+CTP_ALLOWED_TEAM_NR=10
+CTP_ALLOWED_ENCLAVES=hn af
+CTP_ALLOWED_VERBS=deploy deploy-role
+CTP_AUTO_APPROVE_READONLY=true
+CTP_CONTAINER=catapult-tester
+CTP_PROJECT_DIR=/srv/inventories/range
+CTP_SECRET_PATHS=/var/tmp/vlt_pf
+CTP_PII_PATHS=
+EOF
+
+# read-only verb + auto-approve config = runs (exit 0 from mock docker)
+PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF_AA" CTP_BRIDGE_LOG="$TMP/aa.log" \
+    CTP_BRIDGE_STATE="$TMP/state" CTP_QUERY_TEAM_FN="_mock_query_team" \
+    bash "$ROOT/scripts/ctp-bridge.sh" host list mail-hn </dev/null >/dev/null 2>&1
+check "auto-approve: read-only list runs without token (0)" "$?" 0
+
+PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF_AA" CTP_BRIDGE_LOG="$TMP/aa.log" \
+    CTP_BRIDGE_STATE="$TMP/state" CTP_QUERY_TEAM_FN="_mock_query_team" \
+    bash "$ROOT/scripts/ctp-bridge.sh" host vars mail-hn </dev/null >/dev/null 2>&1
+check "auto-approve: read-only vars runs without token (0)" "$?" 0
+
+PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF_AA" CTP_BRIDGE_LOG="$TMP/aa.log" \
+    CTP_BRIDGE_STATE="$TMP/state" CTP_QUERY_TEAM_FN="_mock_query_team" \
+    bash "$ROOT/scripts/ctp-bridge.sh" host connect mail-hn </dev/null >/dev/null 2>&1
+check "auto-approve: read-only connect runs without token (0)" "$?" 0
+
+MOCK_VAULT_LOCKED=1 PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF_AA" CTP_BRIDGE_LOG="$TMP/aa.log" \
+    CTP_BRIDGE_STATE="$TMP/state" CTP_QUERY_TEAM_FN="_mock_query_team" \
+    bash "$ROOT/scripts/ctp-bridge.sh" project update-inventory </dev/null >/dev/null 2>&1
+check "auto-approve: inventory update-inventory runs without token (0)" "$?" 0
+
+# mutating verb + auto-approve config = still refused (must prompt)
+PATH="$BIN:$PATH" CTP_BRIDGE_CONF="$CONF_AA" CTP_BRIDGE_LOG="$TMP/aa.log" \
+    CTP_BRIDGE_STATE="$TMP/state" CTP_QUERY_TEAM_FN="_mock_query_team" \
+    bash "$ROOT/scripts/ctp-bridge.sh" host deploy mail-hn </dev/null >/dev/null 2>&1
+check "auto-approve: mutating deploy still refused (5)" "$?" 5
+
+# read-only verb + NO auto-approve config = still refused (existing behavior)
+run_wrap "" -- host list mail-hn; check "no auto-approve: read-only list still refused (5)" "$RC" 5
+
 # --- hook-approval token: the agent path (no TTY) runs iff a valid token exists
 STATE="$TMP/state"; mkdir -p "$STATE"; APPROVAL="$STATE/approval"
 _mktoken() { printf '%s\t%s\n' "$1" "$2" > "$APPROVAL"; }   # <expiry-epoch> <argv>
@@ -495,6 +547,32 @@ check "legit assign cmdsub (grep) -> none" "$(decide "$(bash_json 'files=$(grep 
 check "legit subshell -> none"            "$(decide "$(bash_json '( cd /tmp && ls )')")" none
 check "legit process subst -> none"       "$(decide "$(bash_json 'diff <(sort a) <(sort b)')")" none
 check "legit param expansion -> none"     "$(decide "$(bash_json 'echo "${ctp_home}/bin"')")" none
+
+# new read-only verbs: vars and connect through the hook
+check "Bash wrapper vars -> ask"          "$(decide "$(bash_json "bash $ROOT/scripts/ctp-bridge.sh host vars mail-hn")")" ask
+check "Bash wrapper connect -> ask"       "$(decide "$(bash_json "bash $ROOT/scripts/ctp-bridge.sh host connect mail-hn")")" ask
+check "installed name vars -> ask"        "$(decide "$(bash_json "ctp-bridge host vars mail-hn")")" ask
+check "installed name connect -> ask"     "$(decide "$(bash_json "ctp-bridge host connect mail-hn")")" ask
+
+# hook auto-approve: CTP_AUTO_APPROVE_READONLY=1 in env turns ask->allow for read-only
+decide_aa() {
+    local out
+    out="$(CTP_BRIDGE_CONF="$CONF" CTP_BRIDGE_STATE="$HSTATE" CTP_TARGET_USER=tester \
+        CTP_TARGET_HOME=/home/tester HOME=/home/tester \
+        CTP_QUERY_TEAM_FN="_mock_query_team" CTP_AUTO_APPROVE_READONLY=1 \
+        bash "$HOOK" <<<"$1" 2>/dev/null)"
+    if [[ -z "$out" ]]; then echo none
+    else printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null || echo parse-error
+    fi
+}
+check "hook auto-approve: list -> allow"      "$(decide_aa "$(bash_json "ctp-bridge host list mail-hn")")" allow
+check "hook auto-approve: vars -> allow"      "$(decide_aa "$(bash_json "ctp-bridge host vars mail-hn")")" allow
+check "hook auto-approve: connect -> allow"   "$(decide_aa "$(bash_json "ctp-bridge host connect mail-hn")")" allow
+check "hook auto-approve: inventory -> allow" "$(decide_aa "$(bash_json "ctp-bridge project update-inventory")")" allow
+check "hook auto-approve: deploy still ask"   "$(decide_aa "$(bash_json "ctp-bridge host deploy mail-hn")")" ask
+check "hook auto-approve: deploy-role still ask" "$(decide_aa "$(bash_json "ctp-bridge host deploy-role mail-hn")")" ask
+# without env var, read-only verbs remain ask (default behavior)
+check "hook no auto-approve: list -> ask"     "$(decide "$(bash_json "ctp-bridge host list mail-hn")")" ask
 fi
 
 # ============================================================================

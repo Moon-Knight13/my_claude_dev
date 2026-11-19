@@ -59,6 +59,7 @@ CTP_ALLOWED_ENCLAVES=""
 CTP_ALLOWED_TEAM_NR=""
 CTP_ALLOWED_TEAM=""
 CTP_ALLOWED_VERBS="deploy deploy-role"
+CTP_AUTO_APPROVE_READONLY=""
 CTP_CONTAINER=""
 CTP_PROJECT_DIR=""
 CTP_INVENTORY_PATH=""
@@ -83,6 +84,7 @@ ctp_load_config() {
             CTP_ALLOWED_TEAM_NR) CTP_ALLOWED_TEAM_NR="$val" ;;
             CTP_ALLOWED_TEAM)    CTP_ALLOWED_TEAM="$val" ;;
             CTP_ALLOWED_VERBS)   CTP_ALLOWED_VERBS="$val" ;;
+            CTP_AUTO_APPROVE_READONLY) CTP_AUTO_APPROVE_READONLY="$val" ;;
             CTP_CONTAINER)       CTP_CONTAINER="$val" ;;
             CTP_PROJECT_DIR)     CTP_PROJECT_DIR="$val" ;;
             CTP_INVENTORY_PATH)  CTP_INVENTORY_PATH="$val" ;;
@@ -222,7 +224,15 @@ ctp_classify() {
             ctp_has_glob "$target" && { printf 'refuse glob-in-list-target-refused'; return 1; }
             printf 'confirm read list %s' "$target"; return 0 ;;
         vars)
-            printf 'refuse vars-not-reachable-streams-box-detail'; return 1 ;;
+            [[ -n "$target" ]] || { printf 'refuse vars-needs-a-target'; return 1; }
+            [[ -z "$a4" ]] || { printf 'refuse unexpected-extra-args'; return 1; }
+            ctp_has_glob "$target" && { printf 'refuse glob-in-vars-target-refused'; return 1; }
+            printf 'confirm read vars %s' "$target"; return 0 ;;
+        connect)
+            [[ -n "$target" ]] || { printf 'refuse connect-needs-a-target'; return 1; }
+            [[ -z "$a4" ]] || { printf 'refuse unexpected-extra-args'; return 1; }
+            ctp_has_glob "$target" && { printf 'refuse glob-in-connect-target-refused'; return 1; }
+            printf 'confirm read connect %s' "$target"; return 0 ;;
         redeploy|remove)
             printf 'refuse destructive-verb-not-reachable:%s' "$verb"; return 1 ;;
         deploy|deploy-role)
