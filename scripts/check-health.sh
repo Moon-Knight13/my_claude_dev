@@ -191,6 +191,17 @@ run_spoke() {
     # shellcheck source=scripts/lib/load-env.sh
     source "$SCRIPT_DIR/lib/load-env.sh"
 
+    # Exercise zone gateway pre-flight (ICMP to fw1-mil)
+    # shellcheck source=scripts/lib/gateway-preflight.sh
+    source "$SCRIPT_DIR/lib/gateway-preflight.sh"
+    if [[ -n "${RANGE_GATEWAY_HOST:-}" ]]; then
+        if check_gateway_reachable; then
+            ((PASS++)) || true
+        else
+            ((FAIL++)) || true
+        fi
+    fi
+
     # Per-var probe ports: SSH spokes on 22, GitLab on its custom port, services on 443
     declare -A PROBE_PORTS=(
         [SPOKE_DEPLOYBOX_HOST]=22
