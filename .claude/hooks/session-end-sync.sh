@@ -62,7 +62,7 @@ else
 fi
 
 # --- Claude memory sync ---
-MEMORY_DIR="$HOME/.claude/projects/-home-chris-Documents-my-claude-dev/memory"
+MEMORY_DIR="$HOME/.claude/projects/-$(echo "${CLAUDE_PROJECT_DIR:-$PWD}" | tr '/' '-' | sed 's/^-//')/memory"
 if [[ -d "$MEMORY_DIR" ]]; then
   OUTPUT+="UPDATE Claude memory file with engagement state summary (engagement ID: $ENG_ID, phase: $PHASE, targets: $TARGET_COUNT, findings: $FINDING_COUNT, creds: $CRED_COUNT). "
   OUTPUT+="Memory update prevents next session from duplicating completed work. "

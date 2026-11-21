@@ -1,0 +1,32 @@
+name: Target Escalation
+description: Target resistance requiring operator strategic decision
+labels: ["target-escalation"]
+body:
+  - type: input
+    id: mode
+    attributes:
+      label: Mode
+      placeholder: "red-team"
+    validations:
+      required: true
+  - type: input
+    id: target
+    attributes:
+      label: Target identifier
+      placeholder: "Host/service being targeted"
+    validations:
+      required: true
+  - type: textarea
+    id: approaches
+    attributes:
+      label: Approaches tried
+      description: "List each approach and its result"
+    validations:
+      required: true
+  - type: textarea
+    id: assessment
+    attributes:
+      label: Assessment
+      description: Why target is resistant, recommended next steps
+    validations:
+      required: true

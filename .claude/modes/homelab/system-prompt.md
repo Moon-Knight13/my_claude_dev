@@ -35,3 +35,9 @@ Use these for hardening and patch prioritization, not offensive operations.
 ### Projects
 Primary workspace: homelab_planning (Moon-Knight13/homelab_planning)
 Related: foundryvtt-docker, medicat-usb
+
+### Readiness check
+
+On session start, verify homelab connectivity. If targeting a specific
+host, confirm SSH reachability before making changes. Check obsidian-mcp
+for documentation access.
