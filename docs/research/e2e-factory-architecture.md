@@ -46,7 +46,7 @@ Based on audit of all 45 Moon-Knight13 repos:
 | 2 | **Satellite** | 6 | HQ orchestrates via mode + MCP; repo stays independent |
 | 3 | **Project repo** | 2 | Template-downstream, no HQ dependency |
 | 4 | **Absorb candidate** | 3 | Evaluate: extract patterns or archive |
-| 5-9 | **Archive/prune** | 32 | Coursework, dead forks, duplicate experiments |
+| 5-9 | **Tidy/portfolio** | 32 | Coursework (portfolio value — tidy, don't delete), dead forks, duplicate experiments |
 
 ### 2.2 Fleet Topology
 
@@ -56,7 +56,7 @@ HQ (my_claude_dev)
 │     └── syncs CI gates + security scaffold to all downstream repos
 │
 ├── Satellites (HQ orchestrates, repos stay separate)
-│   ├── tuoni-mcp         [red-team mode]    — C2 MCP server (PRIVATE, HIGH risk)
+│   ├── tuoni-mcp         [red-team mode]    — OFFICIAL shell-dot/tuoni-mcp (PRIVATE; Moon-Knight13/tuoni-mcp is our fork — ARCHIVE)
 │   ├── tuoni-plugins     [red-dev mode]     — C2 command plugins (PRIVATE, HIGH risk)
 │   ├── homelab_infra     [homelab mode]     — IaC for home platform (PUBLIC)
 │   ├── homelab_planning  [homelab mode]     — BMAD planning artifacts (PRIVATE)
@@ -88,13 +88,13 @@ HQ contains no application code. It contains:
 ### 2.4 Fleet Cleanup Actions
 
 **Immediate (low effort, high cleanup):**
-1. Archive 11 coursework repos (batch)
-2. Delete 6 coursework forks (keep tuoni-mcp-1, foundryvtt-docker-upstream)
-3. Archive 3 of 4 AI experiment repos (keep Ai_Suite)
+1. Tidy coursework repos (portfolio value — standardize READMEs, archive truly dead ones only)
+2. Evaluate coursework forks — keep those with meaningful additions, archive pure forks
+3. Consolidate AI experiment repos (keep Ai_Suite, archive duplicates)
 
 **Near-term:**
 4. Archive weaponised_ansible after extracting reusable patterns into HQ skills
-5. Archive nosense_ip_updater after migrating functions to tuoni-mcp/range-intel
+5. Archive nosense_ip_updater after migrating functions to official tuoni-mcp/range-intel
 6. Add CLAUDE.md to homelab_planning
 
 **Result:** 45 repos → ~25. Active fleet: HQ + template + 6 satellites + 2
@@ -125,9 +125,42 @@ target-specific stages.
 | **Verify** | Health check with real traffic | Yes — HTTP probe pattern |
 | **Record** | Update state file, engagement state, cost tracking | Yes — format differs |
 
-### 3.2 How ctp-bridge Generalizes
+### 3.2 Range-Specific vs General Tooling
 
-ctp-bridge is the most mature deploy pattern. Its safety gates generalize:
+**Important scope boundary.** Several tools exist only for the cr14 exercise range
+and have no general equivalent:
+
+| Tool | Scope | Generalizes? |
+|------|-------|-------------|
+| ctp-bridge | cr14 range deployment only | Safety gate pattern generalizes; tool itself does not |
+| Providentia | cr14 range inventory | No equivalent outside range — cloud providers have their own catalogs |
+| catapult | cr14 Ansible container | General Ansible patterns reusable; catapult container is range-specific |
+| Outline wiki | cr14 range docs | General note-taking via Obsidian; wiki itself is range-specific |
+| vCenter | cr14 VM management | No equivalent needed — cloud providers have native APIs |
+
+The safety *patterns* from ctp-bridge (pre-flight, confirm, lock, verify) generalize.
+The *tools* stay range-scoped. Cloud deploy skills build fresh adapters using
+the same safety patterns, not by wrapping ctp-bridge.
+
+### 3.3 Spoke Model: Range vs Personal
+
+Spokes exist per-environment, not globally:
+
+| Environment | Spokes | Provided by |
+|-------------|--------|------------|
+| cr14 range | deploybox, kali, range-git | Range infrastructure (not ours) |
+| Homelab | Docker host, NAS | Operator-owned hardware |
+| CTF/external | Personal kali deployment | Operator deploys own kali (Docker or VM) |
+| VPS/cloud | Cloud instances | Provisioned on demand |
+
+**Personal kali:** For CTFs outside cr14, operator needs own kali deployment —
+Docker container or VM on homelab/VPS. This is a homelab-mode or ctf-mode
+capability, not tied to range spokes. Design: `kali-bootstrap` skill adapted
+for non-range targets (Docker Compose on any host, not catapult-specific).
+
+### 3.4 How ctp-bridge Safety Gates Generalize
+
+The safety gates generalize as patterns, not as the tool itself:
 
 | ctp-bridge gate | Generalized form | Applies to |
 |-----------------|-------------------|-----------|
@@ -369,11 +402,12 @@ weighted tool-call count from audit trail gives ~±20% accuracy.
 
 | Story | Effort | Dependency |
 |-------|--------|-----------|
-| A1: Archive 11 coursework repos (batch `gh repo archive`) | S | None |
-| A2: Delete 6 coursework forks | S | None |
-| A3: Archive 3 AI experiment repos (keep Ai_Suite) | S | None |
+| A1: Tidy coursework repos — standardize READMEs, archive only truly dead ones (portfolio value) | S | None |
+| A2: Evaluate coursework forks — keep meaningful additions, archive pure forks | S | None |
+| A3: Consolidate AI experiment repos (keep Ai_Suite, archive duplicates) | S | None |
 | A4: Extract weaponised_ansible patterns → HQ skills, archive | M | None |
-| A5: Migrate nosense_ip_updater functions → tuoni-mcp/range-intel, archive | M | None |
+| A5: Migrate nosense_ip_updater functions → official tuoni-mcp/range-intel, archive | M | None |
+| A6: Archive Moon-Knight13/tuoni-mcp fork (using official shell-dot/tuoni-mcp) | S | None |
 | A6: Add CLAUDE.md to homelab_planning | S | None |
 | A7: Confirm CompTIA notes value → archive or keep | S | Operator decision |
 
@@ -521,7 +555,7 @@ Epic F (Master Orchestrator)    ── independent for F1-F4; F5 depends on E
 
 | Repo | Public? | Offensive? | Risk if closer to HQ |
 |------|---------|-----------|---------------------|
-| tuoni-mcp | No | Yes (C2) | CRITICAL — must stay separate, private |
+| tuoni-mcp (official: shell-dot/tuoni-mcp) | No | Yes (C2) | CRITICAL — stays separate, private. Moon-Knight13/tuoni-mcp fork → archive |
 | tuoni-plugins | No | Yes (payloads) | CRITICAL — must stay separate, private |
 | weaponised_ansible | No | Yes (exploitation) | HIGH — extract patterns, don't merge |
 | nosense_ip_updater | No | Partial | MEDIUM — migrate functions only |
