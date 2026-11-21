@@ -102,7 +102,7 @@ Output a table:
 ```
 Gateway          ICMP      Status
 ─────────────────────────────────────────
-fw1-mil          ICMP      OK
+zone-gateway     ICMP      OK
 
 Spoke            Protocol  Status  Latency
 ─────────────────────────────────────────

@@ -8,8 +8,8 @@
 #   source "$SCRIPT_DIR/lib/gateway-preflight.sh"
 #   check_gateway_reachable || { echo "Gateway down"; exit 1; }
 #
-# Requires: RANGE_GATEWAY_HOST set in .env (the fw1-mil management IP).
-# Mode scope: green-dev, platform-ops (ICMP to fw1-mil is not an OPSEC concern).
+# Requires: RANGE_GATEWAY_HOST set in .env (the zone gateway management IP).
+# Mode scope: green-dev, platform-ops (ICMP to zone gateway is not an OPSEC concern).
 
 # Source load-env.sh if not already loaded.
 if [[ -z "${_CLAUDE_ENV_LOADED:-}" ]]; then
@@ -33,7 +33,7 @@ check_gateway_reachable() {
         return 0
     else
         echo " FAIL Exercise zone gateway ($host) unreachable"
-        echo "      -> Check VPN connection and fw1-mil status"
+        echo "      -> Check VPN connection and zone gateway status"
         echo "      -> Do NOT investigate routing until gateway responds"
         return 1
     fi

@@ -191,7 +191,7 @@ run_spoke() {
     # shellcheck source=scripts/lib/load-env.sh
     source "$SCRIPT_DIR/lib/load-env.sh"
 
-    # Exercise zone gateway pre-flight (ICMP to fw1-mil)
+    # Exercise zone gateway pre-flight (ICMP to zone gateway)
     # shellcheck source=scripts/lib/gateway-preflight.sh
     source "$SCRIPT_DIR/lib/gateway-preflight.sh"
     if [[ -n "${RANGE_GATEWAY_HOST:-}" ]]; then
