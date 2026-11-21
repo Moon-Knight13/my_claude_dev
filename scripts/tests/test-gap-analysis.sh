@@ -7,45 +7,59 @@ cd "$(git rev-parse --show-toplevel)"
 PASS=0
 FAIL=0
 
-pass() { echo "PASS: $1"; PASS=$((PASS + 1)); }
-fail() { echo "FAIL: $1"; FAIL=$((FAIL + 1)); }
+check() {
+  local label="$1"
+  shift
+  if "$@" >/dev/null 2>&1; then
+    echo "PASS: $label"
+    PASS=$((PASS + 1))
+  else
+    echo "FAIL: $label"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+check_expr() {
+  local label="$1"
+  shift
+  if [ "$@" ]; then
+    echo "PASS: $label"
+    PASS=$((PASS + 1))
+  else
+    echo "FAIL: $label"
+    FAIL=$((FAIL + 1))
+  fi
+}
 
 # GLOSSARY.md
-test -f GLOSSARY.md && pass "GLOSSARY.md exists" || fail "GLOSSARY.md exists"
-grep -q 'GLOSSARY' CLAUDE.md && pass "CLAUDE.md references GLOSSARY" || fail "CLAUDE.md references GLOSSARY"
-[ "$(grep -c "^|" GLOSSARY.md)" -gt 30 ] && pass "GLOSSARY has 30+ terms" || fail "GLOSSARY has 30+ terms"
+check "GLOSSARY.md exists" test -f GLOSSARY.md
+check "CLAUDE.md references GLOSSARY" grep -q 'GLOSSARY' CLAUDE.md
+check_expr "GLOSSARY has 30+ terms" "$(grep -c "^|" GLOSSARY.md)" -gt 30
 
 # disable-model-invocation
-grep -q 'disable-model-invocation: true' .claude/skills/engagement-orchestration/SKILL.md \
-  && pass "engagement-orchestration has disable-model-invocation" \
-  || fail "engagement-orchestration has disable-model-invocation"
+check "engagement-orchestration has disable-model-invocation" \
+  grep -q 'disable-model-invocation: true' .claude/skills/engagement-orchestration/SKILL.md
 
 # Mini variants exist
 for skill in recon initial-access discovery; do
-  test -f ".claude/skills/$skill/SKILL.mini.md" \
-    && pass "$skill mini exists" || fail "$skill mini exists"
+  check "$skill mini exists" test -f ".claude/skills/$skill/SKILL.mini.md"
 done
 
 # Mini variants under size targets
-[ "$(wc -l < .claude/skills/recon/SKILL.mini.md)" -lt 150 ] \
-  && pass "recon mini <150 lines" || fail "recon mini <150 lines"
-[ "$(wc -l < .claude/skills/initial-access/SKILL.mini.md)" -lt 150 ] \
-  && pass "initial-access mini <150 lines" || fail "initial-access mini <150 lines"
-[ "$(wc -l < .claude/skills/discovery/SKILL.mini.md)" -lt 100 ] \
-  && pass "discovery mini <100 lines" || fail "discovery mini <100 lines"
+check_expr "recon mini <150 lines" "$(wc -l < .claude/skills/recon/SKILL.mini.md)" -lt 150
+check_expr "initial-access mini <150 lines" "$(wc -l < .claude/skills/initial-access/SKILL.mini.md)" -lt 150
+check_expr "discovery mini <100 lines" "$(wc -l < .claude/skills/discovery/SKILL.mini.md)" -lt 100
 
 # Safety rules preserved in minis
 for skill in recon initial-access discovery; do
   mini_count=$(grep -c "ENFORCED" ".claude/skills/$skill/SKILL.mini.md" || true)
-  [ "$mini_count" -gt 0 ] \
-    && pass "$skill mini has ENFORCED rules (count=$mini_count)" \
-    || fail "$skill mini has ENFORCED rules (count=$mini_count)"
+  check_expr "$skill mini has ENFORCED rules (count=$mini_count)" "$mini_count" -gt 0
 done
 
 # Mini variants have header comment
 for skill in recon initial-access discovery; do
-  grep -q 'Mini variant for subagent dispatch' ".claude/skills/$skill/SKILL.mini.md" \
-    && pass "$skill mini has header comment" || fail "$skill mini has header comment"
+  check "$skill mini has header comment" \
+    grep -q 'Mini variant for subagent dispatch' ".claude/skills/$skill/SKILL.mini.md"
 done
 
 echo "---"
