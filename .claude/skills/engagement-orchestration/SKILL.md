@@ -2,6 +2,7 @@
 name: engagement-orchestration
 description: "Master orchestration flow for red-team engagements. Defines phases, thread patterns, Obsidian-as-bus, and handoffs. Load at engagement start before dispatching any threads."
 modes: [red-team, purple, ctf]
+disable-model-invocation: true
 ---
 
 # Engagement Orchestration
