@@ -30,3 +30,8 @@ No engagement active. No OPSEC rules apply.
 ### Skill Filter for dev mode
 Preferred skills: bmad-*, superpowers:*.
 Do NOT invoke offensive or engagement skills unless operator explicitly requests them.
+
+### Readiness check
+
+Verify model failover chain: local-ollama reachable (tertiary fallback).
+No spoke or MCP infrastructure required for general dev work.

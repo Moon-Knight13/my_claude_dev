@@ -32,3 +32,9 @@ ssh deploybox echo ok  # deploy spoke
 ssh kali echo ok       # weapons spoke
 ```
 Report which modes are available based on spoke state.
+
+### Readiness self-check
+
+On session start, verify all MCPs are reachable (this mode has full
+MCP access for debugging). Report any unreachable MCPs. This is your
+mode's core job — know what's healthy and what isn't.

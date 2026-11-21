@@ -46,3 +46,9 @@ Range infrastructure build and configuration. Deploy boxes via catapult spoke.
 5. **Validate** — compare deployed state against Providentia expected state
 6. **Document** — update GitLab README with changes
 
+### Readiness check
+
+Before deploying to range: verify deploy spoke SSH reachable, range-intel
+responds, and ctp-bridge is functional. If deploy spoke is unreachable,
+stop and report — deployment will fail.
+

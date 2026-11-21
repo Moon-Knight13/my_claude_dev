@@ -117,3 +117,16 @@ vectors (linked to source material justifying the approach), and
 executable manual steps (literal commands an operator could run without
 the model). Present to operator for approval. Do not execute until
 approved.
+
+### Mode readiness check
+
+Before starting engagement work, verify your capability envelope:
+1. Test each required MCP with a lightweight call (list/capabilities).
+   Log which are reachable and which are not.
+2. Test spoke connectivity (SSH to Kali if needed for this engagement).
+3. Report capability envelope to operator as part of engagement plan.
+4. If a critical MCP is unreachable (tuoni-mcp for red-team, range-intel
+   for range engagements): report as degraded. Do not proceed without
+   operator acknowledgement of degraded state.
+5. If non-critical MCP is unreachable (e.g., nuclei-mcp): note in plan,
+   proceed with alternative approaches.

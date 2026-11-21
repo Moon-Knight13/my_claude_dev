@@ -103,3 +103,17 @@ until the harness issue is resolved.
 If a dispatched thread reports a target-escalation: present findings
 to operator for strategic decision. Do not auto-retry with same
 approaches.
+
+### Thread readiness
+
+Before dispatching offensive work, verify the target mode's critical
+infrastructure is reachable. Run spoke-health or a quick MCP probe.
+If critical spokes are unreachable, do not dispatch — report to operator.
+
+Capability requirements by mode:
+- red-team, purple: Kali spoke + tuoni-mcp + range-intel + obsidian-mcp
+- ctf: Kali spoke + tuoni-mcp (range-intel only if range-based CTF)
+- pentest: Kali spoke + tuoni-mcp + obsidian-mcp
+- bounty: obsidian-mcp + technique MCPs (no spokes required)
+- green-dev: deploy spoke + range-intel
+- red-dev: tuoni-mcp + obsidian-mcp (Kali for test range only)
