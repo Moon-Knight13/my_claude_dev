@@ -1,0 +1,26 @@
+{
+  "_comment": "HQ Phase 0: user-level safety hooks. Deployed by deploy-hq.sh.",
+  "hooks": {
+    "UserPromptSubmit": [],
+    "PreToolUse": [
+      {
+        "matcher": "Agent",
+        "hooks": [{"type": "command", "command": "$HOME/.claude/hooks/master-dispatch-guard.sh"}]
+      },
+      {
+        "matcher": "Bash|Read|Write|Edit",
+        "hooks": [{"type": "command", "command": "$HOME/.claude/hooks/pretooluse-ctp.sh"}]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [{"type": "command", "command": "$HOME/.claude/hooks/tuoni-secret-guard.sh"}]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "mcp__t3-code__delegate_task|mcp__t3-code__t3_thread_launch|mcp__t3-code__create_threads",
+        "hooks": [{"type": "command", "command": "$HOME/.claude/hooks/dispatch-wakeup-enforcer.sh"}]
+      }
+    ]
+  }
+}
