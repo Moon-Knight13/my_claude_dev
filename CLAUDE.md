@@ -16,6 +16,8 @@ outline-readonly) provide data and execution surfaces. No local model routing.
 
 Backup: OpenCode + OpenRouter with local model if primary unavailable.
 
+Read `GLOSSARY.md` for canonical domain vocabulary.
+
 ## Kanban / Board
 *Applies only when `SUBSYSTEM_BOARD=true` in `template.conf`. If it is off, use
 plain GitHub issues and ignore this section.*
