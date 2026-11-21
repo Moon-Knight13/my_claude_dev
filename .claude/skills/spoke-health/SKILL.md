@@ -12,13 +12,28 @@ seems degraded.
 
 ## Procedure
 
-### Step 0: Load Environment
+### Step 0: Load Environment + Gateway Pre-flight
 
-Source .env so SPOKE_* vars are available for HTTPS checks:
+Source .env and check exercise zone gateway reachability first:
 
 ```bash
 source "$CLAUDE_PROJECT_DIR/scripts/lib/load-env.sh"
+source "$CLAUDE_PROJECT_DIR/scripts/lib/gateway-preflight.sh"
 ```
+
+Run the gateway check (green-dev and platform-ops modes):
+
+```bash
+check_gateway_reachable
+```
+
+If the gateway is unreachable, report it prominently and **do not investigate
+routing** — the gateway being down explains all exercise zone connectivity
+failures. Continue with remaining spoke checks but flag that exercise zone
+modes (green-dev, red-team, red-dev, purple) are blocked until the gateway
+responds.
+
+If `RANGE_GATEWAY_HOST` is not set, skip the check (non-exercise environments).
 
 ### Step 1: SSH Spokes
 
@@ -85,6 +100,10 @@ Based on results, report which modes are available:
 Output a table:
 
 ```
+Gateway          ICMP      Status
+─────────────────────────────────────────
+zone-gateway     ICMP      OK
+
 Spoke            Protocol  Status  Latency
 ─────────────────────────────────────────
 Deploybox        SSH       OK      0.3s

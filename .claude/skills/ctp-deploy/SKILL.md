@@ -56,6 +56,21 @@ though that line is just data. It fails closed (denies, never lets something thr
 and the shape is rare. If you hit it, move the heredoc out of the `$( )` or write the
 body to a file first; there is nothing unsafe about the command itself.
 
+## Pre-flight: exercise zone gateway
+
+Before any ctp-bridge command, verify the exercise zone gateway is reachable.
+Two past incidents wasted thread dispatches investigating routing when the
+gateway was simply down.
+
+```bash
+source "$CLAUDE_PROJECT_DIR/scripts/lib/gateway-preflight.sh"
+check_gateway_reachable || exit 1
+```
+
+If the gateway is unreachable: **stop**. Do not investigate routing, do not
+retry deploys, do not dispatch Providentia topology threads. Report the gateway
+is down and hand back to the operator.
+
 ## The developer loop
 
 1. Make the box on Providentia (outside ctp).
