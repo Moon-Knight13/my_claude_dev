@@ -1,0 +1,37 @@
+name: Harness Failure
+description: Infrastructure/tooling failure detected by agent thread
+labels: ["harness-failure", "platform-ops"]
+body:
+  - type: input
+    id: mode
+    attributes:
+      label: Mode
+      placeholder: "red-team"
+    validations:
+      required: true
+  - type: input
+    id: component
+    attributes:
+      label: Failed component
+      placeholder: "tuoni-mcp | hook | spoke | tool"
+    validations:
+      required: true
+  - type: textarea
+    id: error
+    attributes:
+      label: Error message
+      description: Exact error from the failed tool call
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: What was attempted
+      description: Brief description of the action that triggered the failure
+    validations:
+      required: true
+  - type: input
+    id: consecutive
+    attributes:
+      label: Consecutive failures
+      placeholder: "2"
