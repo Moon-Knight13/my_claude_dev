@@ -149,6 +149,18 @@ Skills or commands without a `modes:` field are allowed in all modes (backwards
 compatible). The `mode` and `day0-check` commands intentionally omit `modes:` so
 they remain universally available.
 
+## Mini skill variants
+
+Heavy skills (>200 lines) may have a `SKILL.mini.md` alongside `SKILL.md`.
+Mini variants retain all safety rules and core procedure but strip detailed
+MCP workflows, templates, and edge-case handling. Use mini variants when
+embedding skill content in dispatched thread prompts. Primary session uses
+full `SKILL.md`.
+
+Convention: `<!-- Mini variant for subagent dispatch. Full version: SKILL.md -->`
+header in every mini file. When updating a full skill, check if a mini exists
+and update it too.
+
 ## Deep-dive references
 
 - [`docs/SAFETY_GATES.md`](SAFETY_GATES.md) — ctp-bridge, destructive-action gate, git guard, path guard, commit guard, secret/PII protection details
