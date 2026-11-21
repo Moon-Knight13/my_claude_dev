@@ -93,3 +93,13 @@ Hub (this machine)
 
 MCPs bridge these spokes into the session. Run `/spoke-health` to check
 connectivity before switching to a mode that requires range access.
+
+### Thread failure handling
+
+If a dispatched thread reports a harness-failure issue: dispatch a
+platform-ops thread to fix it. Do not re-dispatch the failed work
+until the harness issue is resolved.
+
+If a dispatched thread reports a target-escalation: present findings
+to operator for strategic decision. Do not auto-retry with same
+approaches.

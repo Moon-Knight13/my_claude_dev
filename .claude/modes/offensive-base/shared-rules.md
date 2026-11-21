@@ -92,3 +92,28 @@ C2 tunnel.
 Parallel: recon (one fork per target), discovery (per agent), persist-swarm
 (multi-host), cred-dump (all hosts).
 Sequential: target approval, lateral decisions, exploitation.
+
+### Failure classification
+
+If you get the same infrastructure error (MCP connection refused, hook
+denial, tool schema error) on 2 consecutive attempts: stop working.
+Create a GitHub issue with label `harness-failure`. Include: error
+message, mode, what you were attempting, which MCP/spoke/hook failed.
+Report to master. Do not retry.
+
+If a target rejects your approach: that is normal offensive work. Change
+approach. After 3 distinct failed approaches on the same target/vector,
+escalate to operator with findings summary: what you tried, what each
+attempt returned, your assessment of why.
+
+If you cannot determine whether an error is harness or target, report
+both possibilities. Do not guess.
+
+### Engagement planning
+
+Before any offensive execution: produce an engagement plan with scoped
+targets (IP + hostname confirmed from intel sources), referenced attack
+vectors (linked to source material justifying the approach), and
+executable manual steps (literal commands an operator could run without
+the model). Present to operator for approval. Do not execute until
+approved.
