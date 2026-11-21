@@ -60,7 +60,7 @@ count=$(grep -rl "TOKEN\|SECRET\|PASSWORD" "$TMP/.claude/hooks/" 2>/dev/null | w
 [[ "$count" -eq 0 ]] && ok "no secrets in hooks" || fail "secrets found"
 
 # Test 8: no hardcoded paths
-count=$(grep -rl "/home/chris\|/Users/" "$TMP/.claude/hooks/" 2>/dev/null | wc -l || true)
+count=$(grep -rl '/home/[a-z]\|/Users/' "$TMP/.claude/hooks/" 2>/dev/null | wc -l || true)
 [[ "$count" -eq 0 ]] && ok "no hardcoded paths" || fail "hardcoded paths found"
 
 # Test 9: verify-only reports correct state

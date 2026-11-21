@@ -73,7 +73,7 @@ MEMORY_DIR="$HOME/.claude/projects/-$(echo "${CLAUDE_PROJECT_DIR:-$PWD}" | tr '/
 
 Run:
 ```bash
-grep -rn '/home/chris\|/Users/' .claude/ scripts/ --include="*.sh" --include="*.json" | grep -v '.git/' | grep -v 'node_modules'
+grep -rn '/home/[a-z]\|/Users/' .claude/ scripts/ --include="*.sh" --include="*.json" | grep -v '.git/' | grep -v 'node_modules'
 ```
 Expected: only the line just fixed (now gone) or test fixtures.
 
@@ -471,7 +471,7 @@ count=$(grep -rl 'TOKEN\|SECRET\|PASSWORD' "$TMP/.claude/hooks/" 2>/dev/null | w
 [[ "$count" -eq 0 ]] && ok "no secrets in hooks" || fail "secrets found in hooks"
 
 # No hardcoded user paths
-count=$(grep -rl '/home/chris\|/Users/' "$TMP/.claude/hooks/" 2>/dev/null | wc -l)
+count=$(grep -rl '/home/[a-z]\|/Users/' "$TMP/.claude/hooks/" 2>/dev/null | wc -l)
 [[ "$count" -eq 0 ]] && ok "no hardcoded paths" || fail "hardcoded paths found"
 
 # Caveman flag

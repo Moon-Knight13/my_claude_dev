@@ -941,9 +941,9 @@ before selecting approach → technique success scoring uses historical data.
 This is how the harness **learns over time**. A CTF teaches techniques
 that speed up the next engagement.
 
-**Loop 3 — Range doctrine (Outline wiki, cr14/DCM specific):**
+**Loop 3 — Range doctrine (Outline wiki, exercise range specific):**
 
-For cr14/DCM range engagements:
+For exercise range engagements:
 - **Input:** Outline wiki contains known vulnerability information per
   target, range rules, prior team writeups. Thread reads Outline
   BEFORE selecting attack vectors.
@@ -963,7 +963,7 @@ Before executing any offensive action, the thread gathers and scores:
 1. GATHER (read-only, all sources)
    ├── Providentia: target specs, services, known config
    ├── GitLab READMEs: vulnerability profiles
-   ├── Outline: known vulns, prior team findings (cr14/DCM only)
+   ├── Outline: known vulns, prior team findings (exercise range only)
    ├── llm-wiki/techniques: historical success rates
    ├── llm-wiki/engagement: current engagement state
    └── Live enumeration: actual services, versions, responses
@@ -997,7 +997,7 @@ Before executing any offensive action, the thread gathers and scores:
 | **purple** | Full doctrine + detection scoring. After each technique: score detection visibility (4-dimension rubric). OPSEC still matters but detection gaps are findings, not failures. |
 | **red-dev** | Research phase only. Build and test exploits on test range. No live engagement state. Reads Outline for target context. Writes technique documentation to llm-wiki. |
 | **ctf** | Full doctrine but OPSEC relaxed. Speed over stealth. Metasploit allowed. Persist optional. Loop 2 learning still active (CTF teaches techniques). |
-| **pentest** | Full doctrine scoped by SOW. Only targets in scope. Client-safe output format. Reads Outline for methodology templates (not cr14/DCM-specific range doctrine). Findings to llm-wiki + client report format. |
+| **pentest** | Full doctrine scoped by SOW. Only targets in scope. Client-safe output format. Reads Outline for methodology templates (not exercise-range-specific doctrine). Findings to llm-wiki + client report format. |
 | **bounty** | Recon + initial access focus. No C2 persistence (program rules). No lateral movement (single target). Findings to program report format + llm-wiki. |
 
 ### Knowledge base structure (Obsidian llm-wiki)
@@ -1111,15 +1111,16 @@ Every step must be:
 - **Referenced** — links to source material justifying the approach
 - **Executable** — literal commands a human can run manually
 
+<!-- Illustrative template — not operational data -->
 ```markdown
-# Engagement Plan: ENG-2026-042
+# Engagement Plan: ENG-YYYY-NNN
 Status: DRAFT → awaiting approval
 
 ## Objective
-Gain domain admin on cr14-range exercise network.
+Gain domain admin on authorized exercise network.
 
 ## Scope confirmation
-Targets from Providentia query `range_targets(team=red-14)`:
+Targets from Providentia query `range_targets(team=<team-id>)`:
 
 | # | Host | IP | Role | Source |
 |---|------|----|------|--------|
@@ -1229,7 +1230,7 @@ Targets from Providentia query `range_targets(team=red-14)`:
 - Harness failure (create issue, stop, follow manual steps)
 
 ## References used in this plan
-- Providentia: range_targets(team=red-14) queried [timestamp]
+- Providentia: range_targets(team=<team-id>) queried [timestamp]
 - Outline: [list of docs consulted with links]
 - llm-wiki/techniques: [list of technique docs consulted]
 - llm-wiki/technology: [list of tool docs consulted]
@@ -1566,6 +1567,6 @@ config still works until explicitly removed.
 - [ ] Populate llm-wiki/techniques/ with known technique outcomes
 - [ ] Add grounding context to offensive mode system prompts (Option C hybrid)
 - [ ] Build technique outcome logging into offensive skills
-- [ ] Add Outline read/write workflow to cr14/DCM engagement skills
+- [ ] Add Outline read/write workflow to exercise range engagement skills
 - [ ] Evaluate Inspect AI for adversarial safety testing
 - [ ] Build quarterly adversarial eval suite

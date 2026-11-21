@@ -76,7 +76,7 @@ else
 fi
 
 # Test 7: no hardcoded paths
-if grep -q '/home/chris\|/Users/' "$HOOK" 2>/dev/null; then
+if grep -q '/home/[a-z]\|/Users/' "$HOOK" 2>/dev/null; then
     fail "contains hardcoded user paths"
 else
     ok "no hardcoded paths"

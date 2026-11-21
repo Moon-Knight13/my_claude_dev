@@ -62,7 +62,7 @@ done
 # Test: hooks don't contain hardcoded paths
 _test_no_hardcoded_paths() {
     local hook_path="$1"
-    if grep -q '/home/chris\|/Users/' "$hook_path" 2>/dev/null; then
+    if grep -q '/home/[a-z]\|/Users/' "$hook_path" 2>/dev/null; then
         fail "$(basename "$hook_path") contains hardcoded user paths"
     else
         ok "$(basename "$hook_path") has no hardcoded paths"
