@@ -373,6 +373,7 @@
       <div class="dgram-h"><h3>MCP server stack</h3><span class="path">mcp-servers/ · .claude/settings.json</span></div>
       <div class="pipe">
         <div class="check"><div class="cn">outline-readonly</div><div class="cw">Read-only wiki access for doctrine, rules, and planning docs.</div><div class="cs">Node.js · hub</div></div>
+        <div class="check"><div class="cn">outline-write</div><div class="cw">Collection-scoped wiki writes — create and update documents with <b>dry-run default</b>, authorship guards, and audit logging.</div><div class="cs">Node.js · hub</div></div>
         <div class="check"><div class="cn">range-intel</div><div class="cw">Providentia range data + GitLab VM README vulnerability profiles for targeting intel.</div><div class="cs">Python · hub</div></div>
         <div class="check"><div class="cn">tuoni-mcp</div><div class="cw">C2 agent management — commands, listeners, payloads, credentials.</div><div class="cs">official · range</div></div>
         <div class="check"><div class="cn">BloodHound</div><div class="cw">Active Directory attack path analysis and domain enumeration.</div><div class="cs">range · new</div></div>
@@ -386,7 +387,7 @@
         <div class="check"><div class="cn">REA</div><div class="cw">Reverse engineering — binary analysis, decompilation, instrumentation.</div><div class="cs">analysis</div></div>
         <div class="check"><div class="cn">local-ollama</div><div class="cw">Local model inference for low-risk and sensitive work.</div><div class="cs">hub · zero cost</div></div>
       </div>
-      <p class="d-note"><b>Range-facing servers</b> (range-intel, tuoni-mcp, BloodHound, Nuclei, Hashcat) reach the range network through an <b>SSE proxy</b> — the devcontainer uses bridge networking, and the proxy translates stdio MCP connections to SSE endpoints on the host, which forward to range-connected spokes. <b>Reference servers</b> (HackTricks, MITRE, CVE, LOLBins) query public knowledge bases. <b>Hub servers</b> run locally on the operator's machine. Each mode activates only its needed subset.</p>
+      <p class="d-note"><b>Range-facing servers</b> (range-intel, tuoni-mcp, BloodHound, Nuclei, Hashcat) reach the range network through an <b>SSE proxy</b> — the devcontainer uses bridge networking, and the proxy translates stdio MCP connections to SSE endpoints on the host, which forward to range-connected spokes. <b>Reference servers</b> (HackTricks, MITRE, CVE, LOLBins) query public knowledge bases. <b>Hub servers</b> run locally on the operator's machine — outline-readonly and <b>outline-write</b> (collection-scoped, dry-run default) together give agents read + guarded-write access to the team wiki. Each mode activates only its needed subset.</p>
     </div>
 
     <div class="dgram">
@@ -429,7 +430,7 @@
       <div class="pipe">
         <div class="check"><div class="cn">aggregate</div><div class="cw">Scans all engagement YAMLs (active + archived) and collects every technique attempt with its result, target, and timestamp.</div><div class="cs">engagements/</div></div>
         <div class="check"><div class="cn">score</div><div class="cw">Computes a composite score per technique: <b>empirical success rate</b> (recency-weighted), EPSS, and stealth — configurable weights.</div><div class="cs">weighted</div></div>
-        <div class="check"><div class="cn">flag</div><div class="cw">Auto-deprioritizes techniques that keep failing, flags low-confidence scores, and detects <b>Providentia accuracy gaps</b> (range says exploitable, empirical rate says zero).</div><div class="cs">gap detect</div></div>
+        <div class="check"><div class="cn">flag</div><div class="cw">Auto-deprioritizes techniques that keep failing, flags low-confidence scores, and detects <b>Providentia accuracy gaps</b> (range says exploitable, empirical rate says zero). The <b>accuracy tracker</b> (<span class="path">/log-accuracy</span>) now logs discrepancies to the wiki during engagements.</div><div class="cs">gap detect</div></div>
         <div class="check"><div class="cn">ground</div><div class="cw">The ranked output feeds the orchestrator so technique selection is based on <b>what actually worked</b>, not assumptions.</div><div class="cs">orchestrator</div></div>
       </div>
       <p class="d-note">Supports per-target filtering (<span class="path">--target</span>) and single-technique query (<span class="path">--query</span>). Scores accumulate across engagements — every operation makes the next one's technique selection better.</p>
@@ -449,10 +450,13 @@
         <div class="check"><div class="cn">worry ③ destructive act</div><div class="cw"><b>Destructive-action gate.</b> rm -rf, dropdb, DROP/TRUNCATE, terraform destroy, kubectl delete, docker prune — the human <b>confirms</b> before it runs. No human present ⇒ it fails closed to a deny. Model-agnostic: one classifier lib any executor routes through.</div><div class="cs">ask</div></div>
         <div class="check"><div class="cn">destructive git</div><div class="cw"><b>Destructive-git gate.</b> git push --force, reset --hard, clean -f, branch -D, checkout --force — the human <b>confirms</b> first (fails closed with no human). Reads the real command word, so a commit message that says "reset --hard" is not flagged.</div><div class="cs">ask</div></div>
         <div class="check"><div class="cn">worry ④ web connection</div><div class="cw"><b>Egress.</b> Covered on the box by the org's restricted network — new outbound hosts are already gated at the edge. A hook-level visibility layer is planned on top.</div><div class="cs">org net</div></div>
-        <div class="check"><div class="cn">build tooling</div><div class="cw"><b>Bridge.</b> The agent cannot drive the deploy wrapper or docker directly — bare access is <b>denied</b>; a permitted verb raises a confirm bound to that exact command; a refused verb is denied.</div><div class="cs">ask / deny</div></div>
+        <div class="check"><div class="cn">provenance</div><div class="cw"><b>Tool-call provenance.</b> Critical and sensitive tools require a registered session, freshness check, and mode alignment before execution. Every classified call is audit-logged to <span class="path">provenance.jsonl</span>. Missing session or stale registration ⇒ <b>denied</b>.</div><div class="cs">deny</div></div>
+        <div class="check"><div class="cn">GitLab write guard</div><div class="cw"><b>GitLab write guard.</b> Prevents unauthorized write operations to GitLab repositories via MCP — only explicitly allowed repos and operations pass. Protects shared-space repos from accidental agent writes.</div><div class="cs">deny</div></div>
+        <div class="check"><div class="cn">dispatch discipline</div><div class="cw"><b>Dispatch guards.</b> Master sessions delegate only via T3 threads, not Agent tool — enforcing worktree isolation. Implementation threads must use worktree strategy; research must use root. ScheduleWakeup required after every dispatch. Forks and cavecrew bypass.</div><div class="cs">deny / warn</div></div>
+        <div class="check"><div class="cn">build tooling</div><div class="cw"><b>Bridge.</b> The agent cannot drive the deploy wrapper or docker directly — bare access is <b>denied</b>; a permitted verb raises a confirm bound to that exact command; a refused verb is denied. <b>Read-only verbs auto-approve</b> in full-access threads.</div><div class="cs">ask / deny</div></div>
         <div class="check"><div class="cn">credentials</div><div class="cw"><b>Secret-read deny + killswitch.</b> Credential files (vault, ~/.ssh keys, .env, history) are unreadable by any tool; and once the last session ends, credentials left on the shared account are shredded so the next connector authenticates as themselves.</div><div class="cs">deny / shred</div></div>
       </div>
-      <p class="d-note">The hook runs <b>outside</b> the agent's command, so the agent cannot disable it; if its guard stack is missing it <b>fails closed</b> and denies every call. Its limits come from a gitignored on-box config, never the agent's environment. The checks above are <b>one composed policy</b> in <span class="path">scripts/lib/guard-stack.sh</span>, not logic living in the hook: the hook parses the tool call and renders a verdict, the stack decides. That matters because there are now <b>two</b> enforcement points: this hook, and the local-model executor below, which does not go through Claude and so does not inherit the hook. Sharing one library is what stops the two drifting apart. Every control is <b>demonstrable</b> — feed the hook a tool call and read its verdict, or ask Claude to do the risky thing and watch the prompt. Full walkthrough: <span class="path">docs/SAFETY_HARNESS.md</span>. <span class="path">check-day0.sh</span> reports each control's posture honestly (present · warn-only · bypassable · box-only).</p>
+      <p class="d-note">The hook runs <b>outside</b> the agent's command, so the agent cannot disable it; if its guard stack is missing it <b>fails closed</b> and denies every call. Its limits come from a gitignored on-box config, never the agent's environment. The checks above are <b>one composed policy</b> in <span class="path">scripts/lib/guard-stack.sh</span>, not logic living in the hook: the hook parses the tool call and renders a verdict, the stack decides. That matters because there are now <b>two</b> enforcement points: this hook, and the local-model executor below, which does not go through Claude and so does not inherit the hook. Sharing one library is what stops the two drifting apart. The <b>provenance layer</b> adds a third dimension: even if a tool call passes all other guards, it must come from a registered, fresh, mode-aligned session — a tool call with no provenance is refused before the guard stack runs. Every control is <b>demonstrable</b> — feed the hook a tool call and read its verdict, or ask Claude to do the risky thing and watch the prompt. Full walkthrough: <span class="path">docs/SAFETY_HARNESS.md</span>. <span class="path">check-day0.sh</span> reports each control's posture honestly (present · warn-only · bypassable · box-only).</p>
     </div>
 
   </section>
@@ -472,7 +476,7 @@
   </section>
 
   <section aria-labelledby="v3-h">
-    <span class="badge planned">status&nbsp;<b>planned</b>&nbsp;·&nbsp;design&nbsp;2026-11-06&nbsp;·&nbsp;nothing&nbsp;built&nbsp;yet</span>
+    <span class="badge planned">status&nbsp;<b>in&nbsp;progress</b>&nbsp;·&nbsp;design&nbsp;2026-11-06&nbsp;·&nbsp;T3&nbsp;routing&nbsp;+&nbsp;dispatch&nbsp;guards&nbsp;live</span>
     <p class="eyebrow">Roadmap · v3 vision</p>
     <h2 id="v3-h">Next: multi-environment operator hub</h2>
     <p class="section-note">The current architecture serves one environment (a dedicated cyber range). v3 generalizes the framework to support independent operational domains — CTF challenges, penetration tests, bug bounties, software development, and homelab infrastructure — each with its own modes, knowledge bases, and model failover.</p>
@@ -557,7 +561,7 @@
 
         <path class="ln" d="M612 120 H628" marker-end="url(#sp1a-ah)"/>
       </svg>
-      <p class="d-note"><b>Why:</b> hook-injected mode rules degrade in long sessions (context bleed, routing ambiguity). T3 threads give structural context isolation, persistent mode sessions, and a clean audit trail. <b>Security improves:</b> hooks are project-scoped and fire on all threads, including delegate children. The <span class="path">.active-mode</span> shared-state gap is solved by project-per-mode-group. <b>Partially operational:</b> T3 Code is already the orchestration surface — the master agent delegates implementation to threads and stays router-only. <span class="path">project-routes.yaml</span> maps modes to projects with mismatch detection in the mode-inject hook.</p>
+      <p class="d-note"><b>Why:</b> hook-injected mode rules degrade in long sessions (context bleed, routing ambiguity). T3 threads give structural context isolation, persistent mode sessions, and a clean audit trail. <b>Security improves:</b> hooks are project-scoped and fire on all threads, including delegate children. The <span class="path">.active-mode</span> shared-state gap is solved by project-per-mode-group. <b>Operational today:</b> T3 Code is the orchestration surface — the master agent delegates to threads and stays router-only, <b>enforced by dispatch guards</b> (master-dispatch-guard + dispatch-validation-guard). <b>Per-thread mode override</b> lets child threads run in a different mode than master (e.g. red-team thread dispatched from platform-ops). <span class="path">/run-epic</span> orchestrates epics across T3 threads. <span class="path">project-routes.yaml</span> maps modes to projects with mismatch detection.</p>
     </div>
 
     <div class="dgram">
@@ -609,7 +613,8 @@
       <span>docs/TEMPLATE_GUIDE.md</span>
       <span>docs/BMAD_WORKFLOW.md</span>
       <span>docs/KANBAN_WORKFLOW.md</span>
-      <span>docs/ARCHITECTURE_VISION.md (v3 planned)</span>
+      <span>docs/SAFETY_GATES.md</span>
+      <span>docs/ARCHITECTURE_VISION.md (v3 in progress)</span>
     </div>
     <p class="fine">The repository README is the source of truth; this overview is a briefing companion. Apache-2.0.</p>
   </footer>
