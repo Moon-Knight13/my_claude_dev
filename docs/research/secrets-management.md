@@ -292,68 +292,83 @@ hooks enforce which environment is active per mode.
 
 ## 4. Recommendation
 
-### Primary: SOPS + age (encrypted .env files in repo)
+### Honest cost/benefit: what changes from current .env
 
-**Why SOPS+age wins:**
-1. **Offline** — critical for range ops where internet may not exist
-2. **Zero infrastructure** — no server, no subscription, no container
-3. **Fits existing architecture** — encrypted .env files replace plaintext .env,
-   load-env.sh already handles the parsed output
-4. **Git-backed** — encrypted secrets versioned alongside code, reviewable diffs
-5. **Per-environment isolation** — `.sops.yaml` creation rules bind paths to keys
-6. **Single operator** — one age key (or one per environment for harder isolation)
-7. **Rotation** — `sops secrets/range.env.enc` opens editor, re-encrypts on save
+Before recommending a tool, what does any change actually buy?
 
-**Secondary (cloud environments only): 1Password CLI**
+| Concern | Current .env + hooks | Encrypted/vault-backed |
+|---------|---------------------|------------------------|
+| Agent reads secrets | **No** — hook denies `.env` reads | **No** — same hooks |
+| Secrets at rest on disk | Plaintext in `.env` | Encrypted or in vault |
+| File access = all secrets | **Yes** — `cat .env` | No (needs key/auth) |
+| Per-environment isolation | **No** — one `.env`, all envs | **Yes** — separate sets |
+| Mode-gated access | **No** — all secrets in one file | **Yes** — hook gates which set loads |
+| Rotation | Edit `.env` manually | Same (nicer with vault UI) |
+| MCP servers see all env vars | **Yes** | **Yes** (until per-MCP injection added) |
 
-For cloud VPS and homelab where internet is available, `op run` with `op://`
-references is cleaner for secrets that change frequently or are shared with other
-tools. This is additive — SOPS handles the base case, 1Password layers on where
-connectivity exists.
+**Two real wins:** per-environment isolation with mode gating, and defense in
+depth at rest. If you only run one environment and trust disk security, current
+state is functional. The upgrade pays off for multi-environment + mode-gated access.
+
+### Primary: Bitwarden Secrets Manager (`bws`)
+
+**Why `bws` wins given existing Bitwarden:**
+1. **Already owned** — no new subscription, vault already populated
+2. **Project-scoped tokens** — service account token per project, isolated from
+   vault logins/passwords/cards/identities (completely separate from `bw`)
+3. **Per-environment isolation** — one Bitwarden SM project per env
+4. **Rotation via familiar UI** — update in Bitwarden, all consumers get new value
+5. **Official MCP server exists** — GPL-3.0 (uses `bw`, not `bws` yet — watch for updates)
+6. **No new tooling to learn** — same platform, different CLI
+
+**Critical safety note:** `bws` (Secrets Manager CLI) uses project-scoped service
+account tokens. It **cannot** access vault logins, passwords, cards, or identities.
+This is the correct CLI. `bw` (regular CLI) unlocks the **entire vault** — do not
+use `bw` for agent-accessible secret injection.
+
+**Offline fallback: SOPS + age**
+
+For range ops where internet may not exist mid-session, SOPS+age as fallback.
+Secrets resolved from Bitwarden at session start; if range needs re-read
+mid-session offline, SOPS-encrypted file is the backup path. This may never
+be needed — secrets load once at launch.
 
 ### 4.1 Proposed architecture
 
 ```
-secrets/                          # NEW directory, in repo
-  range.env.enc                   # SOPS-encrypted, age backend
-  homelab.env.enc                 # different creation rule (optional: different key)
-  cloud.env.enc
-  ctf.env.enc
-  pentest.env.enc
-.sops.yaml                        # creation rules, in repo
-age-keys/                         # NEVER in repo
-  ~/.config/sops/age/keys.txt     # age identity file (standard location)
-```
+Bitwarden Secrets Manager:
+  Project: range-creds          # TUONI_*, PROVIDENTIA_TOKEN, GITLAB_TOKEN, etc.
+  Project: homelab-creds        # UniFi token, local service keys
+  Project: cloud-creds          # RUNPOD_API_KEY, Hetzner token
+  Project: ctf-creds            # per-exercise creds
+  Project: pentest-creds        # per-engagement creds
 
-**.sops.yaml example:**
-```yaml
-creation_rules:
-  - path_regex: secrets/range\.env\.enc$
-    age: >-
-      age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-  - path_regex: secrets/homelab\.env\.enc$
-    age: >-
-      age1yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
-  - path_regex: secrets/.*\.env\.enc$
-    age: >-
-      age1zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+Service account tokens (one per project):
+  ~/.config/bws/range.token     # scoped to range-creds only
+  ~/.config/bws/homelab.token   # scoped to homelab-creds only
+  ~/.config/bws/cloud.token     # scoped to cloud-creds only
+  (tokens gitignored, never in repo)
+
+Optional SOPS fallback (offline range):
+  secrets/range.env.enc         # SOPS-encrypted, age backend, committed
+  ~/.config/sops/age/keys.txt   # age identity file
 ```
 
 ### 4.2 Mode-to-secret mapping
 
 ```
-MODE              → ALLOWED SECRET FILES
-─────────────────────────────────────────
-platform-ops      → (none, or general.env.enc)
-green-dev         → range.env.enc
-red-team          → range.env.enc
-red-dev           → range.env.enc
-purple            → range.env.enc
-blue              → range.env.enc
-homelab           → homelab.env.enc
-ctf               → ctf.env.enc
-pentest           → pentest.env.enc
-cloud-dev         → cloud.env.enc
+MODE              → BWS PROJECT         → TOKEN FILE
+──────────────────────────────────────────────────────
+platform-ops      → (none)              → (none)
+green-dev         → range-creds         → ~/.config/bws/range.token
+red-team          → range-creds         → ~/.config/bws/range.token
+red-dev           → range-creds         → ~/.config/bws/range.token
+purple            → range-creds         → ~/.config/bws/range.token
+blue              → range-creds         → ~/.config/bws/range.token
+homelab           → homelab-creds       → ~/.config/bws/homelab.token
+ctf               → ctf-creds           → ~/.config/bws/ctf.token
+pentest           → pentest-creds       → ~/.config/bws/pentest.token
+cloud-dev         → cloud-creds         → ~/.config/bws/cloud.token
 ```
 
 ### 4.3 Integration with existing load-env.sh
@@ -361,19 +376,32 @@ cloud-dev         → cloud.env.enc
 **New flow:**
 ```
 1. Mode activates (mode-inject.sh / switch-profile.sh)
-2. Mode config declares which secret file to use
+2. Mode config declares SECRETS_PROJECT and BWS_TOKEN_FILE
 3. load-env.sh enhanced:
    a. Load .env (non-secret config: FIREWALL_MODE, LOCAL_MODEL_*, etc.)
-   b. If SECRETS_FILE set, decrypt via sops:
-      sops -d "$SECRETS_FILE" | while read line; do export "$line"; done
-   c. Profile overlay still works (additive)
-4. Guard hook enhanced: verify SECRETS_FILE matches mode mapping
+   b. If BWS_TOKEN_FILE set and bws available:
+      BWS_ACCESS_TOKEN=$(<"$BWS_TOKEN_FILE") bws secret list --project-id "$SECRETS_PROJECT" \
+        | parse and export each secret as env var
+   c. Fallback: if bws unavailable and SECRETS_FILE set (SOPS path):
+      sops -d "$SECRETS_FILE" | parse and export
+   d. Profile overlay still works (additive)
+4. Guard hook: verify SECRETS_PROJECT matches mode mapping
 ```
 
 **load-env.sh changes (minimal):**
 ```bash
-# After loading .env, decrypt mode-specific secrets
-if [[ -n "${SECRETS_FILE:-}" && -f "$SECRETS_FILE" ]]; then
+# After loading .env, inject mode-specific secrets from Bitwarden SM
+if [[ -n "${BWS_TOKEN_FILE:-}" && -f "$BWS_TOKEN_FILE" && -n "${SECRETS_PROJECT:-}" ]]; then
+    if command -v bws &>/dev/null; then
+        while IFS=$'\t' read -r key val; do
+            [[ "$key" =~ ^[A-Za-z_] ]] || continue
+            [[ -z "${!key+x}" ]] && export "$key=$val"
+        done < <(BWS_ACCESS_TOKEN="$(<"$BWS_TOKEN_FILE")" bws secret list \
+            --project-id "$SECRETS_PROJECT" --output tsv 2>/dev/null \
+            | awk -F'\t' '{print $2 "\t" $3}')
+    fi
+# SOPS fallback for offline environments
+elif [[ -n "${SECRETS_FILE:-}" && -f "$SECRETS_FILE" ]]; then
     if command -v sops &>/dev/null; then
         while IFS='=' read -r key val; do
             [[ "$key" =~ ^[A-Za-z_] ]] || continue
@@ -387,50 +415,58 @@ fi
 
 **New guard: `secret-env-gate.sh`** (PreToolUse, Bash)
 
-Purpose: prevent decrypting wrong environment's secrets for active mode.
+Purpose: prevent accessing wrong environment's secrets for active mode.
 
 ```
-1. Parse command for `sops -d` or `sops exec-env` calls
-2. Extract target filename
-3. Load mode-secret mapping from .claude/modes/<mode>/secret-policy.yaml
-4. If target file not in allowed list → DENY
-5. If no mode active → DENY all secret decryption
+1. Parse command for `bws` or `sops -d` calls
+2. For bws: extract --project-id
+3. For sops: extract target filename
+4. Load mode-secret mapping from .claude/modes/<mode>/secret-policy.yaml
+5. If project/file not in allowed list → DENY
+6. If no mode active → DENY all secret access
 ```
+
+**Also gate token files:**
+- Add `~/.config/bws/*.token` to `CTP_SECRET_BUILTIN` (hook denies Read/Bash
+  access to token files — same pattern as `~/.ssh/id_*`)
 
 **Existing hook updates:**
-- `pretooluse-ctp.sh`: Add `secrets/*.env.enc` to `CTP_SECRET_BUILTIN` for
-  the encrypted files (belt and suspenders — SOPS encryption is the real gate,
-  but denying raw reads prevents fumbling with `cat` on encrypted blobs)
+- `pretooluse-ctp.sh`: Add `~/.config/bws/*` and `secrets/*.env.enc` to
+  `CTP_SECRET_BUILTIN` (denies raw reads of tokens and encrypted files)
 - `mode-tool-gate.sh`: No change needed (already gates MCP tools per mode)
 - `tuoni-secret-guard.sh`: No change needed (guards Tuoni paths specifically)
 
 ### 4.5 Migration path
 
-**Phase 1: Infrastructure (no behavior change)**
-1. Install `sops` and `age` (add to `check-day0.sh`)
-2. Generate age key: `age-keygen -o ~/.config/sops/age/keys.txt`
-3. Create `.sops.yaml` with creation rules
-4. Create `secrets/` directory
-5. Add `secrets/*.env.enc` to `.gitignore` exceptions (encrypted files ARE committed)
+**Phase 1: Bitwarden Secrets Manager setup (no code change)**
+1. Enable Secrets Manager in Bitwarden account (may need upgrade)
+2. Create projects: range-creds, homelab-creds, cloud-creds
+3. Add secrets to each project (mirror current .env secret vars)
+4. Create service account tokens scoped per project
+5. Store tokens: `~/.config/bws/range.token`, etc.
+6. Install `bws` CLI
 
-**Phase 2: Encrypt existing secrets**
-1. Extract secret vars from `.env` into `secrets/range.env`
-2. `sops -e secrets/range.env > secrets/range.env.enc`
-3. Remove secret vars from `.env` (keep non-secret config)
-4. Create encrypted files for other envs as profiles are activated
-5. Remove plaintext: `rm secrets/range.env`
+**Phase 2: Wire into load-env.sh**
+1. Add `bws` secret injection to `load-env.sh` (code above)
+2. Add `SECRETS_PROJECT` and `BWS_TOKEN_FILE` to profile metadata
+3. Update `switch-profile.sh` to set these vars per profile
+4. Test: `SECRETS_PROJECT=<id> BWS_TOKEN_FILE=~/.config/bws/range.token load-env.sh`
 
-**Phase 3: Integration**
-1. Update `load-env.sh` to decrypt `SECRETS_FILE` after loading `.env`
-2. Add `SECRETS_FILE` to mode configs or profile metadata
-3. Add `secret-env-gate.sh` hook
-4. Update `switch-profile.sh` to set `SECRETS_FILE`
+**Phase 3: Hook enforcement**
+1. Add `~/.config/bws/*` to `CTP_SECRET_BUILTIN`
+2. Add `secret-env-gate.sh` hook
+3. Add `secret-policy.yaml` to each mode dir
 
-**Phase 4: Harden**
-1. Update `check-day0.sh` to verify sops+age installed
-2. Update `check-day0.sh` to verify no plaintext secrets in `.env`
-3. Add age key backup guidance to docs
+**Phase 4: Remove plaintext secrets from .env**
+1. Remove secret vars from `.env` (keep non-secret config)
+2. Update `.env.example` to document which secrets come from Bitwarden
+3. Update `check-day0.sh` to verify `bws` installed and tokens present
 4. Test full flow per mode
+
+**Phase 5 (optional): SOPS fallback for offline range**
+1. Install `sops` + `age` if range needs offline mid-session secret access
+2. Create `secrets/range.env.enc` as backup
+3. `load-env.sh` already has fallback path (Phase 2 code)
 
 ### 4.6 What stays the same
 
@@ -439,6 +475,7 @@ Purpose: prevent decrypting wrong environment's secrets for active mode.
 - Profile overlay mechanism unchanged (additive)
 - MCP URL derivation unchanged (load-env.sh still derives URLs from hosts)
 - All existing hooks continue to function
+- Bitwarden vault logins/passwords/cards never touched (bws is isolated)
 
 ### 4.7 .env split after migration
 
@@ -458,62 +495,78 @@ Purpose: prevent decrypting wrong environment's secrets for active mode.
   OBSIDIAN_VAULT_PATH=...
   GUARD_SECRET_PATHS=...
   GUARD_PII_PATHS=...
+  # Secrets come from Bitwarden SM — see docs/research/secrets-management.md
+  # SECRETS_PROJECT=<uuid>       # set by profile/mode, not here
+  # BWS_TOKEN_FILE=<path>        # set by profile/mode, not here
 
-secrets/range.env.enc (encrypted, committed):
-  TUONI_USERNAME=...
-  TUONI_PASSWORD=...
-  PROVIDENTIA_TOKEN=...
-  GITLAB_TOKEN=...
-  GITLAB_PROJECT=...
-  OUTLINE_API_KEY=...
-  MCP_PROXY_TOKEN=...
-  BLOODHOUND_PASSWORD=...
+Bitwarden Secrets Manager (project: range-creds):
+  TUONI_USERNAME
+  TUONI_PASSWORD
+  PROVIDENTIA_TOKEN
+  GITLAB_TOKEN
+  GITLAB_PROJECT
+  OUTLINE_API_KEY
+  MCP_PROXY_TOKEN
+  BLOODHOUND_PASSWORD
 
-secrets/cloud.env.enc (encrypted, committed):
-  RUNPOD_API_KEY=...
+Bitwarden Secrets Manager (project: cloud-creds):
+  RUNPOD_API_KEY
 ```
 
 ---
 
 ## 5. Risk Assessment
 
-### What SOPS+age does NOT solve
-- **Mode-gated access is still a hook concern.** SOPS provides at-rest encryption
-  and per-file isolation. The hook layer enforces which file gets decrypted per mode.
-  A compromised hook = access to all encrypted files (if operator has the age key).
+### What this does NOT solve
+- **Mode-gated access is still a hook concern.** Bitwarden provides per-project
+  isolation and encryption. The hook layer enforces which project token loads per
+  mode. A compromised hook = access to whatever tokens exist on disk.
 - **Decrypted secrets still exist in process environment.** Same as today — once
-  decrypted, MCP servers see the env vars. SOPS moves the exposure window from
-  "always on disk" to "only in process memory at runtime."
-- **Age key is the crown jewel.** Losing `~/.config/sops/age/keys.txt` means
-  all encrypted secrets are compromised. Must be backed up securely (USB key,
-  printed paper key, 1Password for the key itself).
+  injected, MCP servers see env vars. This moves exposure from "always on disk as
+  plaintext" to "only in process memory at runtime."
+- **Service account tokens are the crown jewels.** `~/.config/bws/*.token` files
+  grant access to their scoped projects. Must be protected (hook-guarded, not
+  readable by agent). Per-project scoping limits blast radius — losing range.token
+  exposes range creds only, not homelab or cloud.
 - **String-matching hooks are defense-in-depth, not a sandbox.** Same accepted-risk
-  framing as the existing guard stack. A hostile model could obfuscate around the
-  `sops -d` pattern matching. Real containment is OS-level.
+  framing as existing guard stack. Real containment is OS-level.
+- **bws requires internet at secret-load time.** If range goes offline before
+  secrets load, they won't be available. Mitigation: load at session start (before
+  range ops begin), or use SOPS fallback.
 
-### What SOPS+age improves
-- Secrets encrypted at rest (not plaintext in .env)
-- Per-environment files enable mode-gated hook enforcement
-- Encrypted files safe to commit (backup, versioning, audit trail)
-- No external service dependency (offline range ops)
-- Rotation: `sops secrets/range.env.enc`, edit, save, done
-- Profile system gets real teeth (profile selects secret file, not just config overlay)
+### What this improves
+- Secrets no longer plaintext on disk (stored in Bitwarden, tokens scoped)
+- Per-environment isolation via Bitwarden SM projects
+- Mode-gated hook enforcement possible (project ID per mode)
+- Rotation through familiar Bitwarden UI
+- Vault logins/passwords/cards completely isolated (bws can't reach them)
+- Profile system gets real teeth (profile selects project + token)
+- Guard stack extended to protect token files
+
+### Bitwarden-specific risks
+- **Bitwarden Secrets Manager pricing:** May require paid plan. Check current
+  free tier limits (number of secrets, service accounts, projects).
+- **bws CLI maturity:** Relatively new CLI, syntax changed at v0.3.0. Pin version.
+- **Official MCP server uses `bw` not `bws`:** Do NOT use the official Bitwarden
+  MCP server for secret injection — it unlocks full vault. Use `bws` CLI only.
 
 ---
 
 ## 6. Future Extensions
 
-- **1Password hybrid:** For cloud/homelab envs with internet, add `op run` as
-  alternative decryption backend. `load-env.sh` checks: if `SECRETS_BACKEND=op`,
-  use `op run`; if `SECRETS_BACKEND=sops` (default), use `sops -d`.
 - **Per-MCP secret injection:** Instead of exporting all secrets to process env,
   inject only the secrets each MCP server needs. Requires MCP launch wrapper
-  changes (`mcp-wrapper.sh` already exists).
-- **Age key per environment:** Strongest isolation — range age key only on
-  range-connected machines, homelab key only on homelab host. Prevents single
-  key compromise from exposing all environments.
-- **Automated rotation hook:** Post-exercise script that prompts for new creds
-  and re-encrypts the relevant secret file.
+  changes (`mcp-wrapper.sh` already exists). `bws` project scoping makes this
+  natural — one project per MCP server's needs.
+- **SOPS offline fallback:** If range ops genuinely need mid-session secret access
+  without internet, add SOPS+age encrypted files as fallback (load-env.sh already
+  has the fallback path in the proposed code).
+- **Automated rotation hook:** Post-exercise script that rotates range creds in
+  Bitwarden SM. `bws secret edit` or API call.
+- **Service account token rotation:** Rotate `bws` tokens periodically. Script to
+  generate new token, update `~/.config/bws/*.token`, revoke old one.
+- **Bitwarden self-hosted (Vaultwarden):** If cloud dependency becomes a concern,
+  Vaultwarden on homelab gives local control. Heavy setup but removes cloud trust.
 
 ---
 

@@ -70,7 +70,40 @@
   satellite repos.
 - **Link:** https://github.com/ruvnet/metaharness
 
-### 1.7 Sandcastle (mattpocock/sandcastle)
+### 1.7 Claude Code Native Multi-Agent Layers
+
+Claude Code ships three orchestration layers (2026):
+
+| Layer | Since | Use case |
+|---|---|---|
+| **Subagents** | v2.0+ | Worker definitions in `.claude/agents/` Markdown files, spawned per task |
+| **Agent Teams** | v2.1.32 (Feb 2026) | Research preview. Agents claim tasks from board, merge changes, resolve conflicts. Single-model constraint. |
+| **Dynamic Workflows** | May 2026 | Script-driven orchestration of dozens of subagents. Deterministic reruns. |
+
+**Fit for us:** We already use subagents and workflows. Agent Teams could replace
+manual `/run-epic` dispatch if it matures. Single-model constraint is fine (we
+pin opus-4-6 anyway).
+
+**Gap:** None of these handle *deployment targets* — they orchestrate code work,
+not infra lifecycle.
+
+Sources:
+- [Tembo: Claude Code Multi-Agent Orchestration](https://www.tembo.io/blog/claude-code-multi-agent-orchestration)
+- [Addy Osmani: Code Agent Orchestra](https://addyosmani.com/blog/code-agent-orchestra/)
+
+### 1.8 AWS Well-Architected Agentic AI Lens
+
+AWS published AgentOps guidance adding behavioral evaluation gates to CI/CD:
+- Behavioral evaluation gate (not just unit tests)
+- Security scan stage
+- Staged rollout with automated rollback
+
+**Fit for us:** Our safety gates (pre-commit, semgrep, gitleaks) cover security.
+Behavioral evaluation gate is a gap — we don't test agent behavior as part of CI.
+
+Source: [AWS AgentOps](https://docs.aws.amazon.com/wellarchitected/latest/agentic-ai-lens/agentops03-bp02.html)
+
+### 1.9 Sandcastle (mattpocock/sandcastle)
 
 - **What:** Runs coding agents in isolated Docker/Podman/Vercel sandboxes.
   Claude Code is the default agent provider. Single invocation produces at most
@@ -233,11 +266,22 @@ themselves.
 - **What:** IaC in real languages (TypeScript, Python, Go). Pulumi MCP server
   exists (local and hosted). Fleet provisioning via stacks. Native Terraform/HCL
   support added January 2026.
+- **Stack model:** One stack per environment. Cross-stack dependencies for shared
+  resources. Deployment Settings per stack. Scheduled drift detection runs.
+  Stack promotion pattern (dev→staging→prod) with approval gates. Kargo
+  integration for K8s verification-before-promotion.
+- **Automation API:** TypeScript/Python library — drive Pulumi programmatically
+  without CLI. Can embed in agent workflows directly.
 - **Maturity:** Production. Well-funded startup. Large community.
-- **Fit for us:** Best IaC option for our TypeScript-heavy stack. MCP server
-  would let HQ call Pulumi directly. Stack-per-target maps cleanly to our
-  deploy target abstraction.
-- **Link:** https://www.pulumi.com/topics/agentic-infrastructure/mcp-for-infrastructure-as-code/
+- **Fit for us:** Best IaC option. Stack model maps to our target profiles
+  (range/homelab/cloud). Single-operator friendly — stacks are config, no team
+  overhead. Automation API means HQ can call Pulumi from skills without shelling
+  out to CLI.
+- **Gap:** Cloud-hosted control plane optional. We use local state + CLI, not SaaS.
+- **Links:**
+  - https://www.pulumi.com/topics/agentic-infrastructure/mcp-for-infrastructure-as-code/
+  - https://www.pulumi.com/docs/platform/deployments/
+  - https://www.pulumi.com/guides/solutions/pulumi-cicd-promotion/pulumi-deployments/
 
 ### 5.2 Spacelift
 
@@ -260,11 +304,25 @@ themselves.
 ### 5.4 Google Cloud Deploy
 
 - **What:** Delivery pipeline with multi-target parallel deploys to child
-  targets (GKE fleet clusters).
+  targets (GKE fleet clusters). Single pipeline stage fans out to child targets.
+  Cross-project targets. Approval gates. Execution environment inheritance.
 - **Maturity:** GA. GCP only.
-- **Fit for us:** Multi-target parallel deploy is exactly our pattern. GCP-only
-  limits adoption. Pattern is portable.
-- **Link:** https://docs.cloud.google.com/deploy/docs/parallel
+- **Fit for us:** Multi-target fan-out pattern is exactly what we need for
+  parallel deploys. GCP-only limits adoption. Pattern is portable.
+- **Links:**
+  - https://docs.cloud.google.com/deploy/docs/parallel
+  - https://docs.cloud.google.com/deploy/docs/deploy-app-parallel
+
+### 5.5 Rafay Fleet Plans
+
+- **What:** Fleet-wide operations across environments (Jan 2026). Multi-level
+  filtering by projects, labels, and templates. Scheduled runs. Central dashboard.
+- **Maturity:** New (Jan 2026). K8s-focused.
+- **Fit for us:** Closest to "fleet model with modes/profiles" concept. Filtering
+  by labels maps to our mode system. Fleet-wide operations with rollout control
+  is what our dispatcher needs.
+- **Gap:** Kubernetes-only. SaaS control plane.
+- **Link:** https://docs.rafay.co/blog/2026/01/29/managing-environments-at-scale-with-fleet-plans/
 
 ---
 
@@ -334,6 +392,13 @@ themselves.
 | Governance model | Qovery blog | Multi-target access control |
 | Multi-target parallel | Google Cloud Deploy | Pipeline stage design |
 | Stateless MCP | July 2026 spec | MCP server architecture |
+| Stack-per-environment | Pulumi / Terraform | Target profile structure |
+| Variable scoping hierarchy | Terraform Cloud | mode → target → operation secret isolation |
+| Fleet repo with per-target dirs | Flux CD | `targets/<name>/` layout in HQ |
+| Tiered rollout | Flux CD | range/test → homelab → cloud promotion |
+| Pull-based reconciliation | ArgoCD Agent | ctp-bridge already implements this |
+| Behavioral evaluation gate | AWS AgentOps | Agent behavior testing in CI |
+| Fleet label filtering | Rafay Fleet Plans | Mode system as fleet filter |
 
 ### Build ourselves (nothing exists)
 
@@ -360,17 +425,127 @@ themselves.
 No existing framework combines agent orchestration + multi-environment deploy +
 mode-based isolation + single-operator scale. The closest pieces are:
 
-1. **MCP deploy servers** (Railway, ArgoCD, Flux) as target adapters
+1. **MCP deploy servers** (Railway, ArgoCD, Flux, InfraOps) as target adapters
 2. **Agent orchestrators** (VocanicZ/Harness, daopapp/software-factory) for
    dispatch patterns
-3. **IaC tools** (Pulumi with MCP) for infra provisioning
+3. **IaC tools** (Pulumi with MCP + Automation API) for infra provisioning
+4. **GitOps patterns** (ArgoCD hub-spoke, Flux fleet repo layout) for
+   multi-target reconciliation
+
+**Critical insight from IaC survey:** Every orchestration tool (Pulumi Cloud,
+Terraform Cloud, Spacelift, env0, Rafay) uses a stack/workspace-per-environment
+model — but all assume a SaaS control plane or CI/CD pipeline as execution
+context. None support agent-driven orchestration from a local seat. That gap is
+what our factory fills.
+
+**Critical insight from factory discourse:** Most "AI software factory" diagrams
+stop at deploy (LaunchDarkly observation). Post-deploy verification, observability,
+and rollback are underdeveloped everywhere. We must build this explicitly.
 
 Our value-add is the **glue layer**: mode-aware dispatch, secret
-compartmentalization, context-safety, and the adapter abstraction that makes
-"deploy to range" and "deploy to cloud" feel identical to the operator.
+compartmentalization, context-safety, post-deploy verification, and the adapter
+abstraction that makes "deploy to range" and "deploy to cloud" feel identical
+to the operator.
 
 ---
 
-*Research method: Web search (2026-11-21). Links not all verified for current
-availability. Star counts and commit dates should be confirmed before adoption
-decisions.*
+---
+
+## Appendix A — Expanded Web Survey (2026-11-21, second pass)
+
+### A.1 GitOps Multi-Cluster Patterns (Deep Dive)
+
+**ArgoCD architectural patterns:**
+- **Hub-and-spoke:** One ArgoCD manages all clusters. Works to ~10-20 clusters. Beyond that, federated model recommended. ([Red Hat guide](https://developers.redhat.com/articles/2025/06/24/how-automate-multi-cluster-deployments-using-argo-cd))
+- **ApplicationSets with generators:** Fan one app to N clusters via cluster labels or Git directory generators. The pattern that most resembles our "shared pipeline + per-target config." ([AWS EKS best practices](https://aws-samples.github.io/sample-apex-skills/docs/skills/eks-best-practices/references/argocd-patterns))
+- **Argo CD Agent (pull-based):** Agents on spoke clusters pull changes from hub. No exposed cluster APIs. ([Red Hat OpenShift GitOps 1.21](https://docs.redhat.com/it/documentation/red_hat_openshift_gitops/1.21/html/argo_cd_agent_architecture/argocd-agent-architecture)) — Maps directly to ctp-bridge's pull model.
+- **App of Apps:** Parent Application declares children. Combined with ApplicationSets for platform bootstrapping.
+
+**Flux CD architectural patterns:**
+- **Distributed (recommended by maintainers):** Each cluster runs its own Flux, reconciles from shared repo. Best blast-radius isolation. ([Stefan Prodan, Flux maintainer](https://medium.com/@stefanprodan/fluxcd-multi-cluster-architecture-e426fb2bca0f))
+- **Fleet repo layout:** `clusters/<name>/` directories with shared infra + per-target overrides. Direct model for our `targets/<name>/` layout.
+- **Tiered rollout:** Pilot groups of 2-5 clusters receive changes first, then promote. Maps to our range/test → homelab → cloud promotion.
+- **Flux Operator:** FluxInstance resource per cluster gives version-controlled installs across fleet.
+
+**Adoptable patterns for our model:**
+
+| GitOps pattern | Our adaptation |
+|---|---|
+| Fleet repo with per-target directories | `targets/<target-name>/` in HQ |
+| Pull-based reconciliation (Argo CD Agent) | ctp-bridge already implements this |
+| ApplicationSets / generators | Deploy skill generates per-target config from shared template |
+| Distributed reconciliation | Each target verifies its own state independently |
+| Tiered rollout | Range/test → homelab → cloud promotion |
+
+### A.2 Terraform Cloud Multispace Pattern
+
+HashiCorp's official guidance ([multispace pattern](https://hashicorp.com/en/blog/terraform-apply-as-code-the-multispace-pattern), [recommended practices](https://developer.hashicorp.com/terraform/cloud-docs/recommended-practices/part1)):
+
+- One workspace per component per environment. Cross-workspace ordering via run triggers or `tfe_workspace_run`.
+- Variable scoping: account → environment → workspace inheritance. Lower scope wins. — Maps to our mode → target → operation secret isolation.
+- Auto-apply for pre-prod, manual approve for prod. — Maps to auto-deploy range/test, confirm homelab/cloud.
+- Workspace structure should mirror permissions model.
+
+**What doesn't fit:** SaaS pricing for single operator. Pulumi CLI + local state more appropriate at our scale.
+
+### A.3 AI Software Factory Discourse (2026)
+
+The term is new and mostly vendor-driven. Key observations:
+
+- **LaunchDarkly** ([blog](https://launchdarkly.com/software-factory/)): Most factory diagrams stop at deploy. Production side (release, observe, iterate) is underdeveloped. **Directly relevant** — we must build post-deploy verification.
+- **ZenML** ([case study](https://zenml.io/llmops-database/building-autonomous-software-factories-with-ai-agents)): Factory using Claude + Codex. Notes agents need "dangerous levels of access." Safety gates are critical.
+- **Encore** ([guide](https://encore.dev/articles/how-to-build-an-ai-software-factory)): Deploy step can still be CI/CD, now fed agent-validated changes.
+- **Augment Code** ([definition](https://www.augmentcode.com/guides/what-is-a-software-factory)): Specs and merge approvals under human control, everything else automated.
+- **Mastra** ([blog](https://mastra.ai/blog/software-factory)): Building factories with AI agents in TypeScript.
+
+**Our differentiator:** Single-operator fleet model with mode-based security walls, not team-scale platform engineering. No existing factory addresses mode-based isolation.
+
+### A.4 Additional MCP Deploy Servers
+
+| Server | Targets | Maturity | Notes | Link |
+|---|---|---|---|---|
+| **InfraOps MCP** | 7 providers (Coolify, Hetzner, Cloudflare, etc.) | Community, 195 tools | Multi-provider, runs locally over stdio. Hetzner coverage interesting for our cloud VPS target. | [Glama](https://glama.ai/mcp/servers/AlobarQuest/infraops-mcp-server) |
+| **GARZA OS / Last Rock** | Fly.io + generic | Community | State tracking, distributed locking, auto-rollback. Good safety patterns worth studying. | [Glama](https://glama.ai/mcp/servers/@itsablabla/lastrock-mcp) |
+| **Dokploy MCP** | Dokploy PaaS | Community | Status, logs, metrics, project management | [Glama](https://glama.ai/mcp/servers/firebaseStudio/dokploy-mcp) |
+| **Porter PaaS MCP** | Your own cloud (Porter PaaS) | Production | Browser-based OAuth — no headless/CI use. NOT the CNAB Porter. | [docs.porter.run](https://docs.porter.run/mcp/overview) |
+
+### A.5 Additional ArgoCD MCP Variants
+
+| Server | Notes | Link |
+|---|---|---|
+| **Akuity argocd-mcp** | Apache-2.0, session-based tokens (keeps API token out of prompts/logs) | [mcpservers.org](https://mcpservers.org/servers/akuity/argocd-mcp) |
+| **talkops-argocd-mcp-server** | FastMCP, Docker, write-gated via `MCP_ALLOW_WRITE` | [PyPI](https://pypi.org/project/talkops-argocd-mcp-server/) |
+| **argocd-mcp-server** (asklokesh) | Progressive delivery focus (canary, blue-green), multi-cluster config | [PyPI](https://pypi.org/project/argocd-mcp-server) |
+
+### A.6 Additional Community Harness Projects
+
+| Project | What | Fit |
+|---|---|---|
+| **stellarlinkco/myclaude** | Multi-agent orchestration across Claude Code, Codex, Gemini, OpenCode | Pattern reference. We already have mode-based orchestration. |
+| **wshobson/agents** | Automation + multi-agent orchestration for Claude Code (MIT) | Worth scanning for dispatch patterns. |
+| **gabrielkoerich/orchestrator** | Lightweight bash orchestrator for autonomous coding agents | Bash-first orchestration precedent (like our `board.sh`). |
+| **Chachamaru127/claude-code-harness** | Harness with deploy + monitoring skills; installable via `npx skills add` | Deploy skill at `codex/.codex/skills/deploy` worth reading. Active, Japanese community. |
+
+### A.7 CLAUDE.md Deploy Patterns in the Wild
+
+| Pattern | Source | Description |
+|---|---|---|
+| **Separate deploy doc** | [PRQL PR #5553](https://github.com/PRQL/prql/pull/5553) | Keep detailed deploy procedures out of CLAUDE.md; point to `development.md`. Keeps context window clean. |
+| **Per-environment settings** | [claudekit](https://duthaho.github.io/claudekit/commands/deploy) | CLAUDE.md lists staging + production, with `Auto-deploy: No` for production. |
+| **Hook vs rule** | [r/claude.md](https://github.com/r/claude.md) | CLAUDE.md rule is advisory; hook is enforced. Deploy guardrails should be hooks. We already follow this. |
+| **Config-driven deploy** | [centminmod/my-claude-code-setup](https://github.com/centminmod/my-claude-code-setup) | CLAUDE.md templates with memory-bank file system. |
+
+### A.8 Kubernetes MCP Servers (for future K8s targets)
+
+| Server | Status | Link |
+|---|---|---|
+| **kubectl-mcp-server** | 270+ tools, deploy prompts, multi-context | [PyPI](https://pypi.org/project/kubectl-mcp-server/) |
+| **kubernetes-mcp-server** (manusa) | 1,642 stars, Apache-2.0, K8s + OpenShift | [Glama](https://glama.ai/mcp/best/kubernetes) |
+
+Relevant only if we add K8s targets to fleet. Not immediate priority.
+
+---
+
+*Research method: Web search (2026-11-21, two passes). Links not all verified for
+current availability. Star counts and commit dates should be confirmed before
+adoption decisions.*
