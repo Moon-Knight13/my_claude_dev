@@ -8,13 +8,11 @@
 #
 # Remote-origin signals (any one triggers enforcement):
 #   1. environmentId in tool input (cross-environment thread creation)
-#   2. .claude/.remote-approval-required flag file (operator always-on gate)
-#   3. T3 Connect active + unattended session (automated remote access)
+#   2. T3 Connect active + unattended session (automated remote access)
 #
 # Bypass:
-#   - Delete .claude/.remote-approval-required to disable the flag gate
 #   - Set runtimeMode: "approval-required" in the tool call to pass
-#   - Local attended sessions are not gated (unless flag file exists)
+#   - Local attended sessions are not gated
 #
 # Exit protocol (PreToolUse):
 #   0 + deny JSON  = blocked
@@ -22,9 +20,6 @@
 #   2              = block (error / fail-closed)
 set -euo pipefail
 trap 'exit 2' ERR
-
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
-FLAG_FILE="$PROJECT_DIR/.claude/.remote-approval-required"
 
 input="$(cat)"
 
@@ -98,17 +93,12 @@ RUNTIME_MODE="$(printf '%s' "$parsed" | python3 -I -c 'import sys,json; print(js
 # --- Detect remote origin ---
 is_remote=0
 
-# Signal 1: flag file (operator-configured always-on gate)
-if [[ -f "$FLAG_FILE" ]]; then
-    is_remote=1
-fi
-
-# Signal 2: environmentId in tool input (cross-environment creation)
+# Signal 1: environmentId in tool input (cross-environment creation)
 if [[ "${HAS_ENV_ID:-0}" == "1" ]]; then
     is_remote=1
 fi
 
-# Signal 3: T3 Connect active + unattended session + cross-environment
+# Signal 2: T3 Connect active + unattended session + cross-environment
 # CLAUDE_CODE_SESSION_ATTENDED=0 means no human watching this session.
 # Combined with T3 Connect being enabled AND cross-environment dispatch,
 # this indicates remote automation. Local-dispatch threads (no environmentId)
@@ -151,9 +141,7 @@ fi
 
 # Determine which signal triggered
 reason=""
-if [[ -f "$FLAG_FILE" ]]; then
-    reason="remote-approval gate active (.claude/.remote-approval-required)"
-elif [[ "${HAS_ENV_ID:-0}" == "1" ]]; then
+if [[ "${HAS_ENV_ID:-0}" == "1" ]]; then
     reason="cross-environment thread creation (environmentId present)"
 else
     reason="unattended session with remote access enabled"
@@ -167,7 +155,7 @@ fi
 
 python3 -I -c '
 import json, sys
-reason_text = "Remote thread guard: %s — %s. Set runtimeMode: \"approval-required\" for remote-originated threads. Override: delete .claude/.remote-approval-required or set the mode explicitly." % (sys.argv[1], sys.argv[2])
+reason_text = "Remote thread guard: %s — %s. Set runtimeMode: \"approval-required\" for remote-originated threads." % (sys.argv[1], sys.argv[2])
 out = {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": reason_text}}
 print(json.dumps(out, separators=(",", ":"), ensure_ascii=False))
 ' "$reason" "$mode_msg"
