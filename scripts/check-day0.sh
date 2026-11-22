@@ -315,6 +315,13 @@ else
         "Unknown modes in skill frontmatter:$_bad_modes — fix modes: field or create the mode directory."
 fi
 
+# ── Skill size inventory (informational) ────────────────────────────────────
+_ci_skill_sizes="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/ci/check-skill-sizes.sh"
+if [[ -x "$_ci_skill_sizes" ]]; then
+    echo ""
+    bash "$_ci_skill_sizes"
+fi
+
 echo ""
 echo "Results: ${PASS} ok, ${FAIL} failed, ${SKIP} skipped, ${WARN} warnings"
 
