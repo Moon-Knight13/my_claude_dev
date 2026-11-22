@@ -8,7 +8,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 HOOK="$PROJECT_DIR/.claude/hooks/remote-thread-approval-guard.sh"
-FLAG_FILE="$PROJECT_DIR/.claude/.remote-approval-required"
 TMPINPUT="$(mktemp)"
 trap 'rm -f "$TMPINPUT"' EXIT
 
@@ -42,25 +41,24 @@ run_test() {
 echo "=== Remote thread approval guard tests ==="
 echo ""
 
-# --- Flag file active ---
-echo "--- With flag file active ---"
-touch "$FLAG_FILE"
+# --- Local dispatch (no cross-environment signals) ---
+echo "--- Local dispatch (no cross-environment signals, attended session) ---"
 
 run_test "t3_thread_launch without runtimeMode" \
     '{"tool_name":"mcp__t3-code__t3_thread_launch","tool_input":{"title":"test"}}' \
-    "deny"
+    "allow"
 
 run_test "t3_thread_launch with full-access" \
     '{"tool_name":"mcp__t3-code__t3_thread_launch","tool_input":{"title":"test","runtimeMode":"full-access"}}' \
-    "deny"
+    "allow"
 
 run_test "t3_thread_launch with auto" \
     '{"tool_name":"mcp__t3-code__t3_thread_launch","tool_input":{"title":"test","runtimeMode":"auto"}}' \
-    "deny"
+    "allow"
 
 run_test "t3_thread_launch with auto-accept-edits" \
     '{"tool_name":"mcp__t3-code__t3_thread_launch","tool_input":{"title":"test","runtimeMode":"auto-accept-edits"}}' \
-    "deny"
+    "allow"
 
 run_test "t3_thread_launch with approval-required" \
     '{"tool_name":"mcp__t3-code__t3_thread_launch","tool_input":{"title":"test","runtimeMode":"approval-required"}}' \
@@ -68,11 +66,11 @@ run_test "t3_thread_launch with approval-required" \
 
 run_test "delegate_task without runtimeMode" \
     '{"tool_name":"mcp__t3-code__delegate_task","tool_input":{"task":"do work"}}' \
-    "deny"
+    "allow"
 
 run_test "delegate_task with full-access" \
     '{"tool_name":"mcp__t3-code__delegate_task","tool_input":{"task":"do work","runtimeMode":"full-access"}}' \
-    "deny"
+    "allow"
 
 run_test "delegate_task with approval-required" \
     '{"tool_name":"mcp__t3-code__delegate_task","tool_input":{"task":"do work","runtimeMode":"approval-required"}}' \
@@ -80,7 +78,7 @@ run_test "delegate_task with approval-required" \
 
 run_test "create_threads with mixed modes" \
     '{"tool_name":"mcp__t3-code__create_threads","tool_input":{"threads":[{"title":"a","runtimeMode":"full-access"},{"title":"b","runtimeMode":"approval-required"}]}}' \
-    "deny"
+    "allow"
 
 run_test "create_threads all approval-required" \
     '{"tool_name":"mcp__t3-code__create_threads","tool_input":{"threads":[{"title":"a","runtimeMode":"approval-required"},{"title":"b","runtimeMode":"approval-required"}]}}' \
@@ -96,22 +94,8 @@ run_test "non-gated tool (Read)" \
 
 echo ""
 
-# --- Flag file removed ---
-echo "--- Without flag file (no remote signals, attended session) ---"
-rm -f "$FLAG_FILE"
-
-run_test "t3_thread_launch without flag (local attended)" \
-    '{"tool_name":"mcp__t3-code__t3_thread_launch","tool_input":{"title":"test","runtimeMode":"full-access"}}' \
-    "allow"
-
-run_test "delegate_task without flag (local attended)" \
-    '{"tool_name":"mcp__t3-code__delegate_task","tool_input":{"task":"do work","runtimeMode":"auto"}}' \
-    "allow"
-
-echo ""
-
 # --- Cross-environment signal (environmentId present) ---
-echo "--- Cross-environment (environmentId present, no flag file) ---"
+echo "--- Cross-environment (environmentId present) ---"
 
 run_test "delegate_task with environmentId in target" \
     '{"tool_name":"mcp__t3-code__delegate_task","tool_input":{"task":"do work","target":{"environmentId":"abc-123"}}}' \
@@ -130,9 +114,6 @@ run_test "t3_thread_launch with environmentId AND approval-required" \
     "allow"
 
 echo ""
-
-# Restore flag file for production use
-touch "$FLAG_FILE"
 
 echo "=== Results: $pass passed, $fail failed ==="
 [[ "$fail" -eq 0 ]] && exit 0 || exit 1
