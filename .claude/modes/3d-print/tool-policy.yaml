@@ -1,0 +1,13 @@
+# 3d-print mode — CAD generation, slicing, print preparation.
+# No offensive tools, no range MCPs.
+deny:
+  - "mcp__tuoni-mcp__*"
+  - "mcp__range-intel__*"
+  - "mcp__outline-readonly__*"
+  - "mcp__outline-write__*"
+  - "mcp__hacktricks-mcp__*"
+  - "mcp__mitre-mcp__*"
+  - "mcp__lolbins-mcp__*"
+  - "mcp__cve-mcp__*"
+  - "mcp__rea-mcp__*"
+  - "mcp__ghidra-mcp__*"
