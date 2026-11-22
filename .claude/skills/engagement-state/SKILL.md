@@ -127,7 +127,7 @@ table, gate timestamp.
 Trigger: operator says "new engagement", "start engagement", or no engagement
 exists when entering red-team/purple/red-dev mode.
 
-1. Ask operator for engagement ID (short slug, e.g. `dcm27-t10-nov2026`).
+1. Ask operator for engagement ID (short slug, e.g. `ex01-t10-nov2026`).
 2. Read `.env` for `OPERATOR_CALLSIGN` and `OPERATOR_TEAM`.
 3. Query `tuoni_agents_list` for current agent inventory.
 4. Write thin YAML gate file `engagements/<id>.yaml`:
@@ -694,3 +694,42 @@ across all engagements.
 - **No secrets in engagement YAML**: no passwords, hashes, keys, tokens.
   Only metadata and references.
 - **Gitignored**: `engagements/` must be in `.gitignore`. Verify on create.
+
+## Golden Paths
+
+### GP-1: Create new engagement
+
+**When:** Operator says "new engagement", "start engagement", or session enters
+red-team/purple mode with no existing engagement YAML.
+
+**Steps:**
+
+1. Ask operator for engagement ID (short slug, e.g. `ex01-t10-nov2026`)
+2. `source "$CLAUDE_PROJECT_DIR/scripts/lib/load-env.sh"` — read `OPERATOR_CALLSIGN` and `OPERATOR_TEAM` from env
+3. Call `tuoni_agents_list` — expect agent inventory (confirms tuoni-mcp connectivity + captures self-agent ID)
+4. Write thin gate YAML to `engagements/<id>.yaml` — fields: `engagement_id`, `mode`, `team`, `environment`, `status: active`, `wiki_page` pointer, `exclusions`
+5. Call `obsidian_create_note` with path `llm-wiki/wiki/engagements/<id>.md` — expect note created (sections: Overview, Targets, Reachability, Agents, Credentials, Findings, Techniques Tried, Next Steps, Preflight)
+6. Verify `engagements/` in `.gitignore` — expect match (if missing: add it before proceeding)
+7. Invoke `pre-engagement-cache` skill — expect Providentia data warmed per-host
+
+**Result:** Gate YAML exists at `engagements/<id>.yaml`, Obsidian engagement
+page created with all sections, pre-engagement cache populated. Ready for
+target approval (`add target` with explicit operator naming).
+
+### GP-2: Resume existing engagement
+
+**When:** Session starts in red-team/purple/red-dev mode and engagement YAML
+already exists, or operator says "resume engagement".
+
+**Steps:**
+
+1. `ls -t engagements/*.yaml | head -1` — expect most recent gate YAML path (if multiple: ask operator which to resume)
+2. Read gate YAML — extract `engagement_id` and `wiki_page` path
+3. Call `obsidian_read_note` with `wiki_page` path — expect full engagement page with Targets, Agents, Credentials, Findings, Next Steps
+4. Call `tuoni_agents_list` — compare against `## Agents` section; flag any agents that disappeared since last session
+5. Call `obsidian_search_vault` with `#engagement/<id>` — expect tagged notes from this engagement
+6. Invoke `note-search` for each active target hostname — surfaces operator notes written between sessions
+7. Present summary to operator: engagement ID, target count by classification, live agent count, credential ref count, last technique + result, next steps from previous session, any new operator notes
+
+**Result:** Engagement context fully restored. Operator sees state summary and
+confirms "resume" or requests scope changes before kill-chain skills proceed.

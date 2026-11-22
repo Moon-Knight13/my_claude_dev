@@ -149,3 +149,23 @@ SSH connectivity fails, the bridge reports the failure and the spoke to check.
 Box detail, range topology, credentials, vault contents. The hook blocks reads of
 secret paths; keep it that way — never work around it to inspect a key, `.env`, or
 the vault file. On a shared box the next occupant can read this transcript.
+
+## Golden Paths
+
+### GP-1: Deploy single box via ctp-bridge
+
+**When:** Standing up a new box or redeploying an existing one after base changes.
+Assumes box already exists in Providentia.
+
+**Steps:**
+
+1. `source "$CLAUDE_PROJECT_DIR/scripts/lib/gateway-preflight.sh" && check_gateway_reachable` — expect `"Gateway reachable"` (if unreachable: stop, do not proceed)
+2. `ctp-bridge project update-inventory` — expect exit 0 or exit 1 with `"in the background"` message (exit 1 is expected with dynamic inventory plugin; not a failure)
+3. `ctp-bridge host list <box>` — expect host details with IP, role, OS (confirms box resolves in inventory; if not found: box missing from Providentia or inventory stale)
+4. `ctp-bridge host deploy <box>` — operator confirmation prompt appears (wait for human approval, never pass `--yes`); expect 12-step deploy output ending with exit 0
+5. On failure: read output to identify failing step number (1-8 = infrastructure, 9 = your role content, 10-12 = finalize). Step 9 failure: fix playbook task, then `ctp-bridge host deploy-role <box>`. Steps 1-8 failure: stop and hand back to operator.
+6. After success: `ctp-bridge host list <box>` — confirm IP assigned and state matches expected
+
+**Result:** Box deployed and reachable. `host list` shows correct IP and role.
+Step 9 iteration cycle (edit playbook, `deploy-role`, repeat) handles content
+fixes without full redeploy.
