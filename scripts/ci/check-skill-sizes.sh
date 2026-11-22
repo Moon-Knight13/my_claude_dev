@@ -45,8 +45,6 @@ for entry in "${entries[@]}"; do
     local_path=$(echo "$entry" | awk '{print $2}')
     # shellcheck disable=SC2155
     local_dir=$(dirname "$local_path")
-    # shellcheck disable=SC2155
-    local_name=$(basename "$local_dir")
     mini_path="${local_dir}/SKILL.mini.md"
 
     FOUND=$((FOUND + 1))
