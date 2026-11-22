@@ -16,7 +16,7 @@ intelligence, and dev boxes connected as spokes via SSH tunnels.
  +---------------------------------------------+
  |  Claude Opus 4.6 primary session             |
  |                                              |
- |  13 MCP servers (security research, C2,      |
+ |  15 MCP servers (security research, C2,      |
  |  CMDB, wiki, code, binary analysis, vault)   |
  |                                              |
  |  11 operational modes with context isolation  |
@@ -43,7 +43,7 @@ demonstrating how a single Claude session with MCP integrations, safety controls
 and mode-based isolation can serve as a multi-environment platform for security
 operations and software development.
 
-**Current state:** Built and operational with 11 modes, 13 MCP servers, environment
+**Current state:** Built and operational with 11 modes, 15 MCP servers, environment
 profiles, a tested safety harness, and CI security gates. Supports multiple
 environment types: dedicated cyber range, CTF platforms, penetration testing
 engagements, bug bounty programs, general software development, and homelab
@@ -90,7 +90,7 @@ Mode configs live in `.claude/modes/`. Routing rules in `.claude/modes/project-r
 
 ## MCP Servers
 
-13 MCP servers connecting the hub to range infrastructure and security research
+15 MCP servers connecting the hub to range infrastructure and security research
 tooling. In-repo servers live under `mcp-servers/`; others are external packages.
 
 | Server | Purpose |
@@ -101,12 +101,15 @@ tooling. In-repo servers live under `mcp-servers/`; others are external packages
 | `bloodhound-mcp` | BloodHound AD attack path analysis |
 | `obsidian-mcp` | Engagement documentation vault |
 | `rea-mcp` | Binary reverse engineering analysis |
-| `ghidra-mcp` | Ghidra decompilation and disassembly |
+| `ghidra-mcp` | Ghidra decompiler and type recovery |
 | `hacktricks-mcp` | HackTricks technique reference |
 | `mitre-mcp` | MITRE ATT&CK framework lookup |
 | `lolbins-mcp` | Living-off-the-land binary lookup |
 | `cve-mcp` | CVE vulnerability database |
+| `nuclei-mcp` | Nuclei vulnerability scanner |
+| `hashcat-mcp` | Hashcat password analysis |
 | `local-ollama` | Local model inference |
+| `runpod` | Cloud GPU infrastructure management |
 
 Secret scoping in `config/mcp-secrets.yaml` — each MCP receives only its declared
 secrets (fail-closed: unlisted MCPs get zero).
