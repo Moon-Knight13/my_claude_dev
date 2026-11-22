@@ -138,3 +138,28 @@ purple        READY
 ```
 
 If any spoke is down, report which modes are affected and what to fix.
+
+## Golden Paths
+
+### GP-1: Full health check (SSH spokes + MCP probes)
+
+**When:** Before switching to an operational mode, after VPN connect, or when
+connectivity seems degraded.
+
+**Steps:**
+
+1. `source "$CLAUDE_PROJECT_DIR/scripts/lib/load-env.sh"` — expect no output (env loaded)
+2. `source "$CLAUDE_PROJECT_DIR/scripts/lib/gateway-preflight.sh" && check_gateway_reachable` — expect `"Gateway reachable"` or `"Gateway unreachable"` (if unreachable: exercise zone modes blocked, skip routing investigation)
+3. `ssh -o ConnectTimeout=10 deploybox echo "ok"` — expect `"ok"` (deploy spoke reachable)
+4. `ssh -o ConnectTimeout=10 kali echo "ok"` — expect `"ok"` (weapons spoke reachable)
+5. `ssh -o ConnectTimeout=15 -T range-git 2>&1 | head -1` — expect GitLab welcome banner (GitLab SSH reachable)
+6. `curl -so /dev/null -w "%{http_code}" --connect-timeout 5 "${SPOKE_PROVIDENTIA_URL}"` — expect `200` or `302`
+7. `curl -so /dev/null -w "%{http_code}" --connect-timeout 5 "${SPOKE_WIKI_URL}"` — expect `200` or `302`
+8. `curl -sk -o /dev/null -w "%{http_code}" --connect-timeout 5 "https://${SPOKE_KALI_HOST}:${SPOKE_KALI_C2_WEB_PORT:-8443}/"` — expect `401` (Tuoni alive, auth required)
+9. Call `mcp__range-intel__range_environments` — expect environment list (range-intel MCP live)
+10. Call `tuoni_agents_list` — expect agent list, possibly empty (tuoni-mcp live)
+11. `pgrep -a obsidian || pgrep -a electron` — expect PID line (Obsidian running) or empty (WARN only)
+
+**Result:** Table with per-spoke status, MCP probe results, and mode readiness
+matrix. All modes show READY when every spoke responds. Failed spokes map to
+blocked modes via Step 5 readiness table.

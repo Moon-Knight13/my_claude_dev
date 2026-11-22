@@ -161,6 +161,12 @@ Convention: `<!-- Mini variant for subagent dispatch. Full version: SKILL.md -->
 header in every mini file. When updating a full skill, check if a mini exists
 and update it too.
 
+## Golden path convention
+
+Skills embed `## Golden Paths` sections with worked examples (GP-1, GP-2, ...).
+Format: **When** (trigger), **Steps** (command + expected output), **Result**
+(verified end state). See spoke-health, ctp-deploy, engagement-state for examples.
+
 ## Deep-dive references
 
 - [`docs/SAFETY_GATES.md`](SAFETY_GATES.md) — ctp-bridge, destructive-action gate, git guard, path guard, commit guard, secret/PII protection details
