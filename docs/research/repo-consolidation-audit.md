@@ -42,14 +42,14 @@
 
 ## Tier 2 — Satellites (HQ orchestrates, repos stay separate)
 
-### tuoni-mcp — **Satellite**
+### [private: tuoni-mcp-fork] — **Satellite**
 - **Last commit:** 2026-11-21 | **Private** | **CLAUDE.md:** Yes
 - **Template-sync:** No (not downstream of claude_template_repo)
 - **HQ relationship:** Primary offensive MCP server. HQ connects via `.env` config.
 - **Cross-contamination risk:** HIGH. Offensive tooling. Must never merge into public HQ repo.
 - **HQ orchestration:** red-team mode, Tuoni MCP spoke config, `tuoni-mcp` skill.
 
-### tuoni-plugins — **Satellite**
+### [private: C2-plugins] — **Satellite**
 - **Last commit:** 2026-11-08 | **Private** | **CLAUDE.md:** Yes
 - **Template-sync:** No
 - **HQ relationship:** C2 command plugins deployed to Tuoni agents.
@@ -63,7 +63,7 @@
 - **Cross-contamination risk:** LOW. Public, clean separation. No secrets.
 - **HQ orchestration:** homelab mode (planned, #388-#392), UniFi+Docker MCPs.
 
-### homelab_planning — **Satellite**
+### [private: homelab-planning] — **Satellite**
 - **Last commit:** 2026-11-08 | **Private** | **CLAUDE.md:** No
 - **Template-sync:** No
 - **HQ relationship:** BMAD planning artifacts + deployment-specific settings for homelab_infra. Lives as `_bmad-output/` inside homelab_infra workspace.
@@ -112,7 +112,7 @@
 - **Absorb risk:** Azure-specific Bicep modules and state tracking don't generalize. Better as satellite with an HQ mode that orchestrates it.
 - **Recommendation:** Keep separate repo. Add HQ `azure-dev` mode that connects its MCPs. Same pattern as homelab mode.
 
-### weaponised_ansible — **Absorb candidate**
+### [private: offensive-ansible] — **Absorb candidate**
 - **Last commit:** 2026-01-25 | **Private** | **CLAUDE.md:** No
 - **Purpose:** Ansible playbooks for offensive automation (firewall exploitation, roster management).
 - **Absorb case:** HQ's red-team mode + tuoni-mcp + ctp-bridge have largely superseded this. Engagement profiles, roster exports, firewall targeting.
@@ -249,10 +249,10 @@ What HQ needs to operate each satellite:
 
 | Satellite | HQ Mode | Spoke/MCP needed | Status |
 |-----------|---------|-------------------|--------|
-| tuoni-mcp | red-team, purple | tuoni-mcp server (installed) | LIVE |
-| tuoni-plugins | red-dev | ctp-bridge deploy | LIVE |
+| [private: tuoni-mcp-fork] | red-team, purple | tuoni-mcp server (installed) | LIVE |
+| [private: C2-plugins] | red-dev | ctp-bridge deploy | LIVE |
 | homelab_infra | homelab (planned) | UniFi MCP, Docker MCP | PLANNED (#388-#392) |
-| homelab_planning | homelab (planned) | git clone (read-only) | PLANNED |
+| [private: homelab-planning] | homelab (planned) | git clone (read-only) | PLANNED |
 | foundryvtt-docker | homelab (planned) | Docker MCP | PLANNED |
 | azure-dev-harness | azure-dev (proposed) | @azure/mcp, azops-mcp | NOT STARTED |
 | medicat-usb | — | None | Standalone |
@@ -267,12 +267,12 @@ What HQ needs to operate each satellite:
 3. **Archive 3 of 4 AI experiment repos** (keep Ai_Suite, archive my_ai_package, local_ai_pack, supabase-project)
 
 ### Near-term (supports active work)
-4. **Archive weaponised_ansible** after extracting any patterns not already in HQ skills
+4. **Archive [private: offensive-ansible]** after extracting any patterns not already in HQ skills
 5. **Archive nosense_ip_updater** after migrating useful functions to tuoni-mcp/range-intel
-6. **Add CLAUDE.md to homelab_planning** (private, but would benefit from template patterns)
+6. **Add CLAUDE.md to [private: homelab-planning]** (private, but would benefit from template patterns)
 
 ### Strategic (tied to HQ roadmap)
-7. **homelab mode** (#388-#392) — orchestrates homelab_infra, homelab_planning, foundryvtt-docker
+7. **homelab mode** (#388-#392) — orchestrates homelab_infra, [private: homelab-planning], foundryvtt-docker
 8. **azure-dev mode** — if Azure work resumes, model after homelab mode pattern
 9. **Continue config** — if model failover lands in HQ, absorb continue-agent-config patterns
 
@@ -286,9 +286,9 @@ What HQ needs to operate each satellite:
 
 | Repo | Public? | Offensive content? | Risk if brought closer to HQ |
 |------|---------|-------------------|------------------------------|
-| tuoni-mcp | No | Yes (C2 control) | CRITICAL — must stay separate repo, private |
-| tuoni-plugins | No | Yes (payloads) | CRITICAL — must stay separate repo, private |
-| weaponised_ansible | No | Yes (exploitation) | HIGH — extract, don't merge |
+| [private: tuoni-mcp-fork] | No | Yes (C2 control) | CRITICAL — must stay separate repo, private |
+| [private: C2-plugins] | No | Yes (payloads) | CRITICAL — must stay separate repo, private |
+| [private: offensive-ansible] | No | Yes (exploitation) | HIGH — extract, don't merge |
 | nosense_ip_updater | No | Partial (beacon seeding) | MEDIUM — migrate functions only |
-| homelab_planning | No | No, but has identity-linking refs | MEDIUM — never make public |
+| [private: homelab-planning] | No | No, but has identity-linking refs | MEDIUM — never make public |
 | All others | Mixed | No | LOW/NONE |

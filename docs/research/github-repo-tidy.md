@@ -39,7 +39,7 @@
 |------|-------------------|----------|------------|
 | `foundryvtt-docker-upstream` | felddy/foundryvtt-docker | 8 | **KEEP** — upstream tracking for `foundryvtt-docker` |
 | `fgxgm-SecurityCheckSample` | unknown | 12 | **INVESTIGATE** — 12 branches suggests real coursework |
-| `tuoni-mcp-1` | shell-dot/tuoni-mcp | 2 | **REMOVE** — superseded by private `tuoni-mcp` |
+| `tuoni-mcp-1` | shell-dot/tuoni-mcp | 2 | **REMOVE** — superseded by `[private: tuoni-mcp-fork]` |
 | `graphy_server` | unknown | 4 | **REMOVE** — desc "tax-calculator", unrelated noise |
 | `wtecc-CICD_PracticeCode` | unknown | 2 | **REMOVE** — practice code, `ci-cd-final-project` exists |
 | `mcino-Introduction-to-Git-and-GitHub` | unknown | 3 | **REMOVE** — intro tutorial |
@@ -50,17 +50,17 @@
 
 | Repo | Language | Description | Last Push | Notes |
 |------|----------|-------------|-----------|-------|
-| `tuoni-mcp` | Shell | — | 2026-11-21 | Active, security tooling |
-| `tuoni-plugins` | Python | Custom Tuoni C2 plugins | 2026-11-21 | Active, security tooling |
+| `[private: tuoni-mcp-fork]` | Shell | — | 2026-11-21 | Active, security tooling |
+| `[private: C2-plugins]` | Python | Custom Tuoni C2 plugins | 2026-11-21 | Active, security tooling |
 | `homelab` | HCL | "My repo for homelab work" | 2026-11-20 | **ARCHIVED** — superseded by `homelab_infra` |
-| `homelab_planning` | HTML | — | 2026-11-08 | Active planning |
+| `[private: homelab-planning]` | HTML | — | 2026-11-08 | Active planning |
 | `obsidian` | Shell | Obsidian vault | 2026-05-25 | Personal knowledge base |
 | `dnd` | — | — | 2026-05-26 | Personal/hobby |
 | `my_cv_pub` | — | Public CV sharing | 2026-03-16 | Employment asset |
 | `my_cv` | — | CV workspace | 2026-03-16 | Employment asset |
 | `comptia_net_plus` | Shell | CompTIA Net+ notes | 2026-04-15 | Cert study |
 | `nosense_ip_updater` | Python | Dev tools | 2026-02-01 | Utility |
-| `weaponised_ansible` | Python | "DCM" | 2026-01-25 | Security tooling |
+| `[private: offensive-ansible]` | Python | "DCM" | 2026-01-25 | Security tooling |
 | `my_ai_package` | Python | AI package base | 2026-01-16 | Experimental |
 | `continue-agent-config` | — | Continue.dev agent config | 2026-06-14 | Utility |
 | `Ai_Suite` | Python | Self-hosted AI (Podman) | 2025-08-27 | Experimental |
@@ -159,7 +159,7 @@ These demonstrate learning trajectory. Employer value depends on presentation.
 
 | Fork | Action | Reason |
 |------|--------|--------|
-| `tuoni-mcp-1` | **Delete** | Superseded by private `tuoni-mcp`. Noise. |
+| `tuoni-mcp-1` | **Delete** | Superseded by `[private: tuoni-mcp-fork]`. Noise. |
 | `graphy_server` | **Delete** | "tax-calculator" — irrelevant, no meaningful work |
 | `wtecc-CICD_PracticeCode` | **Delete** | Practice exercises, `ci-cd-final-project` covers this |
 | `mcino-Introduction-to-Git-and-GitHub` | **Delete** | Intro tutorial, adds noise |

@@ -56,10 +56,10 @@ HQ (my_claude_dev)
 │     └── syncs CI gates + security scaffold to all downstream repos
 │
 ├── Satellites (HQ orchestrates, repos stay separate)
-│   ├── tuoni-mcp         [red-team mode]    — OFFICIAL shell-dot/tuoni-mcp (PRIVATE; Moon-Knight13/tuoni-mcp is our fork — ARCHIVE)
-│   ├── tuoni-plugins     [red-dev mode]     — C2 command plugins (PRIVATE, HIGH risk)
+│   ├── [private: tuoni-mcp-fork] [red-team mode]    — OFFICIAL shell-dot/tuoni-mcp (PRIVATE; [private: tuoni-mcp-fork] is our fork — ARCHIVE)
+│   ├── [private: C2-plugins]     [red-dev mode]     — C2 command plugins (PRIVATE, HIGH risk)
 │   ├── homelab_infra     [homelab mode]     — IaC for home platform (PUBLIC)
-│   ├── homelab_planning  [homelab mode]     — BMAD planning artifacts (PRIVATE)
+│   ├── [private: homelab-planning]  [homelab mode]     — BMAD planning artifacts (PRIVATE)
 │   ├── foundryvtt-docker [homelab mode]     — Containerized FoundryVTT (PUBLIC)
 │   └── medicat-usb       [standalone]       — USB rescue builder (PUBLIC)
 │
@@ -93,9 +93,9 @@ HQ contains no application code. It contains:
 3. Consolidate AI experiment repos (keep Ai_Suite, archive duplicates)
 
 **Near-term:**
-4. Archive weaponised_ansible after extracting reusable patterns into HQ skills
+4. Archive [private: offensive-ansible] after extracting reusable patterns into HQ skills
 5. Archive nosense_ip_updater after migrating functions to official tuoni-mcp/range-intel
-6. Add CLAUDE.md to homelab_planning
+6. Add CLAUDE.md to [private: homelab-planning]
 
 **Result:** 45 repos → ~25. Active fleet: HQ + template + 6 satellites + 2
 project repos = 10 repos that matter.
@@ -405,10 +405,10 @@ weighted tool-call count from audit trail gives ~±20% accuracy.
 | A1: Tidy coursework repos — standardize READMEs, archive only truly dead ones (portfolio value) | S | None |
 | A2: Evaluate coursework forks — keep meaningful additions, archive pure forks | S | None |
 | A3: Consolidate AI experiment repos (keep Ai_Suite, archive duplicates) | S | None |
-| A4: Extract weaponised_ansible patterns → HQ skills, archive | M | None |
+| A4: Extract [private: offensive-ansible] patterns → HQ skills, archive | M | None |
 | A5: Migrate nosense_ip_updater functions → official tuoni-mcp/range-intel, archive | M | None |
-| A6: Archive Moon-Knight13/tuoni-mcp fork (using official shell-dot/tuoni-mcp) | S | None |
-| A6: Add CLAUDE.md to homelab_planning | S | None |
+| A6: Archive [private: tuoni-mcp-fork] fork (using official shell-dot/tuoni-mcp) | S | None |
+| A6: Add CLAUDE.md to [private: homelab-planning] | S | None |
 | A7: Confirm CompTIA notes value → archive or keep | S | Operator decision |
 
 **~7 stories. Estimated effort: 1 sprint.**
@@ -555,11 +555,11 @@ Epic F (Master Orchestrator)    ── independent for F1-F4; F5 depends on E
 
 | Repo | Public? | Offensive? | Risk if closer to HQ |
 |------|---------|-----------|---------------------|
-| tuoni-mcp (official: shell-dot/tuoni-mcp) | No | Yes (C2) | CRITICAL — stays separate, private. Moon-Knight13/tuoni-mcp fork → archive |
-| tuoni-plugins | No | Yes (payloads) | CRITICAL — must stay separate, private |
-| weaponised_ansible | No | Yes (exploitation) | HIGH — extract patterns, don't merge |
+| [private: tuoni-mcp-fork] (official: shell-dot/tuoni-mcp) | No | Yes (C2) | CRITICAL — stays separate, private. [private: tuoni-mcp-fork] fork → archive |
+| [private: C2-plugins] | No | Yes (payloads) | CRITICAL — must stay separate, private |
+| [private: offensive-ansible] | No | Yes (exploitation) | HIGH — extract patterns, don't merge |
 | nosense_ip_updater | No | Partial | MEDIUM — migrate functions only |
-| homelab_planning | No | No, identity-linking refs | MEDIUM — never make public |
+| [private: homelab-planning] | No | No, identity-linking refs | MEDIUM — never make public |
 | All others | Mixed | No | LOW/NONE |
 
 ## Appendix B: Existing Hook Execution Order (with new hooks marked)

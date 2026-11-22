@@ -10,7 +10,7 @@
 
 | Environment | Contains | Network | Risk if leaked |
 |-------------|----------|---------|----------------|
-| **Range (cr14)** | Target data, Providentia intel, offensive tooling output, engagement state, exploit PoCs, harvested creds | Isolated exercise network (172.21.x.x) | Exercise data in public repo; scope violations; range topology exposed |
+| **Range (cr14)** | Target data, Providentia intel, offensive tooling output, engagement state, exploit PoCs, harvested creds | Isolated exercise network ([range-ip]) | Exercise data in public repo; scope violations; range topology exposed |
 | **Homelab** | Real credentials, UniFi config, Docker stack state, partner-critical services | Home LAN, internet-facing services | Real credential exposure; home network compromise; partner impact |
 | **VPS/Cloud** | API keys, billing data, RunPod/cloud tokens, DNS configs | Public internet | Financial exposure; infrastructure takeover; API key abuse |
 | **Public repos** | Open-source code, docs, skills, hook logic | GitHub public | Reputational; offensive content in public; secrets in git history |
@@ -57,7 +57,7 @@
 **Mechanisms:**
 - `tuoni-secret-guard.sh` — Bash regex for tuoni config/ssl/key/DB paths
 - `pretooluse-ctp.sh` — guards ctp-bridge paths, requires approval tokens
-- `settings.json` permissions — explicit Write/Edit deny for tuoni-live and /srv/tuoni paths
+- `settings.json` permissions — explicit Write/Edit deny for tuoni-live and [kali-deploy-path] patterns
 - `.gitleaks.toml` — custom rules for Anthropic API keys, PII patterns (email, CC, SSN, etc.)
 - Secret-read deny in guard-stack — denies reads of `.env`, `~/.ssh/id_*`, `~/.gnupg/**`, configured `CTP_SECRET_PATHS`
 
@@ -84,9 +84,9 @@
 ### 2.4 Repo-level separation (IMPLEMENTED)
 
 **Mechanisms:**
-- `project-routes.yaml` — maps repos to default modes (my_claude_dev→platform-ops, tuoni-plugins→red-dev, homelab repos→homelab)
+- `project-routes.yaml` — maps repos to default modes (my_claude_dev→platform-ops, [private: C2-plugins]→red-dev, homelab repos→homelab)
 - `.gitignore` — comprehensive exclusions: secrets, keys, env files, audit logs, sessions, mode-overrides, engagements, MCP runtime DBs
-- Separate repos: tuoni-plugins (private), homelab_planning (private), my_claude_dev (public)
+- Separate repos: [private: C2-plugins] (private), [private: homelab-planning] (private), my_claude_dev (public)
 - `mode-inject.sh` checks `T3_PROJECT_REPO_KEY` and emits mismatch warning if repo doesn't match mode
 
 **Gaps:**
@@ -174,14 +174,14 @@ Central definition of environments and their boundaries.
 environments:
   range:
     description: "Exercise zone — offensive tools, target data, Providentia intel"
-    network: "172.21.0.0/16"
+    network: "[range-network]"
     modes: [red-team, purple, pentest, ctf, green-dev, bounty]
     secret_stores: [tuoni-live, engagements, range-credentials]
     sensitive_patterns:
-      - '\b172\.21\.\d{1,3}\.\d{1,3}\b'          # range IPs
+      - '[range-ip-regex-pattern]'          # range IPs
       - '\b[a-z]+-?(0[1-9]|[1-5]\d)\b'            # target hostnames (e.g., web01, dc02)
       - '\bcr14\.net\b'                             # range domain
-    repos: [tuoni-plugins]
+    repos: [[private: C2-plugins]]
 
   homelab:
     description: "Production home network — real credentials, partner-critical"
@@ -191,7 +191,7 @@ environments:
       - '\bUDR7?\b'                                 # UniFi device names
       - '<homelab-specific-SSID-patterns>'
       - '<homelab-IP-ranges>'
-    repos: [homelab_planning, foundryvtt-docker, medicat-usb]
+    repos: [[private: homelab-planning], foundryvtt-docker, medicat-usb]
 
   cloud:
     description: "VPS/cloud infrastructure — API keys, billing"
@@ -228,7 +228,7 @@ Before thread dispatch, scan the prompt/task field for sensitive patterns from e
 
 ```
 Example: Dispatching thread in homelab mode.
-Scan prompt for range patterns (172.21.x.x, cr14.net, target hostnames).
+Scan prompt for range patterns ([range-ip], cr14.net, target hostnames).
 Match found → deny with: "Dispatch prompt contains range data. Strip before dispatching to homelab thread."
 ```
 
@@ -323,7 +323,7 @@ New pre-commit hook (or extend gitleaks config):
 - Scan staged diff for `sensitive_patterns` from OTHER environments
 - Block commit if cross-environment content detected
 
-Example: Committing to my_claude_dev (public environment). Scan for range IPs (172.21.x.x), homelab device names, cloud API keys. Any match → block with specific pattern identified.
+Example: Committing to my_claude_dev (public environment). Scan for range IPs ([range-ip]), homelab device names, cloud API keys. Any match → block with specific pattern identified.
 
 #### 4c. Public repo content policy
 
