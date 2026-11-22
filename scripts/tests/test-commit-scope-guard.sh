@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # test-commit-scope-guard.sh — verify commit-scope soft guard behavior.
+# shellcheck disable=SC2015,SC2155
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
