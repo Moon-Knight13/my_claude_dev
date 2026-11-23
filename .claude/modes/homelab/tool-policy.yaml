@@ -1,10 +1,20 @@
-# homelab mode -- infrastructure development only.
-# No offensive tools, no range MCPs.
-# cve-mcp and nuclei-mcp allowed for defensive vulnerability scanning.
+# homelab mode — IaC development + security hardening.
+# Deny offensive operations tools; allow security reference for defensive design.
+#
+# Blocked: C2, range recon, RE, range wiki, AD recon, password cracking.
+# Allowed (denied in platform-ops/dev but useful here):
+#   obsidian-mcp   — homelab LLM Wiki knowledge base
+#   cve-mcp        — security fitness, EOL assessment
+#   nuclei-mcp     — defensive scanning of homelab services
+#   mitre-mcp      — threat modeling for network/access design
+#   hacktricks-mcp — defensive awareness for CIS hardening
+#   lolbins-mcp    — host hardening awareness
 deny:
   - "mcp__tuoni-mcp__*"
   - "mcp__range-intel__*"
-  - "mcp__hacktricks-mcp__*"
-  - "mcp__mitre-mcp__*"
-  - "mcp__lolbins-mcp__*"
   - "mcp__rea-mcp__*"
+  - "mcp__outline-readonly__*"
+  - "mcp__outline-write__*"
+  - "mcp__ghidra-mcp__*"
+  - "mcp__bloodhound-mcp__*"
+  - "mcp__hashcat-mcp__*"
