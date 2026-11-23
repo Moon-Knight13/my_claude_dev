@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # test-homelab-leak-guard.sh — tests for AD-13 homelab leak guard hook.
+# shellcheck disable=SC2015
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
