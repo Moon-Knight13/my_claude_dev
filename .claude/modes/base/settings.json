@@ -91,6 +91,15 @@
             "command": "$CLAUDE_PROJECT_DIR/scripts/hooks/pretooluse-gitlab-write-guard.sh"
           }
         ]
+      },
+      {
+        "matcher": "Bash|Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/scripts/hooks/homelab-leak-guard.sh"
+          }
+        ]
       }
     ],
     "PostToolUse": [
