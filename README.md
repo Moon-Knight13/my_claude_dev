@@ -19,7 +19,7 @@ intelligence, and dev boxes connected as spokes via SSH tunnels.
  |  14 MCP servers (security research, C2,      |
  |  CMDB, wiki, code, binary analysis, vault)   |
  |                                              |
- |  11 operational modes with context isolation  |
+ |  13 operational modes with context isolation  |
  |                                              |
  |  ctp-bridge (deploy tooling)                 |
  +------------+--------------------------------+
@@ -43,7 +43,7 @@ demonstrating how a single Claude session with MCP integrations, safety controls
 and mode-based isolation can serve as a multi-environment platform for security
 operations and software development.
 
-**Current state:** Built and operational with 11 modes, 14 MCP servers, environment
+**Current state:** Built and operational with 13 modes, 14 MCP servers, environment
 profiles, a tested safety harness, and CI security gates. Supports multiple
 environment types: dedicated cyber range, CTF platforms, penetration testing
 engagements, bug bounty programs, general software development, and homelab
@@ -70,7 +70,7 @@ planning document.
 
 ## Modes
 
-11 operational modes with context isolation via hook-injected configuration:
+13 operational modes with context isolation via hook-injected configuration:
 
 | Mode | Purpose |
 |------|---------|
@@ -85,6 +85,7 @@ planning document.
 | `pentest` | Client penetration testing engagements |
 | `bounty` | Bug bounty programs |
 | `homelab` | Home infrastructure management |
+| `3d-print` | 3D printing pipeline (NL to STL) |
 
 Mode configs live in `.claude/modes/`. Routing rules in `.claude/modes/project-routes.yaml`.
 
@@ -261,7 +262,7 @@ scripts/host/        Remote box provisioning (killswitch, extensions, ansible-li
 scripts/             Bootstrap, CI helpers, and template validator
 .devcontainer/       Dev environment (for developing this repo)
 .claude/commands/    Claude Code skills
-.claude/modes/       Operational mode configurations (11 modes)
+.claude/modes/       Operational mode configurations (13 modes)
 config/              MCP secret scoping, environment profiles
 .github/             Workflows (CI, secret scan, semgrep, container scan); issue & PR templates
 docs/                SAFETY_HARNESS.md, ARCHITECTURE_VISION.md, TEMPLATE_GUIDE.md, BMAD_WORKFLOW.md, KANBAN_WORKFLOW.md

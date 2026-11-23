@@ -299,7 +299,7 @@
   <section>
     <p class="eyebrow">For engineers</p>
     <h2>The seven moving parts</h2>
-    <p class="section-note">Each is a self-contained piece of the platform. Seven operational modes — from platform-ops to red-team to homelab — activate different subsets of these parts.</p>
+    <p class="section-note">Each is a self-contained piece of the platform. Thirteen operational modes — from platform-ops to red-team to homelab — activate different subsets of these parts.</p>
     <dl class="comp">
       <div>
         <dt>Devcontainer<span class="tag">.devcontainer/</span></dt>
@@ -482,7 +482,7 @@
     <p class="section-note">The current architecture serves one environment (a dedicated cyber range). v3 generalizes the framework to support independent operational domains — CTF challenges, penetration tests, bug bounties, software development, and homelab infrastructure — each with its own modes, knowledge bases, and model failover.</p>
 
     <div class="dgram">
-      <div class="dgram-h"><h3>New operational modes</h3><span class="path">planned · .claude/modes/</span></div>
+      <div class="dgram-h"><h3>New operational modes</h3><span class="path">shipped · .claude/modes/</span></div>
       <div class="cards">
         <div class="card">
           <h3>dev</h3>
@@ -500,8 +500,16 @@
           <h3>bounty</h3>
           <p>Bug bounty programs. Program policy as scope definition, web-focused tooling, no C2 needed.</p>
         </div>
+        <div class="card">
+          <h3>homelab</h3>
+          <p>Home infrastructure management. Non-destructive by default, UniFi and Docker tooling.</p>
+        </div>
+        <div class="card">
+          <h3>3d-print</h3>
+          <p>3D printing pipeline. Natural language to OpenSCAD, preview, STL export, and slicer integration.</p>
+        </div>
       </div>
-      <p class="d-note">Existing modes (base, platform-ops, green-dev, red-team, red-dev, purple, homelab) remain unchanged. Each new mode follows the same structure: system prompt, settings, and tool policy.</p>
+      <p class="d-note">All thirteen modes are operational. Original core modes (base, platform-ops, green-dev, red-team, red-dev, purple) plus seven added in v3 (dev, ctf, pentest, bounty, homelab, 3d-print, offensive-base). Each follows the same structure: system prompt, settings, and tool policy.</p>
     </div>
 
     <div class="dgram">
