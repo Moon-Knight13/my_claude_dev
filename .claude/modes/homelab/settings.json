@@ -1,4 +1,4 @@
 {
   "_mode": "homelab",
-  "_comment": "Homelab mode settings. Inherits base hooks from .claude/settings.json."
+  "_description": "Homelab IaC development and network management. Non-destructive default, dry-run-first. No offensive tools, no range."
 }
