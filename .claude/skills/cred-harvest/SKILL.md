@@ -38,10 +38,10 @@ Active in: **red-team** mode only.
 
 ### Credential Storage
 
-- Credentials stored as REFS ONLY in engagement YAML and Obsidian
-- Actual creds go to **tuoni credential store** (tuoni-mcp)
-- Wiki documentation uses `[cred-ref: <id>]` format, NEVER plaintext
-- No passwords, hashes, or tokens in YAML, Obsidian, or git
+- Credentials stored in **both** Tuoni cred store and Obsidian wiki pages
+- Obsidian pages hold full credential details (username, hash, domain, source)
+- Engagement YAML gate file uses `[cred-ref: <id>]` format only (thin pointer)
+- No passwords, hashes, or tokens in engagement YAML or git
 
 ### Tool Discipline
 
@@ -61,8 +61,8 @@ Use tuoni-plugins for credential operations:
 
 After any successful credential recovery:
 1. Immediately store in Tuoni via `tuoni_credential_add`
-2. Record ref in engagement YAML (tuoni_cred_id only, never plaintext)
-3. Write Obsidian ref page: `wiki/<hostname>-creds.md`
+2. Record cred-ref in engagement YAML gate (tuoni_cred_id only, thin pointer)
+3. Write full credential details to Obsidian: `wiki/<hostname>-creds.md`
 
 ## Phases
 

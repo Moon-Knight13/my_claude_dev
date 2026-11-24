@@ -155,7 +155,7 @@ mode immediately, and initial-access research gate skips authoritative sources.
    - **## Targets** — added after RT-TGT-001 approval (host, IP, OS, classification, phase, wiki page link)
    - **## Reachability** — populated by Phase 0 sweep
    - **## Agents** — self-agent ID, target agents as they're deployed
-   - **## Credentials** — REFS ONLY, auto-populated by cred-harvest. Table columns:
+   - **## Credentials** — auto-populated by cred-harvest, full details. Table columns:
      `| Ref ID | Username | Domain | Type | Source Host | Harvest Method | Timestamp | Status |`
      Status values: `untested`, `tested:success`, `tested:failed`, `tested:expired`
    - **## Findings** — technique outcomes (ID, target, result, timestamp)
@@ -295,8 +295,8 @@ Trigger: **automatic** — called by cred-harvest Phase 4 step 4, Phase 5 spray
 success, and lateral-move on credential validation. Also callable manually:
 "add cred", "record credential".
 
-**REFS ONLY — never store plaintext passwords, hashes, tickets, or keys in
-the engagement YAML or Obsidian notes.**
+**Credentials stored in both Tuoni cred store and Obsidian pages (full details).
+Engagement YAML gate uses `[cred-ref: <id>]` format only (thin pointer).**
 
 #### Input fields
 
@@ -689,10 +689,10 @@ across all engagements.
 - **RT-SCOPE-001**: GT (green team) accounts permanently out of scope. When
   recording techniques or findings that enumerate users, exclude gt-prefixed
   accounts from the data. Never add gt credentials to the credential store.
-- **Credentials**: REFS ONLY in YAML and Obsidian. Actual values in Tuoni
-  cred store only.
+- **Credentials**: stored in both Tuoni cred store and Obsidian (full details).
+  YAML gate uses cred-ref format only (thin pointer).
 - **No secrets in engagement YAML**: no passwords, hashes, keys, tokens.
-  Only metadata and references.
+  Only metadata and cred-ref pointers.
 - **Gitignored**: `engagements/` must be in `.gitignore`. Verify on create.
 
 ## Golden Paths
