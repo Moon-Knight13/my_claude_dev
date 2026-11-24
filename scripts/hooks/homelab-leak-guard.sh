@@ -1,26 +1,12 @@
 #!/usr/bin/env bash
-# homelab-leak-guard.sh — PreToolUse hook: AD-13 context isolation for homelab mode.
+# homelab-leak-guard.sh — PreToolUse hook: AD-13 context isolation.
 #
-# Prevents cross-contamination between homelab and range/engagement contexts:
-#   1. In homelab mode: warns if tool input contains range-specific patterns
-#      (10.10.x.x, 172.21.x.x, dcm/cr14, engagement IDs)
-#   2. In any non-homelab mode: warns if committing files that contain homelab
-#      private data (10.5.x.x subnet, device hostnames) outside homelab repos
-#
-# Boundary rules:
-#   - Homelab data stays in: homelab_infra, homelab_planning
-#   - Range data stays in: my_claude_dev engagement paths
-#   - Cross-contamination in either direction triggers a warning
-#
-# This is a soft guard (warn, not block) because legitimate cross-references
-# exist (e.g., documenting network segmentation). The warning gives the
-# operator visibility to catch accidental leaks.
+# Bidirectional guard between homelab and other operational contexts.
+# Patterns loaded from external config (private repo); no-op if missing.
+# Soft guard: warns via notification, never blocks.
 #
 # Trigger: PreToolUse on Bash, Write, Edit tools
-# Mode detection: .claude/.active-mode or per-session override
-#
-# Exit codes:
-#   0 — always (soft guard: warn via notification, never block)
+# Exit codes: 0 — always
 set -euo pipefail
 
 HOOK_INPUT="$(cat)"
@@ -31,28 +17,47 @@ import sys, json
 try: print(json.load(sys.stdin).get("tool_name",""))
 except: print("")' 2>/dev/null || true)"
 
-# Only check tools that write or execute
 case "$TOOL_NAME" in
     Bash|Write|Edit) ;;
     *) exit 0 ;;
 esac
+
+# ── Load patterns from external config ──────────────────────────────────────
+PATTERN_FILE="${LEAK_GUARD_PATTERNS:-$HOME/Documents/homelab_planning/config/leak-guard-patterns.conf}"
+if [[ ! -f "$PATTERN_FILE" ]]; then
+    exit 0
+fi
+
+RANGE_PATTERNS=()
+HOMELAB_PATTERNS=()
+current_section=""
+while IFS= read -r line; do
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    if [[ "$line" == "[range]" ]]; then current_section="range"; continue; fi
+    if [[ "$line" == "[homelab]" ]]; then current_section="homelab"; continue; fi
+    case "$current_section" in
+        range) RANGE_PATTERNS+=("$line") ;;
+        homelab) HOMELAB_PATTERNS+=("$line") ;;
+    esac
+done < "$PATTERN_FILE"
+
+if (( ${#RANGE_PATTERNS[@]} == 0 && ${#HOMELAB_PATTERNS[@]} == 0 )); then
+    exit 0
+fi
 
 # ── Detect active mode ───────────────────────────────────────────────────────
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-.}"
 SESSION_ID="${CLAUDE_CODE_SESSION_ID:-}"
 ACTIVE_MODE=""
 
-# Per-session override takes precedence
 if [[ -n "$SESSION_ID" && -f "$PROJECT_DIR/.claude/.mode-overrides/$SESSION_ID" ]]; then
     ACTIVE_MODE="$(cat "$PROJECT_DIR/.claude/.mode-overrides/$SESSION_ID" 2>/dev/null || true)"
 fi
 
-# Fall back to global active mode
 if [[ -z "$ACTIVE_MODE" && -f "$PROJECT_DIR/.claude/.active-mode" ]]; then
     ACTIVE_MODE="$(cat "$PROJECT_DIR/.claude/.active-mode" 2>/dev/null || true)"
 fi
 
-# No mode set — nothing to enforce
 [[ -n "$ACTIVE_MODE" ]] || exit 0
 
 # ── Extract tool input text ──────────────────────────────────────────────────
@@ -76,32 +81,8 @@ except: print("")' 2>/dev/null || true)"
 
 [[ -n "$TOOL_TEXT" ]] || exit 0
 
-# Strip heredoc bodies to reduce false positives from documentation/examples
+# Strip heredoc bodies to reduce false positives
 TOOL_TEXT_CHECK="$(printf '%s' "$TOOL_TEXT" | sed "/<<[[:space:]]*['\"]\\{0,1\\}EOF/,/^EOF/d")"
-
-# ── Pattern definitions ──────────────────────────────────────────────────────
-
-# Range/engagement patterns (should not appear in homelab context)
-RANGE_PATTERNS=(
-    '10\.10\.[0-9]{1,3}\.[0-9]{1,3}'
-    '172\.21\.[0-9]{1,3}\.[0-9]{1,3}'
-    '\bdcm[0-9]*[-.]'
-    '\bcr14\b'
-    '\bcrp\.cr14\b'
-    'engagement[-_]?(id|state|yaml)'
-    '\btuoni\b'
-    '\bRT-DEP-[0-9]+'
-)
-
-# Homelab private patterns (should not appear outside homelab repos)
-HOMELAB_PATTERNS=(
-    '10\.5\.[0-9]{1,3}\.[0-9]{1,3}'
-    '\budr7\b'
-    '\bUDR7\b'
-    '\bassets\.yml\b'
-)
-
-FINDINGS=()
 
 # ── Helper: check text against pattern list ──────────────────────────────────
 check_patterns() {
@@ -119,6 +100,8 @@ check_patterns() {
     printf '%s\n' "${matched[@]}"
 }
 
+FINDINGS=()
+
 # ── Direction 1: Range data leaking into homelab mode ────────────────────────
 if [[ "$ACTIVE_MODE" == "homelab" ]]; then
     while IFS= read -r match; do
@@ -128,14 +111,11 @@ fi
 
 # ── Direction 2: Homelab data leaking into non-homelab modes ─────────────────
 if [[ "$ACTIVE_MODE" != "homelab" ]]; then
-    # Only check git commit commands (the actual contamination vector)
     if [[ "$TOOL_NAME" == "Bash" ]] && printf '%s' "$TOOL_TEXT_CHECK" | grep -qE 'git\s+(add|commit|push)'; then
-        # Check if we're in a homelab repo (where homelab data is expected)
         IN_HOMELAB_REPO=false
         if printf '%s' "$TOOL_TEXT_CHECK" | grep -qEi 'homelab_(infra|planning)'; then
             IN_HOMELAB_REPO=true
         fi
-        # Check working directory
         if [[ "$PWD" == *homelab_infra* || "$PWD" == *homelab_planning* ]]; then
             IN_HOMELAB_REPO=true
         fi
@@ -147,14 +127,12 @@ if [[ "$ACTIVE_MODE" != "homelab" ]]; then
         fi
     fi
 
-    # Also check Write/Edit to non-homelab paths
     if [[ "$TOOL_NAME" == "Write" || "$TOOL_NAME" == "Edit" ]]; then
         FILE_PATH="$(printf '%s' "$HOOK_INPUT" | python3 -I -c '
 import sys, json
 try: print(json.load(sys.stdin).get("tool_input",{}).get("file_path",""))
 except: print("")' 2>/dev/null || true)"
 
-        # Skip if writing to homelab repos (expected location)
         if [[ "$FILE_PATH" != *homelab_infra* && "$FILE_PATH" != *homelab_planning* ]]; then
             CONTENT="$(printf '%s' "$HOOK_INPUT" | python3 -I -c '
 import sys, json
@@ -177,7 +155,6 @@ if (( ${#FINDINGS[@]} == 0 )); then
     exit 0
 fi
 
-# Deduplicate
 declare -A seen
 unique=()
 for f in "${FINDINGS[@]}"; do
@@ -186,7 +163,6 @@ for f in "${FINDINGS[@]}"; do
     unique+=("$f")
 done
 
-# Log to audit trail
 AUDIT_DIR="${PROJECT_DIR}/.claude/audit"
 mkdir -p "$AUDIT_DIR" 2>/dev/null || true
 AUDIT_FILE="$AUDIT_DIR/leak-guard.jsonl"
@@ -204,7 +180,6 @@ entry = {
 print(json.dumps(entry))
 ' "$ACTIVE_MODE" "${unique[@]}" >> "$AUDIT_FILE" 2>/dev/null || true
 
-# Warn operator (soft guard — notification, not deny)
 notification="$(python3 -I -c '
 import sys, json
 findings = sys.argv[1:]
