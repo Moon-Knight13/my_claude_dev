@@ -21,7 +21,7 @@ Master thread (this session): orchestration, review, approval
 T3 threads: execution (one phase per thread, short prompts)
 Kali spoke: ALL offensive network traffic (never from hub)
 Obsidian llm-wiki: shared state bus between all threads
-Tuoni cred store: credentials (never plaintext in Obsidian)
+Tuoni cred store + Obsidian: credentials stored in both (YAML gate uses cred-ref format only)
 Engagement YAML: thin gate file only (ID, mode, type, exclusions, wiki pointer)
 ```
 
@@ -334,7 +334,7 @@ what's already in Obsidian.
 | All execution from Kali | Hub is orchestration only, never offensive traffic |
 | Obsidian is the bus | Threads read previous phase, write their phase |
 | Engagement YAML is thin gate | ID + mode + exclusions + wiki pointer only |
-| Credentials in Tuoni store | Refs in Obsidian, never plaintext anywhere |
+| Credentials in Tuoni store + Obsidian | Full details in both; YAML gate uses cred-ref format only |
 | Auto-chain exploit to post-access | Persist round 1 confirmed = gate. No manual dispatch delay. |
 | Persist round 1 in exploit thread | Per RD-003: landing + persist happen together, before post-access |
 | note-search at every phase | Operator notes ground decisions in real experience, not just MCP data |
