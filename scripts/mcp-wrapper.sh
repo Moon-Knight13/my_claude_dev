@@ -58,9 +58,14 @@ if [[ -f "$SECRETS_CONFIG" ]]; then
         "$SECRETS_CONFIG" "$_mcp_name" 2>&1)" || true
 
     # Validate output: must contain pipe delimiter with secrets on left side.
-    # If parser failed or returned garbage, log warning and skip unset (fail-open).
+    # If parser failed or returned garbage, fail-closed: unset all known secrets.
     if [[ "$_scoping" != *"|"* ]]; then
-        echo "mcp-wrapper: WARNING: scoping parser failed for name=$_mcp_name output='$_scoping'" >&2
+        echo "mcp-wrapper: WARNING: scoping parser failed for name=$_mcp_name — fail-closed" >&2
+        for _var in TUONI_USERNAME TUONI_PASSWORD PROVIDENTIA_TOKEN \
+                    GITLAB_TOKEN GITLAB_PROJECT OUTLINE_API_KEY OUTLINE_TOKEN \
+                    BLOODHOUND_USERNAME BLOODHOUND_PASSWORD RUNPOD_API_KEY; do
+            unset "$_var" 2>/dev/null || true
+        done
         _scoping=""
     fi
 
