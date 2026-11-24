@@ -1,14 +1,5 @@
-# platform-ops mode — framework self-maintenance only.
-# No offensive tools, no range MCPs except diagnostics.
+# platform-ops mode — framework self-maintenance + harness work.
+# Full access to all MCPs — this mode works on the harness itself.
+# Only deny local-ollama (not used in ops).
 deny:
-  - "mcp__tuoni-mcp__*"
-  - "mcp__range-intel__*"
-  - "mcp__outline-readonly__*"
-  - "mcp__outline-write__*"
-  - "mcp__obsidian-mcp__*"
-  - "mcp__hacktricks-mcp__*"
-  - "mcp__mitre-mcp__*"
-  - "mcp__lolbins-mcp__*"
-  - "mcp__cve-mcp__*"
-  - "mcp__rea-mcp__*"
-  - "mcp__ghidra-mcp__*"
+  - "mcp__local-ollama__*"
