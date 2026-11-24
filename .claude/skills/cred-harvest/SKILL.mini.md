@@ -17,7 +17,7 @@ modes: [red-team, purple]
 
 - **RT-SCOPE-001:** GT accounts OUT OF SCOPE. Discard gt-prefixed creds from all harvests. Never store gt creds in Tuoni.
 - **Credential spray:** MUST enumerate lockout policy first. Stay under threshold (N-1). One password per observation window. Unknown policy = single attempt only.
-- **Storage:** REFS ONLY in YAML and Obsidian. Actual creds in Tuoni store. `[cred-ref: <id>]` format, NEVER plaintext.
+- **Storage:** Credentials in Tuoni cred store AND Obsidian. YAML gate uses `[cred-ref: <id>]` format.
 - **RT-TGT-002:** No tools uploaded. All commands via tuoni agent.
 
 ## Plugin-First Policy (ENFORCED)
@@ -78,10 +78,10 @@ On Kali (NOT target):
 
 1. Identify type: plaintext, NTLM, Kerberos, SSH key, API token, certificate
 2. **GATE: `tuoni_credential_add`** — store each cred with source host, type, privilege. Must call before proceeding.
-3. Record ref in engagement YAML (tuoni_cred_id only, NEVER plaintext)
+3. Record ref in engagement YAML (`[cred-ref: <tuoni_cred_id>]` format)
 4. **GATE: engagement-state Update Credential Inventory** — pass tuoni_cred_id, username, domain, type, source_host, harvest_method, timestamp, status: untested. Wait for confirm.
 5. Assess lateral value: domain admin? Service accounts? Match `tuoni_credentials_list` against `range_targets`. BloodHound path analysis per new domain cred. Query untested creds from engagement-state.
-6. Document in Obsidian (refs only): target page cred refs, template credential.md, tags `#engagement/<id> #phase/cred-harvest #target/<hostname>`
+6. Document in Obsidian: target page cred details, template credential.md, tags `#engagement/<id> #phase/cred-harvest #target/<hostname>`
 
 ## Phase 4.5: Auto Cred-Reuse Spray (same-template hosts)
 

@@ -96,7 +96,7 @@ Post-reclassification: confirmed = eligible for attack; unreachable = skip, re-c
 
 ## Update Credential Inventory (auto-called by cred-harvest)
 
-**REFS ONLY — never plaintext in YAML or Obsidian.**
+**Credentials in Tuoni cred store AND Obsidian. YAML gate uses `[cred-ref: <id>]` format only.**
 
 Fields: tuoni_cred_id, username, domain, type (password/NTLM/NTLMv2/Kerberos/key/token/certificate), source_host, harvest_method (MITRE ID or plugin), timestamp, status (untested|tested:success|tested:failed|tested:expired).
 

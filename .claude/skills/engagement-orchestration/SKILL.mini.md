@@ -17,7 +17,7 @@ Master thread: orchestration, review, approval
 T3 threads: execution (one phase per thread)
 Kali spoke: ALL offensive traffic (never from hub)
 Obsidian llm-wiki: shared state bus
-Tuoni cred store: credentials (never plaintext in Obsidian)
+Tuoni cred store + Obsidian: credentials in both
 Engagement YAML: thin gate file only
 ```
 
