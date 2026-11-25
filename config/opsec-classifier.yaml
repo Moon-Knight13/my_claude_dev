@@ -1,0 +1,277 @@
+# OPSEC Classifier — command risk metadata for tuoni-plugins
+#
+# Each command maps to an OPSEC rating, detection surfaces, stealthier
+# alternatives, and whether operator confirmation is required before
+# execution.  Consumed by the command queue preview (#352) and OPSEC
+# guard skills.
+#
+# Schema version allows breaking changes without silent misparse.
+schema_version: 1
+
+# ── Rating definitions ──────────────────────────────────────────────────
+#
+# critical  — Triggers well-known EDR/SIEM signatures. Near-certain
+#             detection on monitored hosts.  Requires operator approval.
+# high      — Detectable by tuned defences (Sysmon, custom YARA, ETW).
+#             Operator warned; confirmation recommended.
+# medium    — Minimal footprint but leaves artefacts recoverable in
+#             forensics (logs, temp files, registry keys).
+# low       — Passive or read-only. No new processes, no disk writes,
+#             negligible detection surface.
+
+ratings:
+  critical:
+    description: "Near-certain detection on monitored hosts"
+    requires_confirmation: true
+    colour: red
+  high:
+    description: "Detectable by tuned defences"
+    requires_confirmation: true
+    colour: orange
+  medium:
+    description: "Leaves forensic artefacts"
+    requires_confirmation: false
+    colour: yellow
+  low:
+    description: "Passive / read-only"
+    requires_confirmation: false
+    colour: green
+
+# ── Detection surface vocabulary ────────────────────────────────────────
+#
+# Canonical tags that describe what a defender can key on.
+# Commands reference these by name; the queue preview renders them.
+
+detection_surfaces:
+  process_name:        "Known-bad process name (e.g. mimikatz.exe)"
+  commandline_string:  "Suspicious command-line pattern"
+  etw_amsi:            "ETW / AMSI telemetry fires on script content"
+  api_call:            "Hooked ntdll / kernel32 call sequence"
+  file_drop:           "New file written to disk"
+  registry_write:      "Registry key created or modified"
+  service_install:     "New service or scheduled task created"
+  network_connection:  "Outbound connection to new destination"
+  event_log:           "Windows / syslog event generated"
+  wmi_activity:        "WMI process creation or subscription"
+  pipe_creation:       "Named pipe created (Sysmon event 17/18)"
+  token_manipulation:  "Token duplication or impersonation"
+
+# ── Command mappings ────────────────────────────────────────────────────
+#
+# Keys match the tuoni-plugins script basenames (without .py extension).
+# The deploy script expects these exact names in dist/.
+
+commands:
+  tuoni_cred_dump:
+    description: "Dump credentials from SAM, LSA, or LSASS"
+    opsec_rating: critical
+    mitre_tactic: TA0006
+    mitre_technique: T1003
+    detection_surface:
+      - process_name
+      - commandline_string
+      - etw_amsi
+      - api_call
+    alternatives:
+      - "nanodump (direct syscalls, no process_name hit)"
+      - "VSS shadow copy + offline SAM parse"
+      - "remote secretsdump via SMB (no on-host process)"
+    requires_confirmation: true
+
+  tuoni_get_system:
+    description: "Escalate to SYSTEM via token manipulation"
+    opsec_rating: critical
+    mitre_tactic: TA0004
+    mitre_technique: T1134
+    detection_surface:
+      - token_manipulation
+      - api_call
+      - event_log
+    alternatives:
+      - "named pipe impersonation (lower API-hook visibility)"
+      - "service-based SYSTEM (blends with legitimate service starts)"
+    requires_confirmation: true
+
+  tuoni_persist_swarm:
+    description: "Deploy dual-beacon persistence (operational + sleeper)"
+    opsec_rating: high
+    mitre_tactic: TA0003
+    mitre_technique: T1543
+    detection_surface:
+      - service_install
+      - registry_write
+      - file_drop
+      - network_connection
+    alternatives:
+      - "registry run key only (single mechanism, lower footprint)"
+      - "WMI event subscription (fileless)"
+    requires_confirmation: true
+
+  tuoni_lateral_move:
+    description: "Move laterally via WinRM/PSRemoting/SSH"
+    opsec_rating: high
+    mitre_tactic: TA0008
+    mitre_technique: T1021
+    detection_surface:
+      - network_connection
+      - event_log
+      - commandline_string
+    alternatives:
+      - "DCOM lateral movement (less commonly monitored)"
+      - "SSH with key-based auth (no credential on wire)"
+    requires_confirmation: true
+
+  tuoni_lateral_wmi:
+    description: "Move laterally via WMI process creation"
+    opsec_rating: high
+    mitre_tactic: TA0008
+    mitre_technique: T1047
+    detection_surface:
+      - wmi_activity
+      - process_name
+      - network_connection
+      - event_log
+    alternatives:
+      - "scheduled task on remote host (different telemetry path)"
+      - "SMB file drop + service start"
+    requires_confirmation: true
+
+  tuoni_ad_enum:
+    description: "Enumerate Active Directory objects"
+    opsec_rating: medium
+    mitre_tactic: TA0007
+    mitre_technique: T1087
+    detection_surface:
+      - commandline_string
+      - event_log
+      - network_connection
+    alternatives:
+      - "LDAP queries via native net commands (blends with admin tooling)"
+      - "BloodHound SharpHound collector (faster, single burst)"
+    requires_confirmation: false
+
+  tuoni_net_recon:
+    description: "Network reconnaissance (port scan, service enum)"
+    opsec_rating: medium
+    mitre_tactic: TA0007
+    mitre_technique: T1046
+    detection_surface:
+      - network_connection
+      - event_log
+    alternatives:
+      - "single-port targeted probes (lower scan signature)"
+      - "living-off-the-land: Test-NetConnection, /dev/tcp"
+    requires_confirmation: false
+
+  tuoni_vuln_assess:
+    description: "Assess host for known vulnerabilities"
+    opsec_rating: medium
+    mitre_tactic: TA0007
+    mitre_technique: T1518
+    detection_surface:
+      - commandline_string
+      - file_drop
+    alternatives:
+      - "version fingerprinting only (no exploit probes)"
+    requires_confirmation: false
+
+  tuoni_payload_gen:
+    description: "Generate and stage payload on target"
+    opsec_rating: high
+    mitre_tactic: TA0002
+    mitre_technique: T1059
+    detection_surface:
+      - file_drop
+      - etw_amsi
+      - commandline_string
+      - process_name
+    alternatives:
+      - "in-memory execution via reflective loading"
+      - "LOLBin proxy execution (mshta, rundll32)"
+    requires_confirmation: true
+
+  tuoni_exfil_stage:
+    description: "Stage and exfiltrate collected data"
+    opsec_rating: high
+    mitre_tactic: TA0010
+    mitre_technique: T1041
+    detection_surface:
+      - network_connection
+      - file_drop
+      - commandline_string
+    alternatives:
+      - "DNS exfiltration (lower bandwidth, harder to detect)"
+      - "C2 channel exfil (no new connections)"
+    requires_confirmation: true
+
+  tuoni_host_id:
+    description: "Identify host OS, role, and environment"
+    opsec_rating: low
+    mitre_tactic: TA0007
+    mitre_technique: T1082
+    detection_surface:
+      - commandline_string
+    alternatives: []
+    requires_confirmation: false
+
+  tuoni_collect_intel:
+    description: "Collect files, configs, and intelligence from host"
+    opsec_rating: medium
+    mitre_tactic: TA0009
+    mitre_technique: T1005
+    detection_surface:
+      - file_drop
+      - commandline_string
+    alternatives:
+      - "selective single-file read (no staging directory)"
+    requires_confirmation: false
+
+  tuoni_log_clear:
+    description: "Clear or tamper with event logs"
+    opsec_rating: critical
+    mitre_tactic: TA0005
+    mitre_technique: T1070
+    detection_surface:
+      - event_log
+      - commandline_string
+      - api_call
+    alternatives:
+      - "selective log entry removal (avoid full clear)"
+      - "timestamp manipulation only"
+    requires_confirmation: true
+
+  tuoni_ioc_cleanup:
+    description: "Remove indicators of compromise from host"
+    opsec_rating: medium
+    mitre_tactic: TA0005
+    mitre_technique: T1070.004
+    detection_surface:
+      - file_drop
+      - commandline_string
+    alternatives:
+      - "timestomping only (preserve files, change metadata)"
+    requires_confirmation: false
+
+  tuoni_route_hijack:
+    description: "Hijack network routes for traffic interception"
+    opsec_rating: critical
+    mitre_tactic: TA0008
+    mitre_technique: T1557
+    detection_surface:
+      - network_connection
+      - event_log
+      - commandline_string
+    alternatives:
+      - "ARP-limited scope (single target, not broadcast)"
+      - "DNS poisoning (application layer, harder to attribute)"
+    requires_confirmation: true
+
+  tuoni_agent_watcher:
+    description: "Monitor Tuoni agent health and callbacks"
+    opsec_rating: low
+    mitre_tactic: TA0011
+    mitre_technique: T1071
+    detection_surface:
+      - network_connection
+    alternatives: []
+    requires_confirmation: false
