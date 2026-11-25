@@ -33,6 +33,7 @@ DOTENV
 mkdir -p "$TMPDIR_TEST/scripts/lib"
 mkdir -p "$TMPDIR_TEST/config"
 cp "$PROJECT_DIR/scripts/lib/load-env.sh" "$TMPDIR_TEST/scripts/lib/"
+cp "$PROJECT_DIR/scripts/lib/parse-mcp-scoping.py" "$TMPDIR_TEST/scripts/lib/"
 cp "$PROJECT_DIR/scripts/mcp-wrapper.sh" "$TMPDIR_TEST/scripts/"
 cp "$PROJECT_DIR/config/mcp-secrets.yaml" "$TMPDIR_TEST/config/"
 

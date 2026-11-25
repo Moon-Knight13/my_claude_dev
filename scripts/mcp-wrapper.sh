@@ -48,88 +48,50 @@ _detect_mcp_name() {
 
 _mcp_name="$(_detect_mcp_name "$@")"
 
+# Debug logging (opt-in via MCP_DEBUG=1)
+if [[ "${MCP_DEBUG:-}" == "1" ]]; then
+    echo "mcp-wrapper: name=$_mcp_name args=$*" >&2
+fi
+
 if [[ -f "$SECRETS_CONFIG" ]]; then
-    # Parse config with python — extract secret list and allowed vars for this MCP
-    _scoping="$(python3 -I -c '
-import sys, re
+    _scoping="$(python3 -I "$SCRIPT_DIR/lib/parse-mcp-scoping.py" \
+        "$SECRETS_CONFIG" "$_mcp_name" 2>&1)" || true
 
-config_file = sys.argv[1]
-mcp_name = sys.argv[2]
-
-content = open(config_file).read()
-
-# Lightweight YAML parser for our simple structure
-# Extract secrets list
-secrets = []
-in_secrets = False
-in_scoping = False
-mcp_allowed = []
-in_mcp = False
-
-for line in content.splitlines():
-    stripped = line.strip()
-    if stripped.startswith("#") or not stripped:
-        continue
-
-    # Detect top-level keys
-    if line.startswith("secrets:"):
-        in_secrets = True
-        in_scoping = False
-        in_mcp = False
-        continue
-    elif line.startswith("scoping:"):
-        in_scoping = True
-        in_secrets = False
-        in_mcp = False
-        continue
-    elif not line.startswith(" ") and not line.startswith("\t"):
-        in_secrets = False
-        in_scoping = False
-        in_mcp = False
-        continue
-
-    if in_secrets and stripped.startswith("- "):
-        secrets.append(stripped[2:].strip().strip("\"").strip("'\''"))
-
-    if in_scoping:
-        # Check for MCP name key (2-space indent)
-        m = re.match(r"^  (\S+):\s*(.*)", line)
-        if m:
-            key = m.group(1)
-            val = m.group(2).strip()
-            if key == mcp_name:
-                in_mcp = True
-                # Handle inline empty list: []
-                if val == "[]":
-                    in_mcp = False
-                continue
-            else:
-                in_mcp = False
-                continue
-        if in_mcp and stripped.startswith("- "):
-            mcp_allowed.append(stripped[2:].strip().strip("\"").strip("'\''"))
-
-# Output: SECRETS|ALLOWED (pipe-delimited, single line)
-print(",".join(secrets) + "|" + ",".join(mcp_allowed))
-' "$SECRETS_CONFIG" "$_mcp_name" 2>/dev/null || true)"
-
-    _all_secrets="${_scoping%%|*}"
-    _allowed="${_scoping#*|}"
-
-    # Unset every secret this MCP does NOT need
-    IFS=',' read -ra _secret_arr <<< "$_all_secrets"
-    IFS=',' read -ra _allowed_arr <<< "$_allowed"
-
-    for _var in "${_secret_arr[@]}"; do
-        [[ -z "$_var" ]] && continue
-        _found=0
-        for _a in "${_allowed_arr[@]}"; do
-            [[ "$_a" == "$_var" ]] && { _found=1; break; }
-        done
-        if (( _found == 0 )); then
+    # Validate output: must contain pipe delimiter with secrets on left side.
+    # If parser failed or returned garbage, fail-closed: unset all known secrets.
+    if [[ "$_scoping" != *"|"* ]]; then
+        echo "mcp-wrapper: WARNING: scoping parser failed for name=$_mcp_name — fail-closed" >&2
+        for _var in TUONI_USERNAME TUONI_PASSWORD PROVIDENTIA_TOKEN \
+                    GITLAB_TOKEN GITLAB_PROJECT OUTLINE_API_KEY OUTLINE_TOKEN \
+                    BLOODHOUND_USERNAME BLOODHOUND_PASSWORD RUNPOD_API_KEY; do
             unset "$_var" 2>/dev/null || true
+        done
+        _scoping=""
+    fi
+
+    if [[ -n "$_scoping" ]]; then
+        _all_secrets="${_scoping%%|*}"
+        _allowed="${_scoping#*|}"
+
+        if [[ "${MCP_DEBUG:-}" == "1" ]]; then
+            echo "mcp-wrapper: secrets=[$_all_secrets] allowed=[$_allowed]" >&2
         fi
-    done
+
+        # Unset every secret this MCP does NOT need
+        IFS=',' read -ra _secret_arr <<< "$_all_secrets"
+        IFS=',' read -ra _allowed_arr <<< "$_allowed"
+
+        for _var in "${_secret_arr[@]}"; do
+            [[ -z "$_var" ]] && continue
+            _found=0
+            for _a in "${_allowed_arr[@]}"; do
+                [[ "$_a" == "$_var" ]] && { _found=1; break; }
+            done
+            if (( _found == 0 )); then
+                unset "$_var" 2>/dev/null || true
+            fi
+        done
+    fi
 else
     # No config file — fail closed: unset all known secrets
     for _var in TUONI_USERNAME TUONI_PASSWORD PROVIDENTIA_TOKEN \

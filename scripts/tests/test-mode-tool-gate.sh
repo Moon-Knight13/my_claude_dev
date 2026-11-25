@@ -52,26 +52,35 @@ trap '
 echo "=== Mode Tool Gate Tests ==="
 echo ""
 
-echo "--- platform-ops mode denies offensive MCPs ---"
+echo "--- platform-ops mode allows offensive MCPs (harness maintenance) ---"
 result="$(_call_hook platform-ops mcp__tuoni-mcp__tuoni_send_command)"
-if _is_denied "$result"; then
-    ok "platform-ops denies mcp__tuoni-mcp__tuoni_send_command"
+if _is_allowed "$result"; then
+    ok "platform-ops allows mcp__tuoni-mcp__tuoni_send_command"
 else
-    fail "platform-ops should deny mcp__tuoni-mcp__tuoni_send_command"
+    fail "platform-ops should allow mcp__tuoni-mcp__tuoni_send_command"
 fi
 
 result="$(_call_hook platform-ops mcp__hacktricks-mcp__search)"
-if _is_denied "$result"; then
-    ok "platform-ops denies mcp__hacktricks-mcp__search"
+if _is_allowed "$result"; then
+    ok "platform-ops allows mcp__hacktricks-mcp__search"
 else
-    fail "platform-ops should deny mcp__hacktricks-mcp__search"
+    fail "platform-ops should allow mcp__hacktricks-mcp__search"
 fi
 
 result="$(_call_hook platform-ops mcp__range-intel__query_hosts)"
-if _is_denied "$result"; then
-    ok "platform-ops denies mcp__range-intel__query_hosts"
+if _is_allowed "$result"; then
+    ok "platform-ops allows mcp__range-intel__query_hosts"
 else
-    fail "platform-ops should deny mcp__range-intel__query_hosts"
+    fail "platform-ops should allow mcp__range-intel__query_hosts"
+fi
+
+echo ""
+echo "--- platform-ops denies local-ollama ---"
+result="$(_call_hook platform-ops mcp__local-ollama__chat)"
+if _is_denied "$result"; then
+    ok "platform-ops denies mcp__local-ollama__chat"
+else
+    fail "platform-ops should deny mcp__local-ollama__chat"
 fi
 
 echo ""
@@ -160,7 +169,7 @@ fi
 
 echo ""
 echo "--- deny message includes mode name ---"
-result="$(_call_hook platform-ops mcp__tuoni-mcp__tuoni_send_command)"
+result="$(_call_hook platform-ops mcp__local-ollama__chat)"
 if echo "$result" | grep -q "platform-ops"; then
     ok "deny message includes mode name"
 else
