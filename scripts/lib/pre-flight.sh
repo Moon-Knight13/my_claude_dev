@@ -88,7 +88,7 @@ _CHECKS_JSON="[]"
 
 _add_check() {
     local name="$1" status="$2" latency_ms="${3:-0}" detail="${4:-}"
-    detail="$(echo "$detail" | sed 's/"/\\"/g')"
+    detail="${detail//\"/\\\"}"
     _CHECKS_JSON="$(echo "$_CHECKS_JSON" | jq -c \
         --arg n "$name" --arg s "$status" --argjson l "$latency_ms" --arg d "$detail" \
         '. + [{"name":$n,"status":$s,"latency_ms":$l,"detail":$d}]')"

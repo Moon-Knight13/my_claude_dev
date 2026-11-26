@@ -113,7 +113,7 @@ run_pf_rc() {
 echo "=== pre-flight tests ==="
 
 # --- T1: script exists and is executable ---
-[[ -x "$PREFLIGHT" ]] && ok "script executable" || bad "script executable" "not found or not +x"
+if [[ -x "$PREFLIGHT" ]]; then ok "script executable"; else bad "script executable" "not found or not +x"; fi
 
 # --- T2: output is valid JSON ---
 out="$(run_pf red-team)"
@@ -128,15 +128,15 @@ has_keys=true
 for key in mode checks ready; do
     echo "$out" | jq -e ".$key" >/dev/null 2>&1 || has_keys=false
 done
-$has_keys && ok "JSON has mode/checks/ready" || bad "JSON has mode/checks/ready" "missing keys"
+if $has_keys; then ok "JSON has mode/checks/ready"; else bad "JSON has mode/checks/ready" "missing keys"; fi
 
 # --- T4: mode field matches argument ---
 mode_val="$(echo "$out" | jq -r '.mode')"
-[[ "$mode_val" == "red-team" ]] && ok "mode field = red-team" || bad "mode field = red-team" "got: $mode_val"
+if [[ "$mode_val" == "red-team" ]]; then ok "mode field = red-team"; else bad "mode field = red-team" "got: $mode_val"; fi
 
 # --- T5: checks is array with entries ---
 check_count="$(echo "$out" | jq '.checks | length')"
-[[ "$check_count" -gt 0 ]] && ok "checks array non-empty ($check_count)" || bad "checks array non-empty" "length=0"
+if [[ "$check_count" -gt 0 ]]; then ok "checks array non-empty ($check_count)"; else bad "checks array non-empty" "length=0"; fi
 
 # --- T6: each check has name, status, latency_ms ---
 valid_checks=true
