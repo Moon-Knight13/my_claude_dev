@@ -145,13 +145,13 @@ echo "$out" | jq -c '.checks[]' | while read -r c; do
         echo "$c" | jq -e ".$field" >/dev/null 2>&1 || { valid_checks=false; break 2; }
     done
 done
-$valid_checks && ok "check entries have required fields" || bad "check entries have required fields" "missing name/status/latency_ms"
+if $valid_checks; then ok "check entries have required fields"; else bad "check entries have required fields" "missing name/status/latency_ms"; fi
 
 # --- T7: all-pass returns ready=true and exit 0 ---
 if run_pf_rc red-team >/dev/null 2>&1; then
     out_pass="$(run_pf red-team)"
     ready="$(echo "$out_pass" | jq -r '.ready')"
-    [[ "$ready" == "true" ]] && ok "all-pass ready=true exit=0" || bad "all-pass ready=true" "ready=$ready"
+    if [[ "$ready" == "true" ]]; then ok "all-pass ready=true exit=0"; else bad "all-pass ready=true" "ready=$ready"; fi
 else
     bad "all-pass exit=0" "non-zero exit"
 fi
@@ -184,7 +184,7 @@ chmod +x "$SHIMS/ssh"
 # --- T9: mode detection from settings.json ---
 out_auto="$(run_pf "")"
 auto_mode="$(echo "$out_auto" | jq -r '.mode')"
-[[ "$auto_mode" == "red-team" ]] && ok "auto-detect mode from settings.json" || bad "auto-detect mode" "got: $auto_mode"
+if [[ "$auto_mode" == "red-team" ]]; then ok "auto-detect mode from settings.json"; else bad "auto-detect mode" "got: $auto_mode"; fi
 
 # --- T10: green-dev mode does NOT check tuoni ---
 out_gd="$(run_pf green-dev)"
@@ -221,7 +221,7 @@ fi
 # Remove a required var
 sed -i '/TUONI_USERNAME/d' "$SANDBOX/.env"
 unset _CLAUDE_ENV_LOADED 2>/dev/null || true
-out_env="$(cd "$SANDBOX" && unset TUONI_USERNAME; PATH="$SHIMS:$PATH" _CLAUDE_ENV_LOADED= bash scripts/lib/pre-flight.sh red-team 2>&1)"
+out_env="$(cd "$SANDBOX" && unset TUONI_USERNAME; PATH="$SHIMS:$PATH" _CLAUDE_ENV_LOADED='' bash scripts/lib/pre-flight.sh red-team 2>&1)"
 if echo "$out_env" | jq -e '.checks[] | select(.name == "env-vars" and .status == "fail")' >/dev/null 2>&1; then
     ok "env-vars detects missing TUONI_USERNAME"
 else
