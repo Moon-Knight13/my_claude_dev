@@ -1,10 +1,33 @@
 ---
-- name: Skip if no authorized keys file configured
+- name: Check hub pubkey file exists
+  ansible.builtin.stat:
+    path: "{{ playbook_dir }}/{{ ssh_hub_pubkey_file }}"
+  register: hub_pubkey_stat
+  delegate_to: localhost
+  become: false
+
+- name: Deploy hub SSH pubkey (survives rebuilds)
+  ansible.builtin.authorized_key:
+    user: "{{ ssh_target_user }}"
+    key: "{{ lookup('file', ssh_hub_pubkey_file) }}"
+    state: present
+    exclusive: false
+    comment: "mcd_hub_frame"
+  when: hub_pubkey_stat.stat.exists
+
+- name: Warn if hub pubkey not found
   ansible.builtin.debug:
-    msg: "ssh_authorized_keys_file not set — skipping key deployment"
+    msg: >-
+      Hub pubkey not found at {{ ssh_hub_pubkey_file }}.
+      Copy it: cp ~/.ssh/mcd_hub_frame.pub playbooks/files/mcd_hub_frame.pub
+  when: not hub_pubkey_stat.stat.exists
+
+- name: Skip if no additional authorized keys file configured
+  ansible.builtin.debug:
+    msg: "ssh_authorized_keys_file not set — skipping additional key deployment"
   when: ssh_authorized_keys_file | length == 0
 
-- name: Deploy authorized keys
+- name: Deploy additional authorized keys
   ansible.builtin.authorized_key:
     user: "{{ ssh_target_user }}"
     key: "{{ lookup('file', ssh_authorized_keys_file) }}"

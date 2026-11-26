@@ -47,14 +47,26 @@ SHIM
 
 cat > "$SHIMS/ssh" <<'SHIM'
 #!/usr/bin/env bash
-# Simulate spoke unreachable
-exit 1
+# Simulate SSH auth denied (not network unreachable)
+echo "Permission denied (publickey)." >&2
+exit 255
 SHIM
 
 cat > "$SHIMS/npm" <<'SHIM'
 #!/usr/bin/env bash
 echo '{"metadata":{"vulnerabilities":{"critical":0,"high":0,"moderate":0,"low":0}}}'
 exit 0
+SHIM
+
+cat > "$SHIMS/timeout" <<'SHIM'
+#!/usr/bin/env bash
+# Shim: skip the timeout wrapper, run the command.
+# Port-probe (/dev/tcp) would fail on fake IPs — pretend success.
+shift  # drop timeout value
+if [[ "$*" == *"/dev/tcp/"* ]]; then
+    exit 0
+fi
+exec "$@"
 SHIM
 
 chmod +x "$SHIMS"/*
@@ -173,12 +185,27 @@ else
     bad "MCP reports server count" "count not shown"
 fi
 
-# --- T13: spoke unreachable shows WARN ---
+# --- T13: spoke auth denied shows AUTH DENIED ---
 rc=$(run_health spoke)
-if grep -q "WARN" "$TMP/out"; then
-    ok "spoke unreachable shows WARN"
+if grep -q "AUTH DENIED" "$TMP/out"; then
+    ok "spoke auth denied shows AUTH DENIED"
 else
-    bad "spoke unreachable shows WARN" "no WARN for unreachable spoke"
+    bad "spoke auth denied shows AUTH DENIED" "no AUTH DENIED in output"
+fi
+
+# --- T14: spoke network unreachable shows UNREACHABLE ---
+# Replace ssh shim with one that simulates network failure (no auth error)
+cat > "$SHIMS/ssh" <<'SHIM'
+#!/usr/bin/env bash
+echo "ssh: connect to host 192.0.2.2 port 22: Connection timed out" >&2
+exit 255
+SHIM
+chmod +x "$SHIMS/ssh"
+rc=$(run_health spoke)
+if grep -q "SSH UNREACHABLE" "$TMP/out"; then
+    ok "spoke network down shows UNREACHABLE"
+else
+    bad "spoke network down shows UNREACHABLE" "no SSH UNREACHABLE in output"
 fi
 
 echo ""

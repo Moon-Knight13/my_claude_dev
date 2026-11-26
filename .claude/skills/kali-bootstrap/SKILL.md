@@ -48,11 +48,37 @@ Test SSH authentication to Kali via the configured SSH alias:
 ssh -o BatchMode=yes -o ConnectTimeout=5 kali whoami
 ```
 
-If auth fails:
+If auth fails, distinguish **CTF kali (ours)** from **range kali (shared)**:
+
+#### CTF kali (our infrastructure)
+
+Hub pubkey should already be baked in via Ansible. If missing:
+
+1. Print hub pubkey: `cat ~/.ssh/mcd_hub_frame.pub`
+2. Tell operator to run from host:
+   ```bash
+   # Option A: re-run Ansible (preferred — persists across rebuilds)
+   cp ~/.ssh/mcd_hub_frame.pub playbooks/files/mcd_hub_frame.pub
+   ansible-playbook -i inventory.ini playbooks/kali-bootstrap.yml --tags ssh-keys
+   ```
+   ```bash
+   # Option B: one-shot manual push (does NOT survive rebuild)
+   ssh-copy-id -i ~/.ssh/mcd_hub_frame.pub root@<KALI_IP>
+   ```
+3. Wait for operator confirmation, then re-check SSH auth.
+
+#### Range kali (cr14 shared infrastructure)
+
+Cannot bake keys — shared box, other teams use it.
+
 1. Print container pubkey: `cat ~/.ssh/id_ed25519.pub`
-2. Tell operator: "Add this SSH key to kali — run `ssh-copy-id kali` from host, or paste into authorized_keys"
-3. Wait for operator confirmation
-4. Re-check SSH auth
+2. Tell operator the exact command to run on the range kali:
+   ```bash
+   # Run ON the range kali box (SSH in via another method first):
+   echo '<PUBKEY_CONTENT>' >> /home/rt/.ssh/authorized_keys
+   ```
+   Replace `<PUBKEY_CONTENT>` with output from step 1.
+3. Wait for operator confirmation, then re-check SSH auth.
 
 ### Step 3: Tuoni API Check
 
