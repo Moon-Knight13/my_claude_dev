@@ -45,7 +45,10 @@ ssh -o ConnectTimeout=10 kali echo "ok"          # weapons spoke
 ssh -o ConnectTimeout=15 -T range-git 2>&1 | head -1  # GitLab SSH
 ```
 
-Report each hop: OK or FAIL with error.
+Report each hop: OK, AUTH DENIED (pubkey rejected — host is up), or
+UNREACHABLE (network/host down). Distinguish these clearly — auth failure
+means the spoke is alive but needs key deployment, while unreachable means
+a network or host problem.
 
 ### Step 2: HTTPS Services
 

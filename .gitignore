@@ -115,3 +115,5 @@ orchestrator-log.jsonl
 # Kali bootstrap — real inventory and jar artifacts
 playbooks/inventory.ini
 playbooks/files/*.jar
+playbooks/files/*.pub
+!playbooks/files/*.pub.example

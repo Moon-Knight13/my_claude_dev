@@ -1,3 +1,4 @@
 ---
 ssh_authorized_keys_file: ""
 ssh_target_user: "root"
+ssh_hub_pubkey_file: "files/mcd_hub_frame.pub"

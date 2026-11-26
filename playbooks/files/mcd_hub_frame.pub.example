@@ -1,0 +1,7 @@
+# Copy your hub's SSH public key here and rename to mcd_hub_frame.pub:
+#   cp ~/.ssh/mcd_hub_frame.pub playbooks/files/mcd_hub_frame.pub
+#
+# This key is deployed to Kali authorized_keys by the ssh-keys Ansible role,
+# so fresh rebuilds have SSH access without manual key copy.
+#
+# The .pub file is gitignored — it stays local to your workstation.

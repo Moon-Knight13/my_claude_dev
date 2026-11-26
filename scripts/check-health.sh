@@ -233,7 +233,7 @@ run_spoke() {
         fi
     done
 
-    # SSH auth check for SSH-capable spokes
+    # SSH auth check for SSH-capable spokes — distinguish auth vs network
     declare -A SSH_USERS=(
         [SPOKE_DEPLOYBOX_HOST]="${SPOKE_DEPLOYBOX_USER:-gt}"
         [SPOKE_KALI_HOST]="${SPOKE_KALI_USER:-rt}"
@@ -242,11 +242,16 @@ run_spoke() {
         ip="${!var:-}"
         [[ -z "$ip" ]] && continue
         user="${SSH_USERS[$var]}"
-        if ssh -o BatchMode=yes -o ConnectTimeout=3 -o StrictHostKeyChecking=accept-new \
-               "$user@$ip" whoami >/dev/null 2>&1; then
+        ssh_err="$(ssh -o BatchMode=yes -o ConnectTimeout=3 -o StrictHostKeyChecking=accept-new \
+               "$user@$ip" whoami 2>&1)" && ssh_rc=0 || ssh_rc=$?
+        if [[ $ssh_rc -eq 0 ]]; then
             ok "SSH auth $var ($user@$ip)"
+        elif echo "$ssh_err" | grep -qi "permission denied\|publickey"; then
+            warn "SSH AUTH DENIED $var ($user@$ip)" \
+                "Pubkey not on target. For CTF kali: cp ~/.ssh/mcd_hub_frame.pub playbooks/files/ && re-run Ansible. For range kali: ssh-copy-id $user@$ip"
         else
-            warn "SSH auth failed $var ($user@$ip)" "Add pubkey: cat ~/.ssh/id_ed25519.pub"
+            warn "SSH UNREACHABLE $var ($user@$ip)" \
+                "Network/host down (not auth). Check VPN, firewall, host status"
         fi
     done
 
