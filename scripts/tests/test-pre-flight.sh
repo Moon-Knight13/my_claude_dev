@@ -163,7 +163,7 @@ cat > "$SHIMS/ssh" <<'SHIM'
 exit 1
 SHIM
 chmod +x "$SHIMS/ssh"
-out_fail="$(run_pf_rc red-team)" && exit_ok=false || exit_ok=true
+if out_fail="$(run_pf_rc red-team)"; then exit_ok=false; else exit_ok=true; fi
 ready_fail="$(echo "$out_fail" | jq -r '.ready')"
 if $exit_ok && [[ "$ready_fail" == "false" ]]; then
     ok "failure ready=false exit=1"
@@ -234,7 +234,7 @@ echo "TUONI_USERNAME=admin" >> "$SANDBOX/.env"
 # Remove deploybox host
 sed -i '/SPOKE_DEPLOYBOX_HOST/d' "$SANDBOX/.env"
 unset _CLAUDE_ENV_LOADED 2>/dev/null || true
-out_skip="$(cd "$SANDBOX" && unset SPOKE_DEPLOYBOX_HOST; PATH="$SHIMS:$PATH" _CLAUDE_ENV_LOADED= bash scripts/lib/pre-flight.sh platform-ops 2>&1)"
+out_skip="$(cd "$SANDBOX" && unset SPOKE_DEPLOYBOX_HOST; PATH="$SHIMS:$PATH" _CLAUDE_ENV_LOADED='' bash scripts/lib/pre-flight.sh platform-ops 2>&1)"
 if echo "$out_skip" | jq -e '.checks[] | select(.name == "spoke-deploybox" and .status == "skip")' >/dev/null 2>&1; then
     ok "skip when host not set"
 else
@@ -244,11 +244,11 @@ fi
 # --- T16: homelab mode runs no infrastructure checks (only env-vars) ---
 out_hl="$(run_pf homelab)"
 infra_count="$(echo "$out_hl" | jq '[.checks[] | select(.name != "env-vars")] | length')"
-[[ "$infra_count" -eq 0 ]] && ok "homelab has no infra checks" || bad "homelab has no infra checks" "got $infra_count"
+if [[ "$infra_count" -eq 0 ]]; then ok "homelab has no infra checks"; else bad "homelab has no infra checks" "got $infra_count"; fi
 
 # --- T17: latency_ms is a number ---
 non_num="$(echo "$out" | jq '[.checks[] | select(.latency_ms | type != "number")] | length')"
-[[ "$non_num" -eq 0 ]] && ok "latency_ms all numeric" || bad "latency_ms all numeric" "$non_num non-numeric"
+if [[ "$non_num" -eq 0 ]]; then ok "latency_ms all numeric"; else bad "latency_ms all numeric" "$non_num non-numeric"; fi
 
 echo ""
 echo "Results: $pass passed, $fail failed"
