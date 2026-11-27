@@ -1,0 +1,48 @@
+---
+- name: Check if commercial plugins directory has JARs
+  ansible.builtin.find:
+    paths: "{{ tuoni_plugins_dir }}/server"
+    patterns: "*.jar"
+  register: plugin_jars
+
+- name: Activate commercial licence and download plugins
+  ansible.builtin.command:
+    cmd: ./tuoni update-plugins
+    chdir: "{{ tuoni_install_dir }}"
+  environment:
+    SILENT: "1"
+    TUONI_LICENCE_KEY: "{{ tuoni_licence_key }}"
+  register: licence_result
+  changed_when: true
+  when: plugin_jars.matched == 0
+
+- name: Restart Tuoni to load new plugins
+  ansible.builtin.command:
+    cmd: "{{ tuoni_cli }} restart"
+    chdir: "{{ tuoni_install_dir }}"
+  when:
+    - plugin_jars.matched == 0
+    - licence_result is changed
+
+- name: Wait for Tuoni API after plugin activation
+  ansible.builtin.uri:
+    url: "https://localhost:{{ tuoni_api_port }}/api/v1/auth/login"
+    method: GET
+    validate_certs: false
+    status_code: [200, 401, 405]
+  register: tuoni_post_licence
+  retries: 15
+  delay: 4
+  until: tuoni_post_licence.status in [200, 401, 405]
+  when:
+    - plugin_jars.matched == 0
+    - licence_result is changed
+
+- name: Report licence status
+  ansible.builtin.debug:
+    msg: >-
+      {{ 'Commercial plugins present (' ~ plugin_jars.matched ~ ' JARs)'
+         if plugin_jars.matched > 0
+         else ('Licence applied, plugins downloaded, Tuoni restarted'
+               if licence_result is changed
+               else 'Licence activation skipped') }}

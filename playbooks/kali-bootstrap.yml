@@ -5,10 +5,10 @@
 #   Tuoni C2 (Docker Compose) + offensive tooling + SSH keys
 #
 # Usage:
-#   ansible-playbook -i inventory.ini playbooks/kali-bootstrap.yml --ask-vault-pass
+#   ansible-playbook -i playbooks/inventory.ini playbooks/kali-bootstrap.yml
 #
-# All sensitive values (IPs, tokens, listener config) live in inventory
-# or vault — nothing operational enters this repository.
+# Secrets read directly from .env — no sourcing needed.
+# Nothing operational enters this repository.
 
 - name: Bootstrap Kali attack box
   hosts: kali
@@ -19,6 +19,50 @@
     - vars/guacamole.yml
 
   pre_tasks:
+    - name: Read secrets from .env
+      delegate_to: localhost
+      become: false
+      block:
+        - name: Parse .env file
+          ansible.builtin.set_fact:
+            dotenv: >-
+              {{ dict(
+                lookup('ansible.builtin.file', playbook_dir ~ '/../.env')
+                | regex_findall('(?m)^([A-Z_]+)=(.+)$')
+              ) }}
+
+        - name: Set secrets from .env
+          ansible.builtin.set_fact:
+            tuoni_admin_username: "{{ dotenv.TUONI_USERNAME | default('') }}"
+            tuoni_admin_password: "{{ dotenv.TUONI_PASSWORD | default('') }}"
+            tuoni_licence_key: "{{ dotenv.TUONI_LICENCE_KEY | default('') }}"
+            guacamole_db_password: "{{ dotenv.GUACAMOLE_DB_PASSWORD | default('changeme') }}"
+            guacamole_admin_password: "{{ dotenv.GUACAMOLE_ADMIN_PASSWORD | default('changeme') }}"
+
+    - name: Copy hub SSH pubkey to playbook files if missing
+      delegate_to: localhost
+      become: false
+      block:
+        - name: Check if hub pubkey exists in playbook files
+          ansible.builtin.stat:
+            path: "{{ playbook_dir }}/files/mcd_hub_frame.pub"
+          register: hub_pubkey_local
+
+        - name: Look for hub pubkey in ~/.ssh
+          ansible.builtin.stat:
+            path: "{{ lookup('ansible.builtin.env', 'HOME') }}/.ssh/mcd_hub_frame.pub"
+          register: hub_pubkey_home
+          when: not hub_pubkey_local.stat.exists
+
+        - name: Copy hub pubkey to playbook files
+          ansible.builtin.copy:
+            src: "{{ lookup('ansible.builtin.env', 'HOME') }}/.ssh/mcd_hub_frame.pub"
+            dest: "{{ playbook_dir }}/files/mcd_hub_frame.pub"
+            mode: "0644"
+          when:
+            - not hub_pubkey_local.stat.exists
+            - hub_pubkey_home.stat.exists | default(false)
+
     - name: Update apt cache
       ansible.builtin.apt:
         update_cache: true

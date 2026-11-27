@@ -50,6 +50,31 @@ network.
 
 SSH reaches spokes through a proxy chain: container → host → deploybox/kali.
 
+#### Two-layer spoke provisioning
+
+Spoke setup uses two independent layers:
+
+| Layer | Owner | What |
+|-------|-------|------|
+| **Catapult/Providentia** | Range/DCM | Base box: OS, networking, packages |
+| **Harness Ansible** | This repo (`playbooks/`) | Operator overlay: C2, tools, keys, services |
+
+Ansible runs from the **hub (frame)**, targeting spokes as inventory hosts.
+Spokes are ephemeral — no repo clone, no ansible install on the spoke. Only
+prerequisites: SSH + Python. After catapult re-rolls a box, re-run the
+bootstrap playbook to restore the operator overlay.
+
+```bash
+# One-time: copy playbooks/inventory.ini.example to playbooks/inventory.ini
+# and fill in real host IPs. Never commit inventory.ini.
+# Secrets read directly from .env — no sourcing needed.
+ansible-playbook -i playbooks/inventory.ini playbooks/kali-bootstrap.yml
+```
+
+Roles: `offensive-tools`, `tuoni`, `guacamole`, `ssh-keys`, `java`.
+Secrets read from `.env` via `env` lookup — same source as MCP servers.
+SSH agent forwarding enabled in inventory for private repo access.
+
 #### RDP fronting (via Guacamole)
 
 T3 preview tools can interact with Windows RDP sessions through an Apache

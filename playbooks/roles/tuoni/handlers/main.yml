@@ -3,4 +3,5 @@
   ansible.builtin.command:
     cmd: "{{ tuoni_cli }} restart"
     chdir: "{{ tuoni_install_dir }}"
+  register: tuoni_restart
   changed_when: true

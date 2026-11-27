@@ -1,0 +1,146 @@
+---
+- name: Check for existing active agents on this host
+  ansible.builtin.uri:
+    url: "https://localhost:{{ tuoni_api_port }}/api/v1/agents"
+    method: GET
+    user: "{{ tuoni_admin_username }}"
+    password: "{{ tuoni_admin_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200]
+  register: tuoni_agents
+  no_log: true
+
+- name: Set self-agent presence fact
+  ansible.builtin.set_fact:
+    self_agent_exists: >-
+      {{ tuoni_agents.json | default([])
+         | selectattr('metadata.hostname', 'defined')
+         | selectattr('metadata.hostname', 'match', ansible_hostname)
+         | list | length > 0 }}
+
+- name: Get listeners for payload generation
+  ansible.builtin.uri:
+    url: "https://localhost:{{ tuoni_api_port }}/api/v1/listeners"
+    method: GET
+    user: "{{ tuoni_admin_username }}"
+    password: "{{ tuoni_admin_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200]
+  register: tuoni_listener_list
+  no_log: true
+  when: not self_agent_exists
+
+- name: Set first listener ID
+  ansible.builtin.set_fact:
+    bootstrap_listener_id: "{{ (tuoni_listener_list.json | first).listener_id | default('') }}"
+  when:
+    - not self_agent_exists
+    - tuoni_listener_list.json | default([]) | length > 0
+
+- name: Get payload plugins
+  ansible.builtin.uri:
+    url: "https://localhost:{{ tuoni_api_port }}/api/v1/payload-plugins"
+    method: GET
+    user: "{{ tuoni_admin_username }}"
+    password: "{{ tuoni_admin_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200]
+  register: tuoni_payload_plugins
+  no_log: true
+  when:
+    - not self_agent_exists
+    - bootstrap_listener_id | default('') | length > 0
+
+- name: Find Linux executable payload plugin
+  ansible.builtin.set_fact:
+    linux_payload_plugin_id: >-
+      {{ tuoni_payload_plugins.json
+         | selectattr('identifier', 'defined')
+         | selectattr('identifier', 'search', '(?i)linux.*executable')
+         | map(attribute='identifier')
+         | first | default('') }}
+  when:
+    - not self_agent_exists
+    - bootstrap_listener_id | default('') | length > 0
+
+- name: Generate self-agent payload
+  ansible.builtin.uri:
+    url: "https://localhost:{{ tuoni_api_port }}/api/v1/payloads"
+    method: POST
+    user: "{{ tuoni_admin_username }}"
+    password: "{{ tuoni_admin_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    body_format: json
+    body:
+      name: "bootstrap-self-agent"
+      payloadPluginId: "{{ linux_payload_plugin_id }}"
+      listenerId: "{{ bootstrap_listener_id }}"
+      configuration: {}
+    status_code: [200, 201]
+  register: tuoni_payload
+  no_log: true
+  when:
+    - not self_agent_exists
+    - bootstrap_listener_id | default('') | length > 0
+    - linux_payload_plugin_id | default('') | length > 0
+
+- name: Download self-agent payload
+  ansible.builtin.uri:
+    url: "https://localhost:{{ tuoni_api_port }}/api/v1/payloads/{{ tuoni_payload.json.id }}/download"
+    method: GET
+    user: "{{ tuoni_admin_username }}"
+    password: "{{ tuoni_admin_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    dest: /tmp/tuoni-self-agent
+    status_code: [200]
+  no_log: true
+  when:
+    - not self_agent_exists
+    - tuoni_payload.json.id is defined
+
+- name: Make payload executable
+  ansible.builtin.file:
+    path: /tmp/tuoni-self-agent
+    mode: "0755"
+  when:
+    - not self_agent_exists
+    - tuoni_payload.json.id is defined
+
+- name: Execute self-agent in background
+  ansible.builtin.command:
+    cmd: nohup /tmp/tuoni-self-agent &
+  async: 10
+  poll: 0
+  register: self_agent_launch
+  when:
+    - not self_agent_exists
+    - tuoni_payload.json.id is defined
+
+- name: Wait for self-agent to check in
+  ansible.builtin.uri:
+    url: "https://localhost:{{ tuoni_api_port }}/api/v1/agents"
+    method: GET
+    user: "{{ tuoni_admin_username }}"
+    password: "{{ tuoni_admin_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200]
+  register: agent_check
+  retries: 12
+  delay: 5
+  until: agent_check.json | default([]) | length > 0
+  no_log: true
+  when:
+    - not self_agent_exists
+    - self_agent_launch is changed
+
+- name: Report self-agent status
+  ansible.builtin.debug:
+    msg: >-
+      Self-agent {{ 'already running' if self_agent_exists else
+        ('deployed and checked in' if (agent_check.json | default([]) | length > 0) else 'FAILED to check in') }}

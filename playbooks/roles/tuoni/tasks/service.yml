@@ -1,10 +1,20 @@
 ---
-- name: Start Tuoni stack
+- name: Check if Tuoni API already responding
+  ansible.builtin.uri:
+    url: "https://localhost:{{ tuoni_api_port }}/api/v1/auth/login"
+    method: GET
+    validate_certs: false
+    status_code: [200, 401, 405]
+  register: tuoni_precheck
+  failed_when: false
+
+- name: Start Tuoni stack if not running
   ansible.builtin.command:
     cmd: "{{ tuoni_cli }} start"
     chdir: "{{ tuoni_install_dir }}"
   register: tuoni_start
   changed_when: "'Starting' in tuoni_start.stdout"
+  when: tuoni_precheck.status is not defined or tuoni_precheck.status not in [200, 401, 405]
 
 - name: Wait for Tuoni API
   ansible.builtin.uri:

@@ -2,8 +2,7 @@
 offensive_apt_packages:
   - nmap
   - responder
-  - bloodhound
-
-offensive_pip_packages:
   - netexec
-  - impacket
+  - python3-impacket
+
+offensive_pip_packages: []

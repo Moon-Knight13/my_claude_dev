@@ -1,9 +1,24 @@
 ---
-- name: Install Docker prerequisites
+- name: Check if Docker CE is already installed
+  ansible.builtin.command:
+    cmd: dpkg -l docker-ce
+  register: docker_ce_check
+  changed_when: false
+  failed_when: false
+
+- name: Install Docker (docker.io) if Docker CE not present
   ansible.builtin.apt:
     name:
       - docker.io
-      - docker-compose-v2
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  when: docker_ce_check.rc != 0
+
+- name: Install Docker support packages
+  ansible.builtin.apt:
+    name:
+      - docker-compose-plugin
       - python3-docker
       - git
       - curl

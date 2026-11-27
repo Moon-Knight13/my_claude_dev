@@ -7,8 +7,8 @@
       - tuoni_admin_password is defined
       - tuoni_admin_password | length > 0
     fail_msg: >
-      tuoni_admin_username and tuoni_admin_password must be set
-      via Ansible vault or inventory. No secrets in repo files.
+      tuoni_admin_username and tuoni_admin_password must be set in .env
+      (TUONI_USERNAME, TUONI_PASSWORD). Playbook reads .env directly.
 
 - name: Install Docker and prerequisites
   ansible.builtin.include_tasks: prerequisites.yml
@@ -26,6 +26,14 @@
 - name: Start Tuoni and verify API
   ansible.builtin.include_tasks: service.yml
 
+- name: Activate commercial licence if key present
+  ansible.builtin.include_tasks: licence.yml
+  when: tuoni_licence_key | default('') | length > 0
+
 - name: Configure HTTPS listener
   ansible.builtin.include_tasks: listener.yml
   when: tuoni_listener_enabled
+
+- name: Deploy self-agent on Kali
+  ansible.builtin.include_tasks: self-agent.yml
+  when: tuoni_self_agent_enabled

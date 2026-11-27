@@ -11,6 +11,10 @@
   register: tuoni_listeners
   no_log: true
 
+- name: Set listener presence fact
+  ansible.builtin.set_fact:
+    has_listener: "{{ (tuoni_listeners.json | length) > 0 }}"
+
 - name: Create HTTPS listener
   ansible.builtin.uri:
     url: "https://localhost:{{ tuoni_api_port }}/api/v1/listeners"
@@ -22,9 +26,10 @@
     body_format: json
     body:
       name: "{{ tuoni_listener_name }}"
-      plugin: "shelldot-https-listener"
+      plugin: "shelldot.listener.agent-reverse-http"
       configuration:
         port: "{{ tuoni_listener_port }}"
+        https: true
     status_code: [200, 201]
   no_log: true
-  when: tuoni_listeners.json | selectattr('name', 'equalto', tuoni_listener_name) | list | length == 0
+  when: not has_listener

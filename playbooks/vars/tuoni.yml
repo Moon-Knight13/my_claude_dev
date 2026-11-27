@@ -1,10 +1,7 @@
 ---
 # Tuoni server configuration
 # Override per-host in host_vars or group_vars as needed.
-# Secrets: set via Ansible vault or inventory — never in repo files.
-
-# tuoni_admin_username: (required, vault)
-# tuoni_admin_password: (required, vault)
+# Secrets: read from .env via env lookup in kali-bootstrap.yml.
 
 # SSH
 ssh_authorized_keys_file: ""  # Set in inventory — path to public key file
