@@ -1,0 +1,75 @@
+# Dispatch Presets — Thread-Type Defaults
+#
+# Each preset overrides fields from dispatch-template.yaml.
+# Coordinator merges: template defaults → preset → per-dispatch overrides.
+
+---
+
+deploy:
+  max_iterations: 1
+  commit_scope: "atomic"
+  workspace_strategy: "worktree"
+  on_failure: "report"
+  timeout_minutes: 30
+  handover_target: "pr"
+
+dev:
+  max_iterations: 10
+  commit_scope: "minimal"
+  workspace_strategy: "worktree"
+  on_failure: "report"
+  timeout_minutes: 60
+  handover_target: "pr"
+
+investigation:
+  max_iterations: 5
+  commit_scope: "none"
+  workspace_strategy: "root"
+  on_failure: "report"
+  timeout_minutes: 30
+  handover_target: "obsidian"
+
+review:
+  max_iterations: 3
+  commit_scope: "none"
+  workspace_strategy: "root"
+  runtime_mode: "auto"
+  on_failure: "skip"
+  timeout_minutes: 20
+  handover_target: "artifact"
+
+engagement-recon:
+  max_iterations: 15
+  commit_scope: "none"
+  workspace_strategy: "root"
+  runtime_mode: "full-access"
+  on_failure: "report"
+  timeout_minutes: 90
+  handover_target: "obsidian"
+  skills:
+    - recon
+
+engagement-exploit:
+  max_iterations: 15
+  commit_scope: "none"
+  workspace_strategy: "root"
+  runtime_mode: "full-access"
+  on_failure: "stop_all"
+  timeout_minutes: 120
+  handover_target: "obsidian"
+  skills:
+    - initial-access
+    - persist-swarm
+
+engagement-post-access:
+  max_iterations: 15
+  commit_scope: "none"
+  workspace_strategy: "root"
+  runtime_mode: "full-access"
+  on_failure: "report"
+  timeout_minutes: 120
+  handover_target: "obsidian"
+  skills:
+    - discovery
+    - cred-harvest
+    - persist-swarm
