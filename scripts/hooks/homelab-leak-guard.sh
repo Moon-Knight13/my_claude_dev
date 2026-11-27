@@ -84,6 +84,14 @@ except: print("")' 2>/dev/null || true)"
 # Strip heredoc bodies to reduce false positives
 TOOL_TEXT_CHECK="$(printf '%s' "$TOOL_TEXT" | sed "/<<[[:space:]]*['\"]\\{0,1\\}EOF/,/^EOF/d")"
 
+# gh issue/PR create/edit: scan full text including heredoc body content
+IS_GH_PUBLISH=false
+if [[ "$TOOL_NAME" == "Bash" ]] && printf '%s' "$TOOL_TEXT" | grep -qE 'gh\s+(issue|pr)\s+(create|edit)'; then
+    IS_GH_PUBLISH=true
+fi
+SCAN_TEXT="$TOOL_TEXT_CHECK"
+[[ "$IS_GH_PUBLISH" == "true" ]] && SCAN_TEXT="$TOOL_TEXT"
+
 # ── Helper: check text against pattern list ──────────────────────────────────
 check_patterns() {
     local text="$1"
@@ -106,7 +114,7 @@ FINDINGS=()
 if [[ "$ACTIVE_MODE" == "homelab" ]]; then
     while IFS= read -r match; do
         [[ -n "$match" ]] && FINDINGS+=("range pattern in homelab context: $match")
-    done < <(check_patterns "$TOOL_TEXT_CHECK" "${RANGE_PATTERNS[@]}")
+    done < <(check_patterns "$SCAN_TEXT" "${RANGE_PATTERNS[@]}")
 fi
 
 # ── Direction 2: Homelab data leaking into non-homelab modes ─────────────────
@@ -124,6 +132,23 @@ if [[ "$ACTIVE_MODE" != "homelab" ]]; then
             while IFS= read -r match; do
                 [[ -n "$match" ]] && FINDINGS+=("homelab data in non-homelab commit: $match")
             done < <(check_patterns "$TOOL_TEXT_CHECK" "${HOMELAB_PATTERNS[@]}")
+        fi
+    fi
+
+    # gh issue/PR create/edit: scan full command including heredoc body
+    if [[ "$IS_GH_PUBLISH" == "true" ]]; then
+        IN_HOMELAB_CONTEXT=false
+        if printf '%s' "$TOOL_TEXT" | grep -qEi 'homelab_(infra|planning)'; then
+            IN_HOMELAB_CONTEXT=true
+        fi
+        if [[ "$PWD" == *homelab_infra* || "$PWD" == *homelab_planning* ]]; then
+            IN_HOMELAB_CONTEXT=true
+        fi
+
+        if [[ "$IN_HOMELAB_CONTEXT" == "false" ]]; then
+            while IFS= read -r match; do
+                [[ -n "$match" ]] && FINDINGS+=("homelab data in gh publish command: $match")
+            done < <(check_patterns "$TOOL_TEXT" "${HOMELAB_PATTERNS[@]}")
         fi
     fi
 
