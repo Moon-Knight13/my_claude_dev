@@ -2,10 +2,10 @@
 # Kali Bootstrap Playbook
 #
 # Brings a fresh Kali box to operational state:
-#   Java 25 + Tuoni server (systemd) + offensive tooling + SSH keys
+#   Tuoni C2 (Docker Compose) + offensive tooling + SSH keys
 #
 # Usage:
-#   ansible-playbook -i inventory.ini playbooks/kali-bootstrap.yml
+#   ansible-playbook -i inventory.ini playbooks/kali-bootstrap.yml --ask-vault-pass
 #
 # All sensitive values (IPs, tokens, listener config) live in inventory
 # or vault — nothing operational enters this repository.
@@ -25,7 +25,6 @@
         cache_valid_time: 3600
 
   roles:
-    - java
     - offensive-tools
     - tuoni
     - guacamole

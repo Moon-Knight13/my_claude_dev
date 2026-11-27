@@ -1,16 +1,10 @@
 ---
 # Tuoni server configuration
-# Override per-host in inventory or group_vars as needed.
+# Override per-host in host_vars or group_vars as needed.
+# Secrets: set via Ansible vault or inventory — never in repo files.
 
-tuoni_version: "latest"
-tuoni_jar_name: "TuoniServerApplication.jar"
-tuoni_install_dir: "/app"
-tuoni_heap_size: "2G"
-tuoni_user: "root"
-tuoni_group: "root"
-
-# Java
-java_package: "openjdk-25-jre-headless"
+# tuoni_admin_username: (required, vault)
+# tuoni_admin_password: (required, vault)
 
 # SSH
 ssh_authorized_keys_file: ""  # Set in inventory — path to public key file

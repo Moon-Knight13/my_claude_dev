@@ -1,0 +1,18 @@
+---
+- name: Start Tuoni stack
+  ansible.builtin.command:
+    cmd: "{{ tuoni_cli }} start"
+    chdir: "{{ tuoni_install_dir }}"
+  register: tuoni_start
+  changed_when: "'Starting' in tuoni_start.stdout"
+
+- name: Wait for Tuoni API
+  ansible.builtin.uri:
+    url: "https://localhost:{{ tuoni_api_port }}/api/v1/auth/login"
+    method: GET
+    validate_certs: false
+    status_code: [200, 401, 405]
+  register: tuoni_health
+  retries: 15
+  delay: 4
+  until: tuoni_health.status in [200, 401, 405]

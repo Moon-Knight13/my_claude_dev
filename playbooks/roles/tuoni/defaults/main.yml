@@ -1,7 +1,29 @@
 ---
-tuoni_version: "latest"
-tuoni_jar_name: "TuoniServerApplication.jar"
-tuoni_install_dir: "/app"
-tuoni_heap_size: "2G"
-tuoni_user: "root"
-tuoni_group: "root"
+tuoni_install_dir: /srv/tuoni
+tuoni_api_port: 8443
+tuoni_client_port: 12702
+
+# Docker Compose project name (matches upstream default)
+tuoni_compose_project: tuoni
+
+# Tuoni CLI wrapper — installed by ./tuoni install
+tuoni_cli: "{{ tuoni_install_dir }}/tuoni"
+
+# Config and data subdirectories (relative to install dir)
+tuoni_config_dir: "{{ tuoni_install_dir }}/config"
+tuoni_plugins_dir: "{{ tuoni_install_dir }}/plugins"
+tuoni_scripts_dir: "{{ tuoni_install_dir }}/data/scripts"
+
+# Plugin deployment — clone tuoni-plugins, build, deploy scripts
+tuoni_plugins_enabled: true
+tuoni_plugins_repo: "https://github.com/Moon-Knight13/tuoni-plugins.git"
+tuoni_plugins_branch: "refactor/overhaul-v2"
+
+# HTTPS listener auto-creation (post-install)
+tuoni_listener_enabled: false
+tuoni_listener_port: 443
+tuoni_listener_name: "default-https"
+
+# Secrets — override via Ansible vault or inventory
+# tuoni_admin_username: (required, vault)
+# tuoni_admin_password: (required, vault)
