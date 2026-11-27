@@ -1,4 +1,17 @@
 ---
+- name: Check for existing tuoni.yml
+  ansible.builtin.stat:
+    path: "{{ tuoni_config_dir }}/tuoni.yml"
+  register: tuoni_config_existing
+
+- name: Backup existing tuoni.yml before deploy
+  ansible.builtin.copy:
+    src: "{{ tuoni_config_dir }}/tuoni.yml"
+    dest: "{{ tuoni_config_dir }}/tuoni.yml.pre-ansible"
+    remote_src: true
+    mode: "0640"
+  when: tuoni_config_existing.stat.exists
+
 - name: Deploy Tuoni configuration
   ansible.builtin.template:
     src: tuoni.yml.j2
@@ -6,5 +19,6 @@
     owner: root
     group: root
     mode: "0640"
+    backup: true
   no_log: true
   notify: Restart tuoni

@@ -1,7 +1,47 @@
-# Tuoni server configuration — managed by Ansible
-# Changes trigger container restart via handler.
-users:
-  - username: "{{ tuoni_admin_username }}"
-    password: "{{ tuoni_admin_password }}"
-    authorities:
-      - ROLE_ADMIN
+# {{ ansible_managed }}
+# Full Tuoni server configuration — Ansible manages credentials only.
+# All other values are upstream defaults for Tuoni {{ tuoni_version | default('0.17.4') }}.
+---
+server:
+  port: {{ tuoni_api_port }}
+  ssl:
+    enabled: true
+    key-alias: selfsigned
+    key-store: ssl/selfsigned.keystore
+    key-store-type: jks
+    key-store-password: selfsigned
+    key-password: selfsigned
+tuoni:
+  data-dir: ./data
+  auth:
+    credentials:
+      username: "{{ tuoni_admin_username }}"
+      password: "{{ tuoni_admin_password }}"
+    jwt:
+      expiry-seconds: {{ tuoni_jwt_expiry | default(86400) }}
+      private-key: file:./prod-private.pem
+      public-key: file:./prod-public.pem
+  plugins:
+    "[shelldot.payload.default]":
+      configuration:
+        custom-payload-template-dir: file:./custom-payload-templates/
+  scripting:
+    permissions:
+      fs-access: "{{ tuoni_scripting_fs_access | default('sandbox') }}"
+      allow-net-access: {{ tuoni_scripting_net_access | default(false) | lower }}
+      allow-env-access: {{ tuoni_scripting_env_access | default(false) | lower }}
+logging:
+  file:
+    name: ./logs/tuoni-server.log
+  threshold:
+    console: {{ tuoni_log_console_level | default('INFO') }}
+    file: {{ tuoni_log_file_level | default('DEBUG') }}
+  level:
+    com.shelldot.tuoni: {{ tuoni_log_app_level | default('debug') }}
+    root: {{ tuoni_log_root_level | default('info') }}
+  logback:
+    rollingpolicy:
+      clean-history-on-start: true
+      max-file-size: 10MB
+      max-history: 30
+      total-size-cap: 1GB

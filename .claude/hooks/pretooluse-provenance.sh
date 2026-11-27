@@ -143,10 +143,15 @@ def main():
     # --- Gate: mode alignment -------------------------------------------------
     allowed_modes = policy.get(classification + "_modes", [])
     if allowed_modes and mode not in allowed_modes:
-        deny("Provenance denied: tool %s (class: %s) not allowed in mode '%s'. "
-             "Allowed modes: %s. Switch with /mode." % (
-                 tool_name, classification, mode, ", ".join(allowed_modes)))
-        return
+        # Check infra bootstrap override — critical tools allowed in platform-ops
+        infra_tools = policy.get("critical_infra_bootstrap", [])
+        if mode == "platform-ops" and tool_name in infra_tools:
+            pass  # allowed: infra bootstrap tool in platform-ops
+        else:
+            deny("Provenance denied: tool %s (class: %s) not allowed in mode '%s'. "
+                 "Allowed modes: %s. Switch with /mode." % (
+                     tool_name, classification, mode, ", ".join(allowed_modes)))
+            return
 
     # All checks passed — no output = allow
 

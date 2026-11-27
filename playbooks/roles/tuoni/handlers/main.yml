@@ -1,5 +1,6 @@
 ---
 - name: Restart tuoni
-  community.docker.docker_compose_v2:
-    project_src: "{{ tuoni_install_dir }}"
-    state: restarted
+  ansible.builtin.command:
+    cmd: "{{ tuoni_cli }} restart"
+    chdir: "{{ tuoni_install_dir }}"
+  changed_when: true

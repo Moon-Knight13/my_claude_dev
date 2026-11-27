@@ -129,6 +129,20 @@ critical_modes:
   - "ctf"
   - "bounty"
 
+# Infra bootstrap tools — critical tools also allowed in platform-ops mode.
+# Self-agent deployment, listener management, alias registration are infra, not offensive.
+critical_infra_bootstrap:
+  - "mcp__tuoni-mcp__tuoni_payload_create"
+  - "mcp__tuoni-mcp__tuoni_payload_delete"
+  - "mcp__tuoni-mcp__tuoni_listener_create"
+  - "mcp__tuoni-mcp__tuoni_listener_delete"
+  - "mcp__tuoni-mcp__tuoni_listener_start"
+  - "mcp__tuoni-mcp__tuoni_listener_stop"
+  - "mcp__tuoni-mcp__tuoni_listener_update"
+  - "mcp__tuoni-mcp__tuoni_alias_create"
+  - "mcp__tuoni-mcp__tuoni_alias_delete"
+  - "mcp__tuoni-mcp__tuoni_alias_update"
+
 # Modes allowed for sensitive tools.
 sensitive_modes:
   - "red-team"

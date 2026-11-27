@@ -24,6 +24,23 @@ tuoni_listener_enabled: false
 tuoni_listener_port: 443
 tuoni_listener_name: "default-https"
 
+# Tuoni version tag (used in template comment only)
+tuoni_version: "0.17.4"
+
+# JWT token expiry (seconds)
+tuoni_jwt_expiry: 86400
+
+# Scripting sandbox permissions
+tuoni_scripting_fs_access: "sandbox"
+tuoni_scripting_net_access: false
+tuoni_scripting_env_access: false
+
+# Logging levels
+tuoni_log_console_level: "INFO"
+tuoni_log_file_level: "DEBUG"
+tuoni_log_app_level: "debug"
+tuoni_log_root_level: "info"
+
 # Secrets — override via Ansible vault or inventory
 # tuoni_admin_username: (required, vault)
 # tuoni_admin_password: (required, vault)
