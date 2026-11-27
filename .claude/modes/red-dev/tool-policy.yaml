@@ -1,7 +1,6 @@
 # red-dev mode — exploit development + RE + CVE research.
-# No range-intel (not doing infra queries). Outline-readonly allowed for research.
+# range-intel allowed for test target lookup. Outline-readonly allowed for research.
 # No local-ollama.
 deny:
-  - "mcp__range-intel__*"
   - "mcp__outline-write__*"
   - "mcp__local-ollama__*"
