@@ -1,0 +1,96 @@
+# T3 Scheduled Task Definitions
+# Source of truth for recurring automation. Bootstrap with:
+#   scripts/bootstrap-t3-tasks.sh
+#
+# If T3 server is wiped, re-run bootstrap to recreate all tasks.
+# One-shot tasks (overnight batches) are dispatched per-session, not stored here.
+
+tasks:
+  morning-report:
+    title: "Daily Morning Report — 07:30"
+    schedule:
+      type: fixed_time
+      timeOfDay: "07:30"
+    freshSession: true
+    bindToCurrentThread: false
+    prompt: |
+      You are in platform-ops mode in repo my_claude_dev. Build the daily morning report as a Claude artifact.
+
+      ## Fleet Discovery (from GitHub, not memory)
+      gh repo list Moon-Knight13 --limit 100 --json name,isArchived,isFork,isTemplate,pushedAt,isPrivate
+      For each active repo: count open PRs, issues, last CI status, failed runs (24h).
+
+      ## Spoke Health
+      ssh -o ConnectTimeout=5 -o BatchMode=yes deploybox echo ok
+      ssh -o ConnectTimeout=5 -o BatchMode=yes kali echo ok
+      curl -sk --connect-timeout 5 https://10.181.132.64:8443/api/v1/status
+
+      ## Recent Activity (last 24h)
+      Issues created, PRs opened/merged across fleet.
+
+      ## Build Artifact
+      Clean HTML artifact with: fleet table, spoke/mode matrix, issues needing attention,
+      overnight results, recommended work plan. Publish artifact.
+
+  pr-review-bot:
+    title: "PR Review Bot — auto-review + auto-merge low-risk PRs"
+    schedule:
+      type: interval
+      everyMs: 14400000  # 4 hours
+    freshSession: false
+    bindToCurrentThread: false
+    prompt: |
+      You are the PR Review Bot for all Moon-Knight13 repositories.
+      Mode: platform-ops. OBJECTIVE REVIEWER — you did NOT write this code.
+
+      1. Discover repos with open PRs: gh search prs --owner=Moon-Knight13 --state=open
+      2. Classify: LOW RISK (dependabot, deps, docs-only, gitignore) vs FEATURE
+      3. LOW RISK + CI green + no conflicts: auto-merge --squash --admin
+      4. FEATURE: review diff, post findings, never merge
+      5. Skip archived/fork/template repos. Check for existing bot comments <4h.
+
+  thread-cleanup:
+    title: "Thread Cleanup — archive stale completed threads"
+    schedule:
+      type: fixed_time
+      timeOfDay: "03:00"
+    freshSession: false
+    bindToCurrentThread: false
+    prompt: |
+      Archive stale threads: completed/failed/cancelled + >48h old + no open PRs.
+      Also archive idle subagents whose parent is stale.
+      Never archive running/waiting/preparing threads or threads <48h old.
+      Report: total scanned, archived count + titles, skipped counts.
+
+# Project bindings (for documentation — bootstrap creates if missing)
+projects:
+  - name: my_claude_dev
+    path: /home/chris/Documents/my_claude_dev
+    repo: Moon-Knight13/my_claude_dev
+  - name: tuoni-plugins
+    path: /home/chris/Documents/tuoni-plugins
+    repo: Moon-Knight13/tuoni-plugins
+  - name: homelab_infra
+    path: /home/chris/Documents/homelab_infra
+    repo: Moon-Knight13/homelab_infra
+  - name: medicat-usb
+    path: /home/chris/Documents/medicat-usb
+    repo: Moon-Knight13/medicat-usb
+  - name: foundryvtt-docker
+    path: /home/chris/Documents/foundryvtt-docker
+    repo: Moon-Knight13/foundryvtt-docker
+  - name: homelab_planning
+    path: /home/chris/Documents/homelab_planning
+    repo: Moon-Knight13/homelab_planning
+
+# Overnight batch template (dispatched per-session, not auto-scheduled)
+# See docs/ or memory for full overnight task prompts.
+overnight_tasks:
+  - pii_opsec_scrub
+  - ai_security_audit
+  - issue_board_triage
+  - ci_failure_investigation
+  - dead_code_scan
+  - memory_accuracy_audit
+  - spoke_health_recheck
+  - fleet_discovery_report
