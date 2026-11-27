@@ -1,0 +1,83 @@
+# Dispatch Template — Generalized Thread Dispatch Parameters
+#
+# Used by master-orchestrator and mode-specific orchestration skills to
+# dispatch T3 threads with consistent constraints. Each field has a
+# documented default; omit fields to accept defaults.
+#
+# Source patterns: engagement-orchestration, Sandcastle core concepts.
+# Issue: #403  Epic: F (Master Orchestrator)
+
+---
+
+# --- Thread identity ---
+
+thread_name: ""          # descriptive slug, e.g. "recon-target01"
+mode: ""                 # injected mode override for thread (red-team, dev, etc.)
+model: "claude-opus-4-6" # model pin — matches memory/feedback requirement
+workspace_strategy: "worktree"  # worktree | root (root = read-only tasks only)
+runtime_mode: "auto"     # auto | full-access (full-access for offensive content)
+
+# --- Iteration limit (Sandcastle pattern §1) ---
+# Prevents runaway agent loops. Agent must complete within this many
+# tool-call iterations. 0 = unlimited (not recommended for deploy).
+#
+# Guidelines:
+#   deploy threads:        1  (single atomic operation)
+#   investigation threads: 5  (bounded exploration)
+#   dev threads:          10  (configurable per task complexity)
+#   engagement threads:   15  (multi-phase with gates)
+
+max_iterations: 10
+
+# --- Early stop signal (Sandcastle pattern §2) ---
+# Convention: agent emits a structured completion signal in its final
+# message. Dispatch coordinator detects this without polling.
+#
+# Signal format (in agent's last message):
+#   DISPATCH_COMPLETE: { status: "success"|"failure"|"handover", artifact: "<path-or-ref>" }
+#
+# Coordinator matches: /^DISPATCH_COMPLETE:/ in thread output.
+# Handover status triggers continuation dispatch (Epic E chain).
+
+early_stop_signal: "DISPATCH_COMPLETE"
+
+# --- Commit-scope convention (Sandcastle pattern §3) ---
+# Tags dispatch prompt with commit expectation so agent scopes its
+# git operations correctly.
+#
+# Values:
+#   atomic:     single commit, one logical change (deploy, hotfix)
+#   minimal:    fewest buildable commits (feature dev, refactor)
+#   none:       no commits expected (investigation, review, diagnosis)
+
+commit_scope: "minimal"
+
+# --- Skill injection ---
+# Skills to load in dispatched thread context.
+
+skills: []
+# Example:
+#   - recon
+#   - initial-access
+
+# --- Handover instructions ---
+# Injected into dispatch prompt. Tells agent how to pass state back.
+
+handover_target: "obsidian"  # obsidian | pr | artifact | none
+handover_format: ""          # free-form instructions appended to prompt
+
+# --- Dependency chain ---
+# Thread IDs that must complete before this thread launches.
+# Coordinator enforces via t3_thread_wait.
+
+depends_on: []
+# Example:
+#   - "recon-target01"
+#   - "research-target01"
+
+# --- Error handling ---
+# What coordinator does when thread fails or times out.
+
+on_failure: "report"     # report | retry | skip | stop_all
+max_retries: 0           # only used when on_failure = retry
+timeout_minutes: 60      # hard timeout, coordinator kills thread
