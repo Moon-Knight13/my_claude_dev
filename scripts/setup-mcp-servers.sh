@@ -29,6 +29,10 @@ if [ ! -d "$MCP_PKG_DIR/node_modules/hacktricks-mcp" ]; then
     npm install --prefix "$MCP_PKG_DIR" hacktricks-mcp@1.3.0 --silent 2>&1 || true
 fi
 
+# nuclei-mcp: ensure config dir + logs subdir exist (binary reads config.yaml from cwd)
+NUCLEI_MCP_DIR="$HOME/.config/nuclei-mcp"
+mkdir -p "$NUCLEI_MCP_DIR/logs"
+
 # --- Resolve paths ---
 # Detect host vs container and set paths accordingly.
 WRAPPER="$PROJECT_DIR/scripts/mcp-wrapper.sh"
@@ -127,9 +131,10 @@ read -r -d '' CATALOG << CATALOG_JSON || true
   },
   "nuclei-mcp": {
     "command": "$WRAPPER",
-    "args": ["nuclei-mcp"],
+    "args": ["$HOME/go/bin/nuclei-mcp"],
     "env": {
-      "NUCLEI_MCP_SERVER_PORT": "0"
+      "NUCLEI_MCP_SERVER_PORT": "0",
+      "MCP_CWD": "$NUCLEI_MCP_DIR"
     }
   },
   "bloodhound-mcp": {
