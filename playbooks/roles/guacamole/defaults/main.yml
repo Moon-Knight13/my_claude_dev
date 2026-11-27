@@ -1,6 +1,6 @@
 ---
 guacamole_version: "1.5.5"
-guacamole_port: 8080
+guacamole_port: 8888
 guacamole_install_dir: /opt/guacamole
 guacamole_recording_enabled: true
 guacamole_postgres_version: "16-alpine"

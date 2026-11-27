@@ -61,6 +61,44 @@ curl -sk -o /dev/null -w "%{http_code}" --connect-timeout 5 "https://${SPOKE_KAL
 
 Expected: 200 or 302 for range services, 401 for Tuoni (auth required = alive).
 
+### Step 2.5: Kali Service Recovery (auto-bootstrap)
+
+If Kali SSH succeeds (Step 1) but Tuoni or Guacamole HTTPS checks fail
+(Step 2), the spoke needs bootstrapping. Run the ansible playbook from
+the hub to recover:
+
+```bash
+# Pre-check: Kali reachable but services missing
+TUONI_STATUS=$(ssh -o ConnectTimeout=5 kali "curl -ksS -o /dev/null -w '%{http_code}' https://localhost:8443/api/v1/auth/login 2>/dev/null || echo 000")
+GUAC_STATUS=$(ssh -o ConnectTimeout=5 kali "curl -sS -o /dev/null -w '%{http_code}' http://localhost:8888/guacamole/ 2>/dev/null || echo 000")
+```
+
+**Decision logic:**
+- Both return expected codes (401 for Tuoni, 200/302 for Guacamole) → HEALTHY, skip bootstrap
+- Either returns 000 (connection refused / not running) → RECOVER
+- SSH itself failed → already reported DOWN in Step 1, skip
+
+**Recovery action (auto, no prompt):**
+
+```bash
+cd "$CLAUDE_PROJECT_DIR"
+ansible-playbook -i playbooks/inventory.ini playbooks/kali-bootstrap.yml --diff 2>&1
+```
+
+Report what bootstrap did (changed count, any failures). The playbook is
+fully idempotent — running it on a healthy spoke costs ~30s of no-op
+checks with zero side effects.
+
+**False negative safety:** Every task in the bootstrap playbook is
+idempotent: apt installs skip installed packages, directory creation
+skips existing dirs, docker compose `state: present` leaves running
+containers alone, Guacamole password change fails gracefully if defaults
+already rotated. The only cost of an unnecessary run is time.
+
+After bootstrap completes, re-check the HTTPS endpoints before proceeding
+to MCP probes. If services still fail after bootstrap, report as a hard
+failure — the spoke needs manual investigation.
+
 ### Step 3: MCP Server Probes
 
 Test MCP servers that depend on spoke connectivity:

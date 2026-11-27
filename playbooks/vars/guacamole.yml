@@ -1,9 +1,4 @@
 ---
 # Guacamole configuration
 # Override per-host in inventory or group_vars as needed.
-# Secrets must come from Ansible vault — see vault.yml.example
-
-# guacamole_db_password: !vault |
-#   $ANSIBLE_VAULT;...
-# guacamole_admin_password: !vault |
-#   $ANSIBLE_VAULT;...
+# Secrets: read from .env via env lookup in kali-bootstrap.yml.

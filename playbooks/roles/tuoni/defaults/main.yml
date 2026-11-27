@@ -20,9 +20,14 @@ tuoni_plugins_repo: "https://github.com/Moon-Knight13/tuoni-plugins.git"
 tuoni_plugins_branch: "refactor/overhaul-v2"
 
 # HTTPS listener auto-creation (post-install)
-tuoni_listener_enabled: false
+tuoni_listener_enabled: true
 tuoni_listener_port: 443
-tuoni_listener_name: "default-https"
+tuoni_listener_name: "bootstrap-https"
+
+# Self-agent on kali — baseline connectivity for spoke-health
+# Disabled: Tuoni 0.17.4 ships Windows-only default payloads.
+# Needs Linux payload plugin or custom stager. Tracked as known gap.
+tuoni_self_agent_enabled: false
 
 # Tuoni version tag (used in template comment only)
 tuoni_version: "0.17.4"

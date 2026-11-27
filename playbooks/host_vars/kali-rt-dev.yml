@@ -1,14 +1,6 @@
 ---
 # Tuoni host configuration for kali-rt-dev
-# Credentials must come from Ansible vault — never hardcode here.
-#
-# Example vault usage:
-#   ansible-playbook -i inventory.ini playbooks/kali-bootstrap.yml --ask-vault-pass
-#   # or with vault file:
-#   ansible-playbook -i inventory.ini playbooks/kali-bootstrap.yml --vault-password-file ~/.vault_pass
-
-# tuoni_admin_username: "{{ vault_tuoni_admin_username }}"
-# tuoni_admin_password: "{{ vault_tuoni_admin_password }}"
+# Secrets come from .env via playbook env lookup — no vault needed.
 
 tuoni_install_dir: /srv/tuoni
 tuoni_api_port: 8443
@@ -17,10 +9,8 @@ tuoni_client_port: 12702
 tuoni_plugins_enabled: true
 tuoni_plugins_branch: "refactor/overhaul-v2"
 
-tuoni_listener_enabled: false
-# tuoni_listener_port: 443
-# tuoni_listener_name: "default-https"
+tuoni_listener_enabled: true
+tuoni_listener_port: 443
+tuoni_listener_name: "bootstrap-https"
 
-# Commercial plugin JARs — list local paths to copy to plugins/
-# tuoni_plugin_jars:
-#   - files/plugins/SomePlugin.jar
+tuoni_self_agent_enabled: false

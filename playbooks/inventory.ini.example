@@ -1,10 +1,11 @@
-# Example inventory — copy to inventory.ini and fill in real values.
-# Never commit inventory.ini (it contains IPs/credentials).
+# Ansible inventory — hub-to-spoke targeting
+# Copy to inventory.ini and fill in real values.
+# Never commit inventory.ini (gitignored — contains IPs).
+# Secrets come from .env via env lookup — no vault needed.
 
 [kali]
-# kali-rt-dev ansible_host=<IP> ansible_user=rt ansible_ssh_private_key_file=~/.ssh/id_ed25519
+# kali-rt-dev ansible_host=<IP> ansible_user=rt
 
 [kali:vars]
-# ssh_authorized_keys_file=files/authorized_keys
-# tuoni_admin_username=<vault>
-# tuoni_admin_password=<vault>
+ansible_python_interpreter=/usr/bin/python3
+ansible_ssh_common_args=-o ForwardAgent=yes

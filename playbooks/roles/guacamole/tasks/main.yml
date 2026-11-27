@@ -7,8 +7,8 @@
       - guacamole_admin_password is defined
       - guacamole_admin_password | length > 0
     fail_msg: >
-      guacamole_db_password and guacamole_admin_password must be set
-      via Ansible vault or inventory. No secrets in repo files.
+      guacamole_db_password and guacamole_admin_password must be set.
+      Source .env before running: source .env && ansible-playbook ...
 
 - name: Create Guacamole install directory
   ansible.builtin.file:
