@@ -1,0 +1,208 @@
+# Engagement YAML — example showing all Guacamole integration fields.
+#
+# Demonstrates: guacamole_connections, socks_proxies, listeners sections
+# added in #456 (Guacamole engagement integration, story 1 of #303).
+#
+# SECURITY: cred_refs store REFERENCES ONLY — never plaintext passwords.
+
+metadata:
+  id: "2026-11-27-guac-demo"
+  created: "2026-11-27T10:00:00Z"
+  updated: "2026-11-27T14:00:00Z"
+  operator: "operator"
+  mode_history:
+    - mode: red-team
+      entered: "2026-11-27T10:00:00Z"
+
+phase: lateral
+
+targets:
+  - hostname: fw-perimeter
+    ip: "198.51.100.1"
+    providentia_ref: "prov://hosts/fw-perimeter"
+    approved: true
+    approved_by: operator
+    scope_note: "Perimeter firewall — pivot point"
+  - hostname: sql02
+    ip: "198.51.100.42"
+    providentia_ref: "prov://hosts/sql02"
+    approved: true
+    approved_by: operator
+    scope_note: "Internal SQL server behind firewall VLAN"
+  - hostname: mail-srv
+    ip: "198.51.100.80"
+    providentia_ref: "prov://hosts/mail-srv"
+    approved: true
+    approved_by: operator
+    scope_note: "Exchange server, same VLAN as sql02"
+
+agents:
+  - agent_id: agent-fw
+    hostname: fw-perimeter
+    user: root
+    pid: 1234
+    listener: https-primary
+    status: active
+    payload_id: "pl-fw-001"
+  - agent_id: agent-sql
+    hostname: sql02
+    user: SYSTEM
+    pid: 5678
+    listener: https-primary
+    status: active
+    payload_id: "pl-sql-001"
+
+cred_refs:
+  - ref_id: cred-001
+    type: ldap_bind
+    source_host: fw-perimeter
+    tuoni_cred_id: "tc-4a8b"
+    note: "Service account from LDAP bind config"
+  - ref_id: cred-002
+    type: local_admin
+    source_host: fw-perimeter
+    tuoni_cred_id: "tc-9e1f"
+    note: "Local admin hash, SAM dump"
+  - ref_id: cred-003
+    type: sql_sa
+    source_host: sql02
+    tuoni_cred_id: "tc-b2c7"
+    note: "SA account from connection string in web.config"
+
+findings:
+  - target: fw-perimeter
+    finding: "Default SNMP community string 'public'"
+    severity: high
+    timestamp: "2026-11-27T10:30:00Z"
+  - target: sql02
+    finding: "SQL Server SA account with weak password"
+    severity: critical
+    timestamp: "2026-11-27T12:15:00Z"
+
+persistence:
+  - target: fw-perimeter
+    method: cron
+    beacon_interval: 60
+    payload_id: "pl-fw-persist-001"
+    type: operational
+    status: active
+  - target: fw-perimeter
+    method: rc.local
+    beacon_interval: 600
+    payload_id: "pl-fw-persist-002"
+    type: sleeper
+    status: active
+  - target: sql02
+    method: service
+    beacon_interval: 120
+    payload_id: "pl-sql-persist-001"
+    type: operational
+    status: active
+
+lateral_moves:
+  - from_host: fw-perimeter
+    to_host: sql02
+    method: wmi
+    cred_ref: cred-001
+    timestamp: "2026-11-27T12:00:00Z"
+    agent_id: agent-sql
+
+# --- Guacamole integration sections (story #456) ---
+
+guacamole_connections:
+  # Direct connection — firewall reachable from Kali
+  - hostname: fw-perimeter
+    protocol: ssh
+    ip: "198.51.100.1"
+    port: 22
+    cred_ref: cred-001
+    proxy: null
+    recording: true
+    status: active
+
+  # Pivoted connection — sql02 behind firewall, routed through SOCKS
+  - hostname: sql02
+    protocol: rdp
+    ip: "198.51.100.42"
+    port: 3389
+    cred_ref: cred-003
+    proxy: socks-fw
+    recording: true
+    status: active
+
+  # Another pivoted connection — mail server same VLAN
+  - hostname: mail-srv
+    protocol: rdp
+    ip: "198.51.100.80"
+    port: 3389
+    cred_ref: cred-002
+    proxy: socks-fw
+    recording: false
+    status: active
+
+  # Removed connection — decommissioned after scope change
+  - hostname: old-target
+    protocol: rdp
+    ip: "198.51.100.99"
+    port: 3389
+    cred_ref: null
+    proxy: null
+    recording: false
+    status: removed
+
+socks_proxies:
+  # Primary pivot through compromised firewall
+  - id: socks-fw
+    foothold_agent: agent-fw
+    listen_host: "127.0.0.1"
+    listen_port: 1080
+    type: socks5
+    status: active
+    reachable_nets:
+      - "198.51.100.0/24"
+      - "198.51.101.0/24"
+
+listeners:
+  # Primary HTTPS — operational agents
+  - id: https-primary
+    type: reverse_https
+    port: 443
+    uris: ["/api/v2/telemetry", "/cdn/health", "/static/analytics.js"]
+    cookie: "__cf_bm"
+    user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+    sleep: 30
+    jitter: 15
+    tls_cert: letsencrypt
+    status: active
+
+  # SMB bind — lateral relay between agents (no external traffic)
+  - id: smb-relay
+    type: bind_smb
+    pipe_name: "\\spoolss_alt"
+    status: active
+    note: "Agent-to-agent relay, zero external traffic"
+
+  # DNS — sleeper beacon (requires commercial license)
+  - id: dns-sleeper
+    type: reverse_dns
+    domain: "telemetry.example.com"
+    sleep: 300
+    status: planned
+    note: "Requires commercial Tuoni license — deferred"
+
+  # Disabled listener — kept for reference
+  - id: http-backup
+    type: reverse_http
+    port: 8080
+    uris: ["/update-check"]
+    sleep: 60
+    jitter: 20
+    status: disabled
+    note: "Disabled after defender detected plaintext HTTP beacon"
+
+handoff: |
+  Firewall compromised with dual persistence. SQL server accessed via WMI
+  through SOCKS pivot. Guacamole connections active for fw-perimeter (SSH
+  direct) and sql02 (RDP via socks-fw). Mail server connection ready but
+  not yet used. DNS sleeper listener planned pending license.
+  Next: harvest domain creds from sql02, lateral to mail-srv.

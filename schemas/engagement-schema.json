@@ -1,0 +1,311 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "engagement-schema.json",
+  "title": "Engagement YAML Schema",
+  "description": "Cross-session state contract for offensive operations. All new Guacamole-related sections are optional for backward compatibility.",
+  "type": "object",
+  "required": ["metadata", "phase", "targets", "agents", "cred_refs", "findings", "persistence", "lateral_moves", "handoff"],
+  "additionalProperties": true,
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "required": ["id", "operator"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "created": { "type": "string", "format": "date-time" },
+        "updated": { "type": "string", "format": "date-time" },
+        "operator": { "type": "string", "minLength": 1 },
+        "mode_history": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["mode"],
+            "properties": {
+              "mode": { "type": "string" },
+              "entered": { "type": "string", "format": "date-time" }
+            }
+          }
+        }
+      }
+    },
+    "phase": {
+      "type": "string",
+      "enum": [
+        "targeting", "recon", "initial-access", "discovery", "priv-esc",
+        "cred-harvest", "persist", "lateral", "collection", "exfil",
+        "cleanup", "complete"
+      ]
+    },
+    "type": {
+      "type": "string",
+      "enum": ["black-box"]
+    },
+    "targets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["hostname"],
+        "properties": {
+          "hostname": { "type": "string", "minLength": 1 },
+          "ip": { "type": "string" },
+          "providentia_ref": { "type": "string" },
+          "approved": { "type": "boolean" },
+          "approved_by": { "type": "string" },
+          "scope_note": { "type": "string" },
+          "classification": { "type": "string" },
+          "phase": { "type": "string" },
+          "wiki_page": { "type": "string" }
+        }
+      }
+    },
+    "agents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["agent_id"],
+        "properties": {
+          "agent_id": { "type": "string", "minLength": 1 },
+          "hostname": { "type": "string" },
+          "user": { "type": "string" },
+          "pid": { "type": "integer" },
+          "listener": { "type": "string" },
+          "status": { "type": "string" },
+          "payload_id": { "type": "string" }
+        }
+      }
+    },
+    "cred_refs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ref_id", "tuoni_cred_id"],
+        "properties": {
+          "ref_id": { "type": "string", "minLength": 1 },
+          "type": { "type": "string" },
+          "source_host": { "type": "string" },
+          "tuoni_cred_id": { "type": "string", "minLength": 1 },
+          "note": { "type": "string" }
+        },
+        "not": {
+          "anyOf": [
+            { "required": ["password"] },
+            { "required": ["hash"] },
+            { "required": ["secret"] },
+            { "required": ["ntlm"] },
+            { "required": ["plaintext"] },
+            { "required": ["passwd"] },
+            { "required": ["cleartext"] },
+            { "required": ["credential"] },
+            { "required": ["token"] },
+            { "required": ["private_key"] }
+          ]
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "target": { "type": "string" },
+          "finding": { "type": "string" },
+          "severity": { "type": "string" },
+          "timestamp": { "type": "string" }
+        }
+      }
+    },
+    "persistence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["target", "method"],
+        "properties": {
+          "target": { "type": "string", "minLength": 1 },
+          "method": { "type": "string", "minLength": 1 },
+          "beacon_interval": { "type": "integer" },
+          "payload_id": { "type": "string" },
+          "type": { "type": "string" },
+          "status": { "type": "string" }
+        }
+      }
+    },
+    "lateral_moves": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "from_host": { "type": "string" },
+          "to_host": { "type": "string" },
+          "method": { "type": "string" },
+          "cred_ref": { "type": "string" },
+          "timestamp": { "type": "string" },
+          "agent_id": { "type": "string" }
+        }
+      }
+    },
+    "handoff": { "type": "string" },
+    "kali_agent_id": { "type": "string" },
+    "cache_timestamp": { "type": "string", "format": "date-time" },
+
+    "guacamole_connections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["hostname", "protocol", "ip", "port", "status"],
+        "properties": {
+          "hostname": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Target hostname matching targets[].hostname"
+          },
+          "protocol": {
+            "type": "string",
+            "enum": ["rdp", "ssh", "vnc"]
+          },
+          "ip": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Target IP address"
+          },
+          "port": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "cred_ref": {
+            "type": ["string", "null"],
+            "description": "Reference into cred_refs[].ref_id — credentials resolved at sync time from tuoni cred store"
+          },
+          "proxy": {
+            "type": ["string", "null"],
+            "description": "socks_proxies[].id for pivot routing, or null for direct connection"
+          },
+          "recording": {
+            "type": "boolean",
+            "default": true,
+            "description": "Enable Guacamole session recording"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["active", "removed"]
+          }
+        }
+      }
+    },
+
+    "socks_proxies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "foothold_agent", "listen_host", "listen_port", "type", "status"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Unique proxy identifier, referenced by guacamole_connections[].proxy"
+          },
+          "foothold_agent": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Tuoni agent ID providing the tunnel (must exist in agents[])"
+          },
+          "listen_host": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Local bind address for SOCKS proxy"
+          },
+          "listen_port": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "type": {
+            "type": "string",
+            "enum": ["socks5", "socks4"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["active", "down"]
+          },
+          "reachable_nets": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "CIDR notation network reachable through this proxy"
+            }
+          }
+        }
+      }
+    },
+
+    "listeners": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "status"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Unique listener identifier used by persist-swarm for assignment"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["reverse_https", "reverse_http", "reverse_dns", "bind_smb", "bind_tcp"],
+            "description": "Tuoni listener type"
+          },
+          "port": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "uris": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "HTTP(S) callback URI paths for C2 profile diversification"
+          },
+          "cookie": {
+            "type": "string",
+            "description": "HTTP cookie name for session tracking"
+          },
+          "user_agent": {
+            "type": "string",
+            "description": "HTTP User-Agent string for blending"
+          },
+          "sleep": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Beacon interval in seconds"
+          },
+          "jitter": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Jitter percentage applied to sleep interval"
+          },
+          "tls_cert": {
+            "type": "string",
+            "enum": ["letsencrypt", "self-signed", "custom-pkcs12"],
+            "description": "TLS certificate source for HTTPS listeners"
+          },
+          "pipe_name": {
+            "type": "string",
+            "description": "Named pipe for SMB listeners"
+          },
+          "domain": {
+            "type": "string",
+            "description": "Domain for DNS listeners"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["active", "planned", "disabled"]
+          },
+          "note": {
+            "type": "string",
+            "description": "Operator note about this listener profile"
+          }
+        }
+      }
+    }
+  }
+}
