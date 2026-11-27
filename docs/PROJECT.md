@@ -117,10 +117,23 @@ wholesale. Details: [`docs/TROUBLESHOOTING.md`](TROUBLESHOOTING.md).
 
 Pinned to specific tag + recorded commit SHA. Refuses install on drift.
 
+## T3 Scheduled Task Recovery
+
+If T3 server state is wiped, scheduled automation (morning report, PR review bot,
+thread cleanup) must be recreated from `config/t3-scheduled-tasks.yaml`:
+
+```bash
+APPLY=true bash scripts/bootstrap-t3-tasks.sh
+```
+
+Dry run (no `APPLY=true`) shows the task plan without creating anything.
+Idempotent: safe to re-run — skips tasks whose title already exists.
+
 ## Verification
 
 - `bash scripts/check-day0.sh` (or `/day0-check`) — day-0 state on either surface.
 - `bash scripts/validate-template.sh` — template invariants; runs in CI.
+- `bash scripts/bootstrap-t3-tasks.sh` — dry-run T3 scheduled task bootstrap.
 - `pre-commit run --all-files` — covers gitleaks and semgrep.
 
 ## Skill mode filtering
