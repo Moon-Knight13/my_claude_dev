@@ -33,3 +33,23 @@ Not for: live offensive ops (red-team), range infra (green-dev), framework maint
 ### Documentation Outputs
 Per completed exploit: `techniques/<CVE-or-name>/` containing writeup.md,
 ioc-report.md, remediation.md, pickup-card.md.
+
+### Readiness Check — REQUIRED
+
+Before starting dev work, verify:
+1. **tuoni-mcp** — `mcp__tuoni__list_agents` returns (REQUIRED)
+2. **obsidian-mcp** — `mcp__obsidian__list_notes` returns (REQUIRED)
+3. **Kali spoke** — SSH reachable (OPTIONAL — needed only for test range execution)
+
+If tuoni-mcp or obsidian-mcp unreachable: STOP. Report degraded state.
+
+### Skill Filter
+
+Allowed skills in red-dev mode:
+- recon, reverse-engineering, initial-access, lolbins
+- technique-scoring, cred-harvest, note-search
+
+Blocked skills:
+- bmad, bmad-to-board — not applicable to exploit development
+- range-build, ctp-deploy — use green-dev mode for infrastructure
+- persist-swarm, lateral-move — use red-team mode for live operations
