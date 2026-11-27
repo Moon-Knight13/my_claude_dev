@@ -27,7 +27,6 @@ No engagement active. No offensive tools loaded. No OPSEC rules apply.
 ### Spoke preflight
 Before switching to an operational mode, verify connectivity:
 ```
-ssh hub echo ok        # host gateway
 ssh deploybox echo ok  # deploy spoke
 ssh kali echo ok       # weapons spoke
 ```
