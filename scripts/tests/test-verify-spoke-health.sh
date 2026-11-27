@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2015
 # Tests for scripts/verify-spoke-health.sh and scripts/verify-pre-deploy.sh.
 # Uses SSH shim — no real connectivity needed.
 set -uo pipefail

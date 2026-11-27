@@ -107,6 +107,7 @@ ssh_cmd() {
     fi
     local -a opts=(-o BatchMode=yes -o ConnectTimeout="$SSH_TIMEOUT" -o StrictHostKeyChecking=accept-new)
     [[ -n "$port" ]] && opts+=(-p "$port")
+    # shellcheck disable=SC2029
     ssh "${opts[@]}" "$target" "$@"
 }
 

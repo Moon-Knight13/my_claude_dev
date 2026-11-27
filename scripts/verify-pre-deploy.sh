@@ -34,7 +34,6 @@ verify_spoke_ready() {
 
     local result
     result="$(bash "$verify_script" "$spoke" --json --quiet 2>/dev/null)" || true
-    local exit_code=$?
 
     if [[ -z "$result" ]]; then
         echo " FAIL pre-deploy: could not run health check for $spoke" >&2
