@@ -19,6 +19,7 @@ routes:
 # Non-repo projects (matched by T3 project title)
 project_names:
   "DnD": "dev"
+  "3d_prints": "3d-print"
 
 # Default when no route matches
 default: "dev"
