@@ -134,7 +134,7 @@ read -r -d '' CATALOG << CATALOG_JSON || true
   },
   "bloodhound-mcp": {
     "command": "$WRAPPER",
-    "args": ["$PYTHON_CMD", "BloodHound-MCP.py"],
+    "args": ["$PYTHON_CMD", "$PROJECT_DIR/mcp-servers/bloodhound-mcp/BloodHound-MCP.py"],
     "cwd": "$PROJECT_DIR/mcp-servers/bloodhound-mcp"
   },
   "hashcat-mcp": {
