@@ -82,6 +82,9 @@ projects:
   - name: homelab_planning
     path: /home/chris/Documents/homelab_planning
     repo: Moon-Knight13/homelab_planning
+  - name: gamefinder
+    path: /home/chris/Documents/gamefinder
+    repo: Moon-Knight13/gamefinder
 
 # Overnight batch template (dispatched per-session, not auto-scheduled)
 # See docs/ or memory for full overnight task prompts.
