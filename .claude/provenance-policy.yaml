@@ -89,6 +89,7 @@ sensitive:
   - "mcp__tuoni-mcp__tuoni_users_list"
   - "mcp__tuoni-mcp__tuoni_setting_get"
   - "mcp__tuoni-mcp__tuoni_settings_get_all"
+  - "mcp__tuoni-mcp__tuoni_capabilities"
   # tuoni discovery read
   - "mcp__tuoni-mcp__tuoni_discovery_*"
   # tuoni credential/host/service/alias/job read-only

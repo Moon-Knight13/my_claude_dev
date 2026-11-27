@@ -65,7 +65,7 @@ echo ""
 
 # -----------------------------------------------------------------------
 echo "--- Critical tool WITHOUT session registration = denied ---"
-result="$(_call_hook "test-session-001" "red-team" "mcp__tuoni-mcp__tuoni_command_execute")"
+result="$(_call_hook "test-session-001" "red-team" "mcp__tuoni-mcp__tuoni_command_prepare")"
 if _is_denied "$result"; then
     ok "unregistered session denied for critical tool"
 else
@@ -76,7 +76,7 @@ fi
 echo ""
 echo "--- Critical tool WITH registered session in correct mode = allowed ---"
 _register_session "test-session-002" "red-team"
-result="$(_call_hook "test-session-002" "red-team" "mcp__tuoni-mcp__tuoni_command_execute")"
+result="$(_call_hook "test-session-002" "red-team" "mcp__tuoni-mcp__tuoni_command_prepare")"
 if _is_allowed "$result"; then
     ok "registered session in red-team allowed for critical tool"
 else
@@ -87,7 +87,7 @@ fi
 echo ""
 echo "--- Critical tool in wrong mode = denied ---"
 _register_session "test-session-003" "green-dev"
-result="$(_call_hook "test-session-003" "green-dev" "mcp__tuoni-mcp__tuoni_command_execute")"
+result="$(_call_hook "test-session-003" "green-dev" "mcp__tuoni-mcp__tuoni_command_prepare")"
 if _is_denied "$result"; then
     ok "green-dev mode denied for critical tool"
 else
@@ -97,7 +97,7 @@ fi
 # -----------------------------------------------------------------------
 echo ""
 echo "--- Critical tool with no session ID = denied ---"
-result="$(_call_hook "" "red-team" "mcp__tuoni-mcp__tuoni_command_execute")"
+result="$(_call_hook "" "red-team" "mcp__tuoni-mcp__tuoni_command_prepare")"
 if _is_denied "$result"; then
     ok "no session ID denied for critical tool"
 else
@@ -158,7 +158,7 @@ echo "--- Stale session = denied ---"
 _register_session "test-session-stale" "red-team"
 # Backdate the session file by 25h
 touch -d "25 hours ago" "$TEST_PROJECT/.claude/sessions/test-session-stale"
-result="$(_call_hook "test-session-stale" "red-team" "mcp__tuoni-mcp__tuoni_command_execute")"
+result="$(_call_hook "test-session-stale" "red-team" "mcp__tuoni-mcp__tuoni_command_prepare")"
 if _is_denied "$result"; then
     ok "stale session denied"
 else
@@ -199,7 +199,7 @@ fi
 # -----------------------------------------------------------------------
 echo ""
 echo "--- Deny message includes tool and mode ---"
-result="$(_call_hook "test-session-003" "green-dev" "mcp__tuoni-mcp__tuoni_command_execute")"
+result="$(_call_hook "test-session-003" "green-dev" "mcp__tuoni-mcp__tuoni_command_prepare")"
 if echo "$result" | grep -q "green-dev"; then
     ok "deny message includes mode name"
 else
@@ -213,9 +213,66 @@ fi
 
 # -----------------------------------------------------------------------
 echo ""
+echo "--- Previously-bypassed critical tools now gated ---"
+_register_session "test-session-bypass" "green-dev"
+
+for tool in tuoni_operation_execute tuoni_payload_create tuoni_payload_delete \
+            tuoni_payload_rename tuoni_user_set_password tuoni_settings_update_bulk \
+            tuoni_credential_add tuoni_credential_archive tuoni_credential_update \
+            tuoni_host_add tuoni_host_archive tuoni_host_update \
+            tuoni_job_pause tuoni_job_restart tuoni_job_resume; do
+    result="$(_call_hook "test-session-bypass" "green-dev" "mcp__tuoni-mcp__${tool}")"
+    if _is_denied "$result"; then
+        ok "green-dev denies mcp__tuoni-mcp__${tool}"
+    else
+        fail "green-dev should deny mcp__tuoni-mcp__${tool}"
+    fi
+done
+
+echo ""
+echo "--- Previously-bypassed critical tools allowed in red-team ---"
+_register_session "test-session-rt" "red-team"
+
+for tool in tuoni_operation_execute tuoni_payload_create tuoni_credential_add \
+            tuoni_host_add tuoni_job_pause tuoni_settings_update_bulk; do
+    result="$(_call_hook "test-session-rt" "red-team" "mcp__tuoni-mcp__${tool}")"
+    if _is_allowed "$result"; then
+        ok "red-team allows mcp__tuoni-mcp__${tool}"
+    else
+        fail "red-team should allow mcp__tuoni-mcp__${tool}"
+    fi
+done
+
+echo ""
+echo "--- Sensitive read-only tools allowed in green-dev ---"
+for tool in tuoni_credentials_list tuoni_hosts_list tuoni_agents_list \
+            tuoni_listeners_list tuoni_capabilities tuoni_aliases_list \
+            tuoni_jobs_list tuoni_commands_list; do
+    result="$(_call_hook "test-session-bypass" "green-dev" "mcp__tuoni-mcp__${tool}")"
+    if _is_allowed "$result"; then
+        ok "green-dev (sensitive mode) allows mcp__tuoni-mcp__${tool}"
+    else
+        fail "green-dev should allow sensitive tool mcp__tuoni-mcp__${tool}"
+    fi
+done
+
+echo ""
+echo "--- Sensitive tuoni tools denied in base mode ---"
+_register_session "test-session-base" "base"
+for tool in tuoni_credentials_list tuoni_hosts_list tuoni_agents_list; do
+    result="$(_call_hook "test-session-base" "base" "mcp__tuoni-mcp__${tool}")"
+    if _is_denied "$result"; then
+        ok "base mode denies sensitive mcp__tuoni-mcp__${tool}"
+    else
+        fail "base mode should deny sensitive mcp__tuoni-mcp__${tool}"
+    fi
+done
+
+# -----------------------------------------------------------------------
+echo ""
 echo "--- No policy file = no enforcement ---"
 mv "$TEST_PROJECT/.claude/provenance-policy.yaml" "$TEST_PROJECT/.claude/provenance-policy.yaml.bak"
-result="$(_call_hook "" "red-team" "mcp__tuoni-mcp__tuoni_command_execute")"
+result="$(_call_hook "" "red-team" "mcp__tuoni-mcp__tuoni_command_prepare")"
 if _is_allowed "$result"; then
     ok "no policy file = no enforcement"
 else
