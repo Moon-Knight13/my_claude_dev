@@ -45,11 +45,14 @@ if ! ssh -o ConnectTimeout=10 -o BatchMode=yes kali echo "SSH OK" 2>/dev/null; t
     exit 1
 fi
 
-# ── Check yq available ────────────────────────────────────────────────────
-if ! ssh -o ConnectTimeout=10 kali "command -v yq" >/dev/null 2>&1; then
-    echo "FAIL: yq not found on Kali — install with: sudo apt install yq"
+# ── Detect yq variant (Go mikefarah/yq required, may be installed as yq-go) ─
+YQ_BIN=$(ssh -o ConnectTimeout=10 kali 'if command -v yq-go >/dev/null 2>&1; then echo yq-go; elif command -v yq >/dev/null 2>&1 && yq --version 2>&1 | grep -q "mikefarah"; then echo yq; fi' 2>/dev/null)
+
+if [[ -z "$YQ_BIN" ]]; then
+    echo "FAIL: Go yq (mikefarah/yq) not found on Kali — install or symlink as yq-go"
     exit 1
 fi
+echo "Using yq binary: ${YQ_BIN}"
 
 # ── Check config exists ───────────────────────────────────────────────────
 if ! ssh -o ConnectTimeout=10 kali "test -f ${TUONI_CONFIG}" 2>/dev/null; then
@@ -60,18 +63,19 @@ fi
 # ── Write credentials via yq ──────────────────────────────────────────────
 echo "Writing credentials to ${TUONI_CONFIG}..."
 
-ssh -o ConnectTimeout=10 kali bash -s -- "$TUONI_USER" "$TUONI_PASS" "$TUONI_CONFIG" <<'REMOTE_SCRIPT'
+ssh -o ConnectTimeout=10 kali bash -s -- "$TUONI_USER" "$TUONI_PASS" "$TUONI_CONFIG" "$YQ_BIN" <<'REMOTE_SCRIPT'
 set -euo pipefail
 user="$1"
 pass="$2"
 config="$3"
+yq_bin="$4"
 
 cp "$config" "${config}.bak"
 
-yq -i ".users[0].username = \"${user}\"" "$config"
-yq -i ".users[0].password = \"${pass}\"" "$config"
+"$yq_bin" -i ".users[0].username = \"${user}\"" "$config"
+"$yq_bin" -i ".users[0].password = \"${pass}\"" "$config"
 
-current_user=$(yq '.users[0].username' "$config")
+current_user=$("$yq_bin" '.users[0].username' "$config")
 if [[ "$current_user" != "$user" ]]; then
     echo "FAIL: yq write did not stick — username is '$current_user'"
     exit 1
@@ -96,9 +100,9 @@ echo "Waiting for Tuoni API on port ${TUONI_PORT}..."
 for i in $(seq 1 "$MAX_RETRIES"); do
     code=$(ssh -o ConnectTimeout=10 kali \
         "curl -sk --connect-timeout 3 -o /dev/null -w '%{http_code}' https://localhost:${TUONI_PORT}/api/v1/auth/login" \
-        2>/dev/null || echo "000")
+        2>/dev/null | tr -d '[:space:]' || echo "000")
 
-    if [[ "$code" != "000" ]]; then
+    if [[ "$code" =~ ^[1-5][0-9]{2}$ ]]; then
         echo "API responding (HTTP ${code}) after ${i}/${MAX_RETRIES} attempts"
         break
     fi
@@ -115,16 +119,13 @@ done
 echo ""
 echo "Verifying credentials..."
 
-auth_result=$(ssh -o ConnectTimeout=10 kali \
-    "curl -sk --connect-timeout 5 -w '\n%{http_code}' \
+auth_code=$(ssh -o ConnectTimeout=10 kali \
+    "curl -sk --connect-timeout 5 -X POST -o /dev/null -w '%{http_code}' \
      -u '${TUONI_USER}:${TUONI_PASS}' \
      https://localhost:${TUONI_PORT}/api/v1/auth/login" \
-    2>/dev/null || echo "000")
+    2>/dev/null | tr -d '[:space:]' || echo "000")
 
-http_code=$(echo "$auth_result" | tail -1)
-body=$(echo "$auth_result" | head -n -1)
-
-if [[ "$http_code" == "200" ]]; then
+if [[ "$auth_code" == "200" ]]; then
     echo ""
     echo "=== SUCCESS ==="
     echo "Tuoni credentials bootstrapped and verified."
@@ -134,7 +135,6 @@ if [[ "$http_code" == "200" ]]; then
 else
     echo ""
     echo "=== FAIL ==="
-    echo "Auth returned HTTP ${http_code}"
-    [[ -n "$body" ]] && echo "Response: $(echo "$body" | head -c 200)"
+    echo "Auth returned HTTP ${auth_code}"
     exit 1
 fi
