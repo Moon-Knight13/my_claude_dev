@@ -21,4 +21,4 @@ project_names:
   "DnD": "base"
 
 # Default when no route matches
-default: "base"
+default: "dev"
