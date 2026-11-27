@@ -110,6 +110,7 @@ unset _host_var _v
 [[ -n "${PROVIDENTIA_HOST:-}" && -z "${PROVIDENTIA_URL:-}" ]] && export PROVIDENTIA_URL="https://${PROVIDENTIA_HOST}"
 [[ -n "${RANGE_GIT_HOST:-}" && -z "${GITLAB_URL:-}" ]] && export GITLAB_URL="https://${RANGE_GIT_HOST}"
 [[ -n "${SPOKE_KALI_HOST:-}" && -z "${TUONI_URL:-}" ]] && export TUONI_URL="https://${SPOKE_KALI_HOST}:${SPOKE_KALI_C2_WEB_PORT:-8443}"
+[[ -n "${SPOKE_KALI_HOST:-}" && -z "${BLOODHOUND_URI:-}" ]] && export BLOODHOUND_URI="bolt://${SPOKE_KALI_HOST}:7687"
 
 # Auto-heal URL vars that lack a scheme. Docker --env-file and stale container
 # env can inject bare hostnames; MCP servers need https://.

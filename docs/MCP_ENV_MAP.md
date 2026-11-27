@@ -56,11 +56,13 @@ Static overrides in `.mcp.json`: `TUONI_VERIFY_TLS=false`,
 
 ### BloodHound → bloodhound-mcp
 
-| You set in `.env`      | load-env.sh derives | MCP server reads |
-|------------------------|---------------------|------------------|
-| *(none)*               | *(none)*            | *(none)*         |
+| You set in `.env`      | load-env.sh derives | MCP server reads   |
+|------------------------|---------------------|--------------------|
+| `SPOKE_KALI_HOST`      | `BLOODHOUND_URI`    | bloodhound-mcp     |
+| `BLOODHOUND_USERNAME`  | *(passed through)*  | bloodhound-mcp     |
+| `BLOODHOUND_PASSWORD`  | *(passed through)*  | bloodhound-mcp     |
 
-Standalone — no env vars required. Provides Active Directory graph analysis.
+Connects to Neo4j (BloodHound CE backend) on Kali via bolt protocol.
 
 ### Hashcat → hashcat-mcp
 
@@ -90,7 +92,7 @@ Standalone — no env vars required. Provides CVE/EPSS/KEV/NVD/exploit lookup.
 ### No env vars needed
 
 These servers work standalone: **obsidian-mcp**, **hacktricks-mcp**,
-**mitre-mcp**, **lolbins-mcp**, **cve-mcp**, **bloodhound-mcp**.
+**mitre-mcp**, **lolbins-mcp**, **cve-mcp**.
 
 ## Debugging
 
