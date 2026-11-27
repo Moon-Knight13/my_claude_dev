@@ -1,0 +1,7 @@
+# Tuoni server configuration — managed by Ansible
+# Changes trigger container restart via handler.
+users:
+  - username: "{{ tuoni_admin_username }}"
+    password: "{{ tuoni_admin_password }}"
+    authorities:
+      - ROLE_ADMIN

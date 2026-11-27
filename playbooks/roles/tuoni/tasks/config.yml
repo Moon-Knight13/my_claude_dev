@@ -1,0 +1,10 @@
+---
+- name: Deploy Tuoni configuration
+  ansible.builtin.template:
+    src: tuoni.yml.j2
+    dest: "{{ tuoni_config_dir }}/tuoni.yml"
+    owner: root
+    group: root
+    mode: "0640"
+  no_log: true
+  notify: Restart tuoni

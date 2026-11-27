@@ -1,6 +1,5 @@
 ---
 - name: Restart tuoni
-  ansible.builtin.systemd:
-    name: tuoni
+  community.docker.docker_compose_v2:
+    project_src: "{{ tuoni_install_dir }}"
     state: restarted
-    daemon_reload: true

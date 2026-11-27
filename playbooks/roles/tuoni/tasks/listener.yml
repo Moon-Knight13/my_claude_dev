@@ -1,0 +1,30 @@
+---
+- name: Check existing listeners
+  ansible.builtin.uri:
+    url: "https://localhost:{{ tuoni_api_port }}/api/v1/listeners"
+    method: GET
+    user: "{{ tuoni_admin_username }}"
+    password: "{{ tuoni_admin_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    status_code: [200]
+  register: tuoni_listeners
+  no_log: true
+
+- name: Create HTTPS listener
+  ansible.builtin.uri:
+    url: "https://localhost:{{ tuoni_api_port }}/api/v1/listeners"
+    method: POST
+    user: "{{ tuoni_admin_username }}"
+    password: "{{ tuoni_admin_password }}"
+    force_basic_auth: true
+    validate_certs: false
+    body_format: json
+    body:
+      name: "{{ tuoni_listener_name }}"
+      plugin: "shelldot-https-listener"
+      configuration:
+        port: "{{ tuoni_listener_port }}"
+    status_code: [200, 201]
+  no_log: true
+  when: tuoni_listeners.json | selectattr('name', 'equalto', tuoni_listener_name) | list | length == 0

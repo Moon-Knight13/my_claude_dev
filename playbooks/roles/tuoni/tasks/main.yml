@@ -1,48 +1,31 @@
 ---
-- name: Create Tuoni install directory
-  ansible.builtin.file:
-    path: "{{ tuoni_install_dir }}"
-    state: directory
-    owner: "{{ tuoni_user }}"
-    group: "{{ tuoni_group }}"
-    mode: "0755"
+- name: Validate vault secrets are defined
+  ansible.builtin.assert:
+    that:
+      - tuoni_admin_username is defined
+      - tuoni_admin_username | length > 0
+      - tuoni_admin_password is defined
+      - tuoni_admin_password | length > 0
+    fail_msg: >
+      tuoni_admin_username and tuoni_admin_password must be set
+      via Ansible vault or inventory. No secrets in repo files.
 
-- name: Check if Tuoni jar exists
-  ansible.builtin.stat:
-    path: "{{ tuoni_install_dir }}/{{ tuoni_jar_name }}"
-  register: tuoni_jar
+- name: Install Docker and prerequisites
+  ansible.builtin.include_tasks: prerequisites.yml
 
-- name: Fail if jar not present and no source configured
-  ansible.builtin.fail:
-    msg: >
-      Tuoni jar not found at {{ tuoni_install_dir }}/{{ tuoni_jar_name }}.
-      Copy the jar manually or set tuoni_jar_source in inventory to a local path.
-  when:
-    - not tuoni_jar.stat.exists
-    - tuoni_jar_source is not defined
+- name: Install Tuoni (Docker Compose)
+  ansible.builtin.include_tasks: install.yml
 
-- name: Copy Tuoni jar from local source
-  ansible.builtin.copy:
-    src: "{{ tuoni_jar_source }}"
-    dest: "{{ tuoni_install_dir }}/{{ tuoni_jar_name }}"
-    owner: "{{ tuoni_user }}"
-    group: "{{ tuoni_group }}"
-    mode: "0644"
-  when:
-    - not tuoni_jar.stat.exists
-    - tuoni_jar_source is defined
-  notify: Restart tuoni
+- name: Deploy Tuoni configuration
+  ansible.builtin.include_tasks: config.yml
 
-- name: Deploy Tuoni systemd unit
-  ansible.builtin.template:
-    src: tuoni.service.j2
-    dest: /etc/systemd/system/tuoni.service
-    mode: "0644"
-  notify: Restart tuoni
+- name: Deploy TSE plugins and scripts
+  ansible.builtin.include_tasks: plugins.yml
+  when: tuoni_plugins_enabled
 
-- name: Enable and start Tuoni service
-  ansible.builtin.systemd:
-    name: tuoni
-    enabled: true
-    state: started
-    daemon_reload: true
+- name: Start Tuoni and verify API
+  ansible.builtin.include_tasks: service.yml
+
+- name: Configure HTTPS listener
+  ansible.builtin.include_tasks: listener.yml
+  when: tuoni_listener_enabled

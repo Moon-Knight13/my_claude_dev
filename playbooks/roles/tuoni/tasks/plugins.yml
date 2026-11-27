@@ -1,0 +1,41 @@
+---
+- name: Clone tuoni-plugins repository
+  ansible.builtin.git:
+    repo: "{{ tuoni_plugins_repo }}"
+    dest: /opt/tuoni-plugins
+    version: "{{ tuoni_plugins_branch }}"
+    force: true
+
+- name: Build TSE scripts (inline shared code)
+  ansible.builtin.command:
+    cmd: python3 -I build_scripts.py
+    chdir: /opt/tuoni-plugins
+  changed_when: true
+
+- name: Find built scripts
+  ansible.builtin.find:
+    paths: /opt/tuoni-plugins/dist
+    patterns: "tuoni_*.py"
+  register: built_scripts
+
+- name: Deploy TSE scripts to Tuoni data/scripts
+  ansible.builtin.copy:
+    src: "{{ item.path }}"
+    dest: "{{ tuoni_scripts_dir }}/{{ item.path | basename }}"
+    owner: root
+    group: root
+    mode: "0644"
+    remote_src: true
+  loop: "{{ built_scripts.files }}"
+  notify: Restart tuoni
+
+- name: Copy commercial plugin JARs if present
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ tuoni_plugins_dir }}/{{ item | basename }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ tuoni_plugin_jars | default([]) }}"
+  when: tuoni_plugin_jars is defined
+  notify: Restart tuoni

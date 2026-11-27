@@ -1,0 +1,52 @@
+---
+- name: Create Tuoni install directory
+  ansible.builtin.file:
+    path: "{{ tuoni_install_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Check if Tuoni CLI wrapper exists
+  ansible.builtin.stat:
+    path: "{{ tuoni_cli }}"
+  register: tuoni_cli_stat
+
+- name: Download Tuoni installer
+  ansible.builtin.get_url:
+    url: https://shelldot.com/tuoni/install
+    dest: "{{ tuoni_install_dir }}/install.sh"
+    mode: "0755"
+  when: not tuoni_cli_stat.stat.exists
+
+- name: Run Tuoni installer
+  ansible.builtin.command:
+    cmd: bash install.sh
+    chdir: "{{ tuoni_install_dir }}"
+    creates: "{{ tuoni_cli }}"
+  when: not tuoni_cli_stat.stat.exists
+
+- name: Ensure config directory exists
+  ansible.builtin.file:
+    path: "{{ tuoni_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Ensure plugins directory exists
+  ansible.builtin.file:
+    path: "{{ tuoni_plugins_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Ensure scripts directory exists
+  ansible.builtin.file:
+    path: "{{ tuoni_scripts_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: tuoni_plugins_enabled
