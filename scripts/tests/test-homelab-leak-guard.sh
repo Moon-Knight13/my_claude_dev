@@ -163,8 +163,40 @@ is_silent "$OUT" && ok "homelab IP in non-git Bash: silent" || bad "non-git Bash
 echo "== Heredoc false-positive prevention =="
 # ══════════════════════════════════════════════════════════════════════════════
 
-OUT="$(run_hook "homelab" "$(printf '{"tool_name":"Bash","tool_input":{"command":"gh pr create --body \"$(cat <<'"'"'EOF'"'"'\\n%s is an example range IP\\nEOF\\n)\""}}' "$RANGE_IP_1")")"
-is_silent "$OUT" && ok "heredoc with range IP: silent" || bad "heredoc triggered: $OUT"
+OUT="$(run_hook "homelab" "$(printf '{"tool_name":"Bash","tool_input":{"command":"gh pr create --body \\\"$(cat <<'"'"'EOF'"'"'\\n%s is an example range IP\\nEOF\\n)\\\""}}'  "$RANGE_IP_1")")"
+has_warning "$OUT" && ok "gh pr create heredoc with range IP: warned" || bad "gh pr create heredoc should warn: body is published content"
+
+# Non-gh heredocs should still be silent (false-positive prevention)
+OUT="$(run_hook "homelab" "$(printf '{"tool_name":"Bash","tool_input":{"command":"python3 <<'"'"'EOF'"'"'\\nprint(\\\"%s\\\")\\nEOF"}}'  "$RANGE_IP_1")")"
+is_silent "$OUT" && ok "non-gh heredoc with range IP: silent" || bad "non-gh heredoc triggered: $OUT"
+
+# ══════════════════════════════════════════════════════════════════════════════
+echo "== Direction 2: gh issue/PR create/edit scanning =="
+# ══════════════════════════════════════════════════════════════════════════════
+
+OUT="$(run_hook "platform-ops" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"gh issue create --title \\\"bug\\\" --body \\\"found on $HOMELAB_IP\\\"\"}}")"
+has_warning "$OUT" && ok "homelab IP in gh issue create --body: warned" || bad "gh issue create body not scanned"
+
+OUT="$(run_hook "platform-ops" "$(printf '{"tool_name":"Bash","tool_input":{"command":"gh pr create --title \\\"fix\\\" --body \\\"$(cat <<'"'"'EOF'"'"'\\nrouter %s is down\\nEOF\\n)\\\""}}'  "$HOMELAB_IP")")"
+has_warning "$OUT" && ok "homelab IP in gh pr create heredoc body: warned" || bad "gh pr create heredoc body not scanned"
+
+OUT="$(run_hook "green-dev" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"gh issue edit 42 --body \\\"$HOMELAB_DEVICE is offline\\\"\"}}")"
+has_warning "$OUT" && ok "homelab device in gh issue edit: warned" || bad "gh issue edit body not scanned"
+
+OUT="$(run_hook "platform-ops" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"gh pr create --title \\\"update\\\" -f body=\\\"deploy to $HOMELAB_IP\\\"\"}}")"
+has_warning "$OUT" && ok "homelab IP in gh pr create -f body: warned" || bad "gh pr create -f body not scanned"
+
+# gh commands in homelab repos should be silent
+OUT="$(run_hook "platform-ops" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"gh issue create --repo user/homelab_infra --body \\\"$HOMELAB_IP router\\\"\"}}")"
+is_silent "$OUT" && ok "gh issue in homelab_infra repo: silent" || bad "homelab_infra gh issue triggered: $OUT"
+
+# Clean gh commands should be silent
+OUT="$(run_hook "platform-ops" '{"tool_name":"Bash","tool_input":{"command":"gh issue create --title \"refactor\" --body \"update CI pipeline\""}}')"
+is_silent "$OUT" && ok "clean gh issue create: silent" || bad "clean gh issue triggered: $OUT"
+
+# Direction 1: range data in gh publish while in homelab mode
+OUT="$(run_hook "homelab" "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"gh issue create --body \\\"testing $RANGE_IP_1\\\"\"}}")"
+has_warning "$OUT" && ok "range IP in gh issue (homelab mode): warned" || bad "range IP in gh issue not caught in homelab mode"
 
 # ══════════════════════════════════════════════════════════════════════════════
 echo "== Audit logging =="
