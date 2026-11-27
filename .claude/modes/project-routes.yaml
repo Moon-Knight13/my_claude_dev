@@ -12,8 +12,9 @@ routes:
   "github.com/moon-knight13/my_claude_dev": "platform-ops"
   "github.com/moon-knight13/tuoni-plugins": "red-dev"
   "github.com/moon-knight13/homelab_planning": "homelab"
-  "github.com/moon-knight13/foundryvtt-docker": "homelab"
+  "github.com/moon-knight13/foundryvtt-docker": "dev"
   "github.com/moon-knight13/medicat-usb": "homelab"
+  "github.com/moon-knight13/gamefinder": "dev"
 
 # Non-repo projects (matched by T3 project title)
 project_names:
